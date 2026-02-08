@@ -2,92 +2,271 @@
 
 ## Overview
 
-A CLI tool (`electric-agent`) that turns natural-language app descriptions into running reactive applications built on Electric SQL + TanStack DB. This plan covers the fresh implementation of the tool itself (Phase 1 of the RFC: Core Generation MVP).
+A CLI tool (`electric-agent`) that turns natural-language app descriptions into running reactive applications built on Electric SQL + TanStack DB. This plan covers Phase 1 of the RFC: Core Generation MVP.
 
-The tool is a Node.js/TypeScript CLI that orchestrates Claude API calls with a focused tool set, programmatic guardrails, and a build-verification feedback loop.
+**Key architectural insight:** The Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) provides the agentic loop, built-in tools (Read, Write, Edit, Glob, Grep, Bash), sub-agent orchestration, and hooks for guardrails out of the box. We build on top of this rather than implementing our own agent infrastructure. The existing playbook npm packages (`@electric-sql/playbook`, `@tanstack/db-playbook`) provide canonical grounding material — we use them as-is rather than rewriting.
 
 ---
 
-## Project Structure (the CLI tool itself)
+## Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│  CLI Entry Point (commander)                     │
+│  electric-agent new | iterate | status | up | down│
+└──────────────┬──────────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────────┐
+│  Agent SDK query()                               │
+│                                                  │
+│  ┌──────────────┐    ┌────────────────────────┐ │
+│  │ Planner       │    │ Coder                  │ │
+│  │ (Opus 4.6)    │    │ (Sonnet 4.5)           │ │
+│  │ agents: {}    │    │ agents: {}             │ │
+│  │ tools: MCP    │    │ tools: built-in + MCP  │ │
+│  └──────────────┘    └────────────────────────┘ │
+│                                                  │
+│  Built-in tools:  Read, Write, Edit, Glob, Grep, │
+│                   Bash, Task                     │
+│                                                  │
+│  Custom MCP tools: build, read_playbook,         │
+│                    list_playbooks                 │
+│                                                  │
+│  Hooks (PreToolUse):                             │
+│    - Write protection                            │
+│    - Import validation                           │
+│    - SQL migration validation                    │
+│    - Dependency guard                            │
+│                                                  │
+│  Hooks (PostToolUse):                            │
+│    - Collection-schema validation (warnings)     │
+│    - Error logging to _agent/errors.md           │
+│    - Progress reporting                          │
+└─────────────────────────────────────────────────┘
+```
+
+### What we build vs. what we get for free
+
+**Get for free from Agent SDK:**
+- Agentic loop (tool dispatch, multi-turn conversation)
+- Built-in tools: Read, Write, Edit, Glob, Grep, Bash
+- Sub-agent orchestration (Task tool)
+- Extended thinking support
+- Token tracking, cost estimation, budget caps
+- Streaming messages for progress feedback
+- Session resumption
+- Prompt caching (automatic)
+
+**What we build:**
+- CLI entry point and commands
+- Template scaffolding system
+- Custom MCP tools: `build`, `read_playbook`, `list_playbooks`
+- Guardrail hooks (5 hooks from RFC Section 8)
+- System prompts for planner and coder
+- Progress reporter (transforms SDK messages to prefixed CLI output)
+- Working memory management (`_agent/errors.md`, `_agent/session.md`)
+
+---
+
+## Project Structure
 
 ```
 create-electric-app/
-├── package.json                # CLI tool dependencies
-├── tsconfig.json               # TypeScript config for the tool
-├── biome.json                  # Linting for tool source code
-├── PLAN.md                     # This file
-├── README.md                   # How to develop/use the CLI tool
-├── playbooks/                  # Grounding material for agents
-│   ├── patterns.md             # Import paths, hallucination guard (always loaded)
-│   ├── collections.md          # Collection definition patterns
-│   ├── live-queries.md         # useLiveQuery API
-│   ├── mutations.md            # Optimistic mutation patterns
-│   ├── proxy.md                # Server-side API route patterns
-│   ├── schemas.md              # SQL migration conventions
-│   ├── setup.md                # Docker Compose & infrastructure
-│   ├── shapes.md               # Sync shape definitions
-│   ├── electric.md             # Architecture overview
-│   └── security.md             # Phase 1 security limitations
-├── template/                   # KPB starter template (scaffolded into new projects)
-│   ├── docker-compose.yml
-│   ├── Caddyfile
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── vite.config.ts
-│   ├── biome.json
-│   ├── .env.template
-│   ├── .gitignore
-│   └── src/
-│       └── routes/
-│           └── __root.tsx
-├── src/                        # CLI tool source
-│   ├── index.ts                # Entry point, CLI command routing
-│   ├── cli/                    # Command implementations
-│   │   ├── new.ts              # `electric-agent new "description"`
-│   │   ├── iterate.ts          # `electric-agent iterate`
-│   │   ├── status.ts           # `electric-agent status`
-│   │   ├── up.ts               # `electric-agent up`
-│   │   └── down.ts             # `electric-agent down`
-│   ├── agents/                 # Agent orchestration
-│   │   ├── planner.ts          # Planner sub-agent (Opus)
-│   │   ├── coder.ts            # Main coder agent (Sonnet)
-│   │   ├── loop.ts             # Core agentic loop (tool dispatch, retry)
-│   │   └── types.ts            # Shared agent types
-│   ├── tools/                  # Tool implementations (what the agents can call)
-│   │   ├── registry.ts         # Tool registry and dispatch
-│   │   ├── write.ts            # Create new file (with guardrail hooks)
-│   │   ├── edit.ts             # Search-and-replace edit
-│   │   ├── view.ts             # Read file contents
-│   │   ├── grep.ts             # Regex search across project
-│   │   ├── glob.ts             # Find files by pattern
-│   │   ├── build.ts            # Run pnpm build + check
-│   │   ├── shell.ts            # Execute shell commands
-│   │   └── playbook.ts         # read_playbook and list_playbooks
-│   ├── guardrails/             # Programmatic guardrails
-│   │   ├── index.ts            # Guardrail pipeline (compose all checks)
-│   │   ├── write-protection.ts # Block writes to protected files
-│   │   ├── import-validation.ts# Validate imports against patterns.md
-│   │   ├── sql-validation.ts   # Ensure REPLICA IDENTITY FULL
-│   │   ├── collection-schema.ts# Verify collection fields match SQL
-│   │   └── dependency-guard.ts # Prevent removal of template deps
-│   ├── errors/                 # Error handling
-│   │   ├── classifier.ts       # Classify build errors by pattern
-│   │   └── working-memory.ts   # Read/write _agent/errors.md
-│   ├── prompts/                # System prompts
-│   │   ├── coder.ts            # Coder system prompt builder
-│   │   └── planner.ts          # Planner system prompt builder
-│   ├── scaffold/               # Project scaffolding
-│   │   ├── index.ts            # Copy template, initialize project
-│   │   └── template.ts         # Template file processing
-│   ├── progress/               # CLI output
-│   │   └── reporter.ts         # Prefixed progress lines
-│   └── session/                # Session management
-│       └── index.ts            # Read/write _agent/session.md
-└── tests/                      # Tests for the CLI tool
-    ├── guardrails/
-    ├── errors/
-    ├── tools/
-    └── integration/
+├── package.json                 # CLI tool: dependencies, bin entry
+├── tsconfig.json                # TypeScript config for the tool
+├── biome.json                   # Linting for tool source code
+├── PLAN.md                      # This file
+├── src/
+│   ├── index.ts                 # CLI entry point (commander)
+│   ├── cli/
+│   │   ├── new.ts               # electric-agent new "description"
+│   │   ├── iterate.ts           # electric-agent iterate
+│   │   ├── status.ts            # electric-agent status
+│   │   ├── up.ts                # electric-agent up
+│   │   └── down.ts              # electric-agent down
+│   ├── agents/
+│   │   ├── planner.ts           # Planner: query() with Opus, MCP-only tools
+│   │   ├── coder.ts             # Coder: query() with Sonnet, full tools
+│   │   └── prompts.ts           # System prompt builders
+│   ├── tools/                   # Custom MCP tools
+│   │   ├── server.ts            # createSdkMcpServer with all custom tools
+│   │   ├── build.ts             # tool(): pnpm build + pnpm check
+│   │   └── playbook.ts          # tool(): read_playbook, list_playbooks
+│   ├── hooks/                   # Agent SDK hooks (guardrails)
+│   │   ├── index.ts             # Compose all hooks
+│   │   ├── write-protection.ts  # Block writes to protected files
+│   │   ├── import-validation.ts # Validate imports against known-correct table
+│   │   ├── sql-validation.ts    # Ensure REPLICA IDENTITY FULL
+│   │   ├── collection-schema.ts # Warn on field mismatches (PostToolUse)
+│   │   └── dependency-guard.ts  # Prevent removal of template deps
+│   ├── scaffold/
+│   │   └── index.ts             # Clone KPB template, add Electric deps
+│   ├── progress/
+│   │   └── reporter.ts          # Transform SDK messages → prefixed CLI output
+│   └── working-memory/
+│       ├── errors.ts            # Read/write _agent/errors.md
+│       └── session.ts           # Read/write _agent/session.md
+├── template/                    # Extended KPB starter template
+│   ├── docker-compose.yml       # Postgres 17 + Electric + Caddy
+│   ├── Caddyfile                # HTTP/2 reverse proxy
+│   ├── postgres.conf            # wal_level=logical
+│   ├── .env.example             # DATABASE_URL, ELECTRIC_URL
+│   ├── src/
+│   │   ├── server.ts            # TanStack Start server entry
+│   │   ├── start.tsx            # SSR disabled (defaultSsr: false)
+│   │   └── lib/
+│   │       └── electric-proxy.ts # Proxy helpers (prepareElectricUrl, etc.)
+│   └── (inherits from KPB: package.json, vite, biome, tsconfig, routes, etc.)
+└── tests/
+    ├── hooks/                   # Guardrail hook tests
+    ├── tools/                   # Custom tool tests
+    └── scaffold/                # Template scaffolding tests
+```
+
+---
+
+## Grounding: Playbook Strategy
+
+**We do NOT write playbooks from scratch.** The KPB template includes three playbook npm packages as devDependencies:
+
+| Package | CLI | Skills |
+|---------|-----|--------|
+| `@electric-sql/playbook` | `electric-playbook` | `electric`, `electric-quickstart`, `electric-tanstack-integration`, `electric-security-check`, `electric-go-live`, `deploying-electric`, `tanstack-start-quickstart` |
+| `@tanstack/db-playbook` | `db-playbook` | `tanstack-db`, `tanstack-db-collections`, `tanstack-db-electric`, `tanstack-db-live-queries`, `tanstack-db-mutations`, `tanstack-db-schemas`, `tanstack-db-query` |
+| `@durable-streams/playbook` | `durable-streams-playbook` | `durable-streams`, `durable-state`, `durable-streams-dev-setup` |
+
+Each playbook is a `SKILL.md` file with optional `references/*.md` deep-dives. The `read_playbook` custom tool reads these files directly from `node_modules/`.
+
+### Playbook loading strategy
+
+**Planner receives** (via system prompt — loaded once):
+- `electric-quickstart` — project structure, setup patterns
+- `tanstack-start-quickstart` — TanStack Start + Electric SSR config, proxy, docker-compose
+- `tanstack-db-electric` — Electric collection setup, txid matching, shapes
+
+**Coder receives** (via system prompt — always loaded):
+- A condensed `patterns.md` we write ourselves (~100 lines) — import hallucination guard, correct patterns
+- Instructions to use `read_playbook` tool for detailed patterns when needed
+
+**Coder loads on demand** (via `read_playbook` tool):
+- `tanstack-db-collections` — when creating collections
+- `tanstack-db-live-queries` — when writing queries
+- `tanstack-db-mutations` — when implementing mutations
+- `tanstack-db-schemas` — when defining Zod schemas
+- `electric-tanstack-integration` — when wiring Electric + TanStack DB
+- `tanstack-start-quickstart` — when setting up routes, SSR, proxy
+
+---
+
+## Template: Extended KPB
+
+The generated project starts from the KPB template (`npx gitpick KyleAMathews/kpb`) extended with Electric + TanStack DB infrastructure. We add these files on top of KPB:
+
+### Files we add to KPB
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Postgres 17 (wal_level=logical), Electric, Caddy |
+| `Caddyfile` | HTTP/2 reverse proxy: `:5173` → dev server + Electric |
+| `postgres.conf` | `listen_addresses=*`, `wal_level=logical`, `max_replication_slots=10` |
+| `.env.example` | `DATABASE_URL`, `ELECTRIC_URL` for local Docker |
+| `src/server.ts` | TanStack Start server entry point |
+| `src/start.tsx` | `createStart({ defaultSsr: false })` |
+| `src/lib/electric-proxy.ts` | `prepareElectricUrl()`, `proxyElectricRequest()` from playbook |
+
+### Dependencies we add to KPB's package.json
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `@tanstack/db` | `0.5.25` | TanStack DB core |
+| `@tanstack/react-db` | `0.1.69` | React hooks (useLiveQuery, etc.) |
+| `@tanstack/electric-db-collection` | `0.2.31` | electricCollectionOptions |
+| `@electric-sql/client` | `1.5.1` | Electric protocol client |
+| `postgres` | `latest` | Postgres client for API routes |
+| `zod` | `^3.24` | Schema validation |
+| `nitro` | `latest` | Server routes for TanStack Start |
+| `dbmate` | `latest` | Database migrations |
+
+### KPB's __root.tsx modification
+
+We modify the root route to use `shellComponent` pattern required for SSR-disabled Electric apps:
+
+```tsx
+export const Route = createRootRoute({
+  head: () => ({ /* existing head config */ }),
+  shellComponent: RootDocument,   // Always SSR'd
+  component: () => <Outlet />,    // Client-rendered
+})
+
+function RootDocument({ children }) {
+  return (
+    <html lang="en">
+      <head><HeadContent /></head>
+      <body>
+        <Theme accentColor="blue" grayColor="slate" radius="medium">
+          <ThemeProvider>
+            <Header />
+            {children}
+          </ThemeProvider>
+        </Theme>
+        <Scripts />
+      </body>
+    </html>
+  )
+}
+```
+
+### Template validation
+
+The template MUST build before the agent writes any app-specific code. Acceptance: `pnpm install && pnpm run build` passes on the bare template.
+
+---
+
+## Pinned Package Versions
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| `@tanstack/db` | `0.5.25` | Beta — pin to avoid breaking changes |
+| `@tanstack/react-db` | `0.1.69` | Includes useLiveQuery, eq, etc. |
+| `@tanstack/electric-db-collection` | `0.2.31` | electricCollectionOptions |
+| `@electric-sql/client` | `1.5.1` | ELECTRIC_PROTOCOL_QUERY_PARAMS |
+| `@tanstack/react-start` | `1.159.2` | TanStack Start framework |
+| `@tanstack/react-router` | `1.158.4` | File-based routing |
+| `@tanstack/router-plugin` | `1.158.4` | Vite plugin |
+| `@radix-ui/themes` | `3.3.0` | UI component library |
+| `@biomejs/biome` | `2.2.4` | Linting (matches KPB) |
+| `vite` | `7.3.1` | Build tool (matches KPB) |
+| `react` | `19.2.0` | React (matches KPB) |
+
+---
+
+## Migration Tool: dbmate
+
+**Choice: dbmate** — standard SQL files, Docker-friendly, `dbmate wait` for health checks.
+
+Migration file convention: `db/migrations/YYYYMMDDHHMMSS_description.sql`
+
+```sql
+-- migrate:up
+CREATE TABLE todos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  text TEXT NOT NULL,
+  completed BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE todos REPLICA IDENTITY FULL;
+
+-- migrate:down
+DROP TABLE todos;
+```
+
+Template package.json scripts:
+```json
+{
+  "migrate": "dbmate --url $DATABASE_URL --migrations-dir db/migrations up",
+  "migrate:create": "dbmate --url $DATABASE_URL --migrations-dir db/migrations new"
+}
 ```
 
 ---
@@ -96,392 +275,366 @@ create-electric-app/
 
 ### Phase 0: Project Bootstrap
 
-Set up the CLI tool project itself — build system, dependencies, entry point.
+Set up the CLI tool project itself.
 
-- [ ] Initialize package.json with project metadata, bin entry (`electric-agent`), and TypeScript build script
-- [ ] Configure tsconfig.json for Node.js 20+ (ESM, strict, NodeNext module resolution)
-- [ ] Configure biome.json for the tool's own source code
-- [ ] Install core dependencies:
-  - `@anthropic-ai/sdk` — Claude API client
+- [ ] Initialize `package.json` with bin entry (`electric-agent`), ESM type, build scripts
+- [ ] Configure `tsconfig.json` for Node.js 20+ (ESM, strict, NodeNext)
+- [ ] Configure `biome.json` (tabs, double quotes — matching KPB style)
+- [ ] Install dependencies:
+  - `@anthropic-ai/claude-agent-sdk` — Agent SDK
   - `commander` — CLI argument parsing
-  - `glob` — file pattern matching (for the glob tool)
-  - `fast-glob` — performant globbing
-- [ ] Create `src/index.ts` — CLI entry point with commander, registering `new`, `iterate`, `status`, `up`, `down` subcommands as stubs
-- [ ] Verify the tool builds: `pnpm run build` produces working JS in `dist/`
-- [ ] Acceptance: `npx electric-agent --help` prints usage, `npx electric-agent new --help` prints the new command usage
+  - `zod` — Schema definitions for custom tools
+- [ ] Create `src/index.ts` — CLI entry with commander, stub subcommands
+- [ ] Verify: `pnpm run build` produces working JS, `electric-agent --help` works
+- [ ] Acceptance: CLI shell runs and prints usage
 
 ### Phase 1: Template & Scaffolding
 
-Create the KPB starter template and the scaffolding system that copies it into a new project directory.
+Build the extended KPB template and the scaffolding system.
 
-- [ ] Create `template/` directory with all KPB starter files:
-  - `docker-compose.yml` — Postgres 16 (logical replication), Electric, Caddy
-  - `Caddyfile` — HTTP/2 reverse proxy for Electric + dev server
-  - `package.json` — TanStack Start, TanStack DB, Electric client, Radix UI, Biome
-  - `tsconfig.json` — strict TypeScript for generated projects
-  - `vite.config.ts` — TanStack Start vite plugin
-  - `biome.json` — formatting and lint rules
-  - `.env.template` — DATABASE_URL, ELECTRIC_URL defaults for local Docker
-  - `.gitignore` — node_modules, dist, _agent/, .env
-  - `src/routes/__root.tsx` — root layout with Radix Theme provider
-  - `app.config.ts` — TanStack Start app configuration
-- [ ] Implement `src/scaffold/template.ts` — read template directory, process `.template` files (variable substitution for project name)
+- [ ] Create `template/` directory with Electric infrastructure files:
+  - `docker-compose.yml` — Postgres 17 + Electric + Caddy
+  - `Caddyfile` — reverse proxy config
+  - `postgres.conf` — wal_level=logical
+  - `.env.example` — local Docker defaults
+- [ ] Create `template/src/server.ts` — TanStack Start server entry
+- [ ] Create `template/src/start.tsx` — `createStart({ defaultSsr: false })`
+- [ ] Create `template/src/lib/electric-proxy.ts` — proxy helpers from `tanstack-start-quickstart` playbook
 - [ ] Implement `src/scaffold/index.ts`:
-  - Create target directory
-  - Copy template files
-  - Rename `.env.template` → `.env`
-  - Initialize git repo
-  - Create `_agent/` directory with empty `errors.md` and `session.md`
-  - Add `_agent/` to `.gitignore`
-  - Create `db/migrations/` directory
-- [ ] Acceptance: `electric-agent new "test"` creates a directory with all template files, `pnpm install && pnpm run build` passes in the generated project (before any app-specific code)
+  1. Clone KPB via `npx gitpick KyleAMathews/kpb <target-dir>`
+  2. Copy our Electric infrastructure files into the cloned project
+  3. Merge additional dependencies into `package.json` (add, never remove)
+  4. Modify `__root.tsx` to use `shellComponent` pattern
+  5. Copy `.env.example` → `.env`
+  6. Create `db/migrations/` directory
+  7. Create `_agent/` directory with empty `errors.md` and `session.md`
+  8. Append `_agent/` to `.gitignore`
+  9. Run `pnpm install`
+- [ ] Verify: scaffolded project builds (`pnpm run build` passes)
+- [ ] Acceptance: `electric-agent new "test"` creates a building project with Docker, Electric, and all deps installed
 
-### Phase 2: Playbooks
+### Phase 2: Custom MCP Tools
 
-Write all grounding playbooks. These are the single source of truth for how to build on the stack.
+Build the three custom tools the agents need beyond the built-in set.
 
-- [ ] Write `playbooks/patterns.md` (~80 lines):
-  - Correct import paths for every package
-  - Hallucination table: wrong import → correct import
-  - `createCollection` wrapping pattern: `createCollection(electricCollectionOptions({...}))`
-  - `shapeOptions: { url, params: { table } }` (not shorthand)
-  - Common mistakes and their fixes
-- [ ] Write `playbooks/collections.md` (~40 lines):
-  - Full collection definition example with Electric sync
-  - Schema field types mapping to Postgres types
-  - Collection ID conventions
-- [ ] Write `playbooks/live-queries.md` (~30 lines):
-  - `useLiveQuery` import and usage
-  - `eq()` import from `@tanstack/react-db` and usage
-  - Both `eq(field, value)` and plain JS filter patterns
-  - Return type handling
-- [ ] Write `playbooks/mutations.md` (~35 lines):
-  - Optimistic mutation pattern with `mutate` and `onMutate`
-  - Transaction callback pattern
-  - Server confirmation handling
-- [ ] Write `playbooks/proxy.md` (~45 lines):
-  - `createAPIFileRoute` pattern for server-side API routes
-  - Request/response handling
-  - Postgres query execution from API routes
-  - Error handling pattern
-- [ ] Write `playbooks/schemas.md` (~30 lines):
-  - `CREATE TABLE` conventions
-  - `ALTER TABLE ... REPLICA IDENTITY FULL` requirement (after every table)
-  - Field type mappings (TypeScript ↔ Postgres)
-  - Migration file naming: `NNN_description.sql`
-  - Relationship patterns (foreign keys)
-- [ ] Write `playbooks/setup.md` (~50 lines):
-  - Docker Compose service definitions
-  - Postgres logical replication config
-  - Electric service configuration
-  - Caddy reverse proxy setup
-  - Health check patterns
-- [ ] Write `playbooks/shapes.md` (~20 lines):
-  - Shape definition syntax
-  - Table-level shapes
-  - Where clause filtering
-  - Shape URL construction
-- [ ] Write `playbooks/electric.md` (~40 lines):
-  - Architecture: Postgres → Electric → HTTP → Client
-  - What Electric does and doesn't do
-  - Read-path sync (Electric) vs write-path (API routes)
-  - Logical replication requirements
-- [ ] Write `playbooks/security.md` (~15 lines):
-  - Phase 1 limitations: no auth, no row-level security
-  - All data is accessible to all clients
-  - Suitable for local development and demos only
-- [ ] Acceptance: All playbooks exist, are internally consistent, and follow the fixes listed in RFC Section 7 (Playbook Pre-requisites)
+- [ ] Implement `src/tools/build.ts` — `build` tool:
+  - Runs `pnpm run build && pnpm run check` in the project directory
+  - Captures stdout/stderr
+  - Parses TypeScript and Biome error output
+  - Returns structured result: `{ success: boolean, output: string, errors: string }`
+  - Zod schema: `{ project_dir: z.string() }`
+- [ ] Implement `src/tools/playbook.ts` — `read_playbook` tool:
+  - Reads a skill SKILL.md from installed playbook packages
+  - Searches `node_modules/@electric-sql/playbook/skills/`, `node_modules/@tanstack/db-playbook/skills/`, `node_modules/@durable-streams/playbook/skills/`
+  - Optionally loads reference files from `references/` subdirectory
+  - Zod schema: `{ name: z.string(), include_references: z.boolean().optional() }`
+- [ ] Implement `src/tools/playbook.ts` — `list_playbooks` tool:
+  - Lists all available skills across all playbook packages
+  - Returns name + description for each
+  - Zod schema: `{}` (no args)
+- [ ] Implement `src/tools/server.ts` — MCP server:
+  - `createSdkMcpServer({ name: "electric-agent-tools", version: "1.0.0", tools: [buildTool, readPlaybookTool, listPlaybooksTool] })`
+- [ ] Write tests for each tool
+- [ ] Acceptance: Each tool runs independently with correct output
 
-### Phase 3: Tool Implementations
+### Phase 3: Guardrail Hooks
 
-Build the tool set that agents use to interact with the generated project.
+Implement the 5 guardrails from RFC Section 8 as Agent SDK hooks.
 
-- [ ] Implement `src/tools/types.ts` — Tool interface: `{ name, description, parameters, execute(args, context) → result }`
-- [ ] Implement `src/tools/registry.ts` — Tool registry: register tools, look up by name, generate Anthropic tool definitions for API calls
-- [ ] Implement `src/tools/view.ts` — Read file from project directory, template directory, or playbooks. Returns file content or "file not found"
-- [ ] Implement `src/tools/write.ts`:
-  - Write file to project directory
-  - **Hook into guardrail pipeline before writing** (write protection, import validation)
-  - Return success/failure (silently reject protected files)
-- [ ] Implement `src/tools/edit.ts`:
-  - Search-and-replace in existing file
-  - `old_text` → `new_text` replacement (must be unique match)
-  - **Hook into guardrail pipeline** (same checks as write)
-  - Return success/failure with context
-- [ ] Implement `src/tools/grep.ts` — Regex search across project files. Returns matching lines with file paths and line numbers
-- [ ] Implement `src/tools/glob.ts` — Find files matching a glob pattern in the project. Returns list of matching paths
-- [ ] Implement `src/tools/build.ts`:
-  - Run `pnpm run build` + `pnpm run check` in the project directory
-  - Capture stdout/stderr
-  - Parse and format error output for the agent
-  - Return structured result: `{ success, stdout, stderr, errors[] }`
-- [ ] Implement `src/tools/shell.ts`:
-  - Execute arbitrary shell command in project directory
-  - 120s timeout
-  - Capture stdout/stderr
-  - Return structured result
-- [ ] Implement `src/tools/playbook.ts`:
-  - `read_playbook(name)` — load a playbook by name from the bundled playbooks directory
-  - `list_playbooks()` — list all available playbook names with one-line descriptions
-- [ ] Acceptance: Each tool can be called independently with test inputs and returns expected results. Tools compose with guardrails correctly.
-
-### Phase 4: Programmatic Guardrails
-
-Build the five guardrails from RFC Section 8. These are deterministic checks — no LLM involved.
-
-- [ ] Implement `src/guardrails/index.ts` — Guardrail pipeline: takes a file write/edit operation, runs it through all applicable guardrails, returns allow/reject
-- [ ] Implement `src/guardrails/write-protection.ts`:
-  - Maintain list of write-protected files: `docker-compose.yml`, `vite.config.ts`, `tsconfig.json`, `biome.json`, `pnpm-lock.yaml`
-  - On write/edit to protected file: silently reject (return success to agent, but don't write)
-  - Protection activates after initial scaffolding is complete
-- [ ] Implement `src/guardrails/import-validation.ts`:
-  - Parse import statements from file content
-  - Check each import against known-correct import table (derived from `patterns.md`)
-  - Reject file write if unknown import found, with suggestion from hallucination table
-  - Return specific error: "Unknown import X — did you mean Y?"
-- [ ] Implement `src/guardrails/sql-validation.ts`:
-  - Parse SQL migration content
+- [ ] Implement `src/hooks/write-protection.ts` — PreToolUse hook:
+  - Matches: `Write|Edit`
+  - Protected files (after scaffolding): `docker-compose.yml`, `Caddyfile`, `vite.config.ts`, `tsconfig.json`, `biome.json`, `pnpm-lock.yaml`, `postgres.conf`
+  - On match: return `{ permissionDecision: "allow" }` but with `updatedInput` that redirects to `/dev/null` (silent reject)
+  - Alternative: return `{ permissionDecision: "deny", permissionDecisionReason: "..." }` with `suppressOutput: true` to hide from agent
+- [ ] Implement `src/hooks/import-validation.ts` — PreToolUse hook:
+  - Matches: `Write|Edit`
+  - Extracts import statements from file content being written
+  - Checks against known-correct import table:
+    ```
+    @tanstack/react-db → useLiveQuery, eq, and, or, gt, lt, createCollection, ...
+    @tanstack/db → eq, gt, lt, and, or, not, inArray, count, sum, avg, ...
+    @tanstack/electric-db-collection → electricCollectionOptions, isChangeMessage, isControlMessage
+    @electric-sql/client → ELECTRIC_PROTOCOL_QUERY_PARAMS, ShapeStream, Shape
+    @radix-ui/themes → Theme, Container, Flex, Heading, Text, Button, ...
+    @tanstack/react-router → createFileRoute, createRootRoute, Link, Outlet, ...
+    @tanstack/react-start → createStart
+    @tanstack/react-start/server → createServerFileRoute (or server-entry)
+    ```
+  - On hallucinated import: deny with suggestion
+- [ ] Implement `src/hooks/sql-validation.ts` — PreToolUse hook:
+  - Matches: `Write|Edit` (on `*.sql` files)
   - For every `CREATE TABLE` statement, verify a corresponding `ALTER TABLE ... REPLICA IDENTITY FULL` exists
-  - Reject migration if any table is missing REPLICA IDENTITY
-  - Return specific error listing which tables need the ALTER
-- [ ] Implement `src/guardrails/collection-schema.ts`:
-  - After writing a collection file, extract schema fields from the collection definition
-  - Read the corresponding migration file to get SQL column definitions
-  - Compare fields — flag mismatches (missing fields, type mismatches)
-  - Return warnings (not hard reject — the agent should fix, but the write goes through)
-- [ ] Implement `src/guardrails/dependency-guard.ts`:
-  - Track the set of dependencies from the template's `package.json`
-  - On any write to `package.json`, verify no template dependencies were removed
-  - Allow additions, block removals
-- [ ] Write tests for each guardrail in `tests/guardrails/`
-- [ ] Acceptance: Each guardrail independently catches its target failure mode. Write-protection silently rejects. Import validation catches hallucinated imports. SQL validation catches missing REPLICA IDENTITY. Collection validation catches field mismatches. Dependency guard blocks removals.
+  - On missing: deny with specific error
+- [ ] Implement `src/hooks/dependency-guard.ts` — PreToolUse hook:
+  - Matches: `Write|Edit` (on `package.json`)
+  - Parses old and new content, compares dependency lists
+  - Allows additions, blocks removals of existing deps
+- [ ] Implement `src/hooks/collection-schema.ts` — PostToolUse hook:
+  - Matches: `Write|Edit` (on `src/collections/*.ts` or `src/db/collections/*.ts`)
+  - After write succeeds: reads the collection file and the corresponding migration
+  - Compares schema fields to SQL columns
+  - Returns `additionalContext` warning on mismatch (doesn't block)
+- [ ] Implement `src/hooks/index.ts` — compose all hooks:
+  ```typescript
+  export const hooks = {
+    PreToolUse: [
+      { matcher: "Write|Edit", hooks: [writeProtection, importValidation, sqlValidation, dependencyGuard] },
+    ],
+    PostToolUse: [
+      { matcher: "Write|Edit", hooks: [collectionSchemaValidation] },
+    ],
+  }
+  ```
+- [ ] Write tests for each hook
+- [ ] Acceptance: Each hook catches its target failure. Write-protection silently rejects. Import validation catches hallucinated imports. SQL validation catches missing REPLICA IDENTITY.
 
-### Phase 5: Error Classification & Working Memory
+### Phase 4: Patterns File & System Prompts
 
-Build the error classification system and the working memory that prevents repeated failures.
+Write the condensed patterns file and build system prompt constructors.
 
-- [ ] Implement `src/errors/classifier.ts`:
-  - Parse build output (stdout/stderr from build tool)
-  - Classify errors into: `syntax`, `type`, `import`, `architecture`, `infrastructure`, `unknown`
-  - Pattern matching on error messages:
-    - `syntax`: "Parse error", "Unexpected token", "SyntaxError"
-    - `type`: "Type", "is not assignable to", "missing property", "does not exist on type"
-    - `import`: "Module not found", "Cannot find module", "has no exported member"
-    - `architecture`: "Circular dependency", "Cannot be used as a"
-    - `infrastructure`: "ECONNREFUSED", "docker", "postgres"
-  - Return classified errors with: class, file, message, line number, max retries, escalation path
-- [ ] Implement `src/errors/working-memory.ts`:
-  - `readErrors(projectDir)` — parse `_agent/errors.md`
-  - `logError(projectDir, error)` — append to `_agent/errors.md` with timestamp, classification, attempted fix
-  - `logOutcome(projectDir, errorId, outcome)` — update existing entry with fix result
-  - `hasFailedAttempt(projectDir, errorClass, file, message)` — check if same error already has a failed fix
-  - `consecutiveIdenticalFailures(projectDir, errorClass, file, message)` — check for two identical failures in a row
-- [ ] Implement `src/session/index.ts`:
-  - `readSession(projectDir)` — parse `_agent/session.md`
-  - `writeSession(projectDir, data)` — update session metadata
-  - Track: app name, current phase, current task, build status, total builds, total errors, escalations
-- [ ] Write tests for classifier with sample build outputs for each error class
-- [ ] Acceptance: Classifier correctly categorizes sample errors from each class. Working memory persists across tool calls. Consecutive identical failure detection works.
+- [ ] Write `src/agents/patterns.md` (~100 lines):
+  - Correct import paths for every package (condensed from playbooks)
+  - Hallucination table: wrong import → correct import
+  - `createCollection(electricCollectionOptions({...}))` wrapping pattern
+  - `shapeOptions: { url: '/api/tablename' }` pattern
+  - SSR-safe URL construction: `new URL('/api/x', typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173').toString()`
+  - `getKey: (row) => row.id` requirement
+  - `onInsert`/`onUpdate`/`onDelete` handler patterns returning `{ txid }`
+  - Backend txid extraction: `pg_current_xact_id()::xid::text` inside transaction
+  - `ELECTRIC_PROTOCOL_QUERY_PARAMS` proxy pattern
+  - `shellComponent` pattern for __root.tsx
+  - Common mistakes:
+    - Wrong: `import { useQuery } from '@tanstack/react-db'` → Right: `useLiveQuery`
+    - Wrong: `import { electricCollectionOptions } from '@tanstack/react-db'` → Right: `from '@tanstack/electric-db-collection'`
+    - Wrong: `createCollection({ ...electricCollectionOptions() })` → Right: `createCollection(electricCollectionOptions({}))`
+    - Missing `REPLICA IDENTITY FULL` after `CREATE TABLE`
+    - Missing `nitro` plugin in vite.config.ts
+    - Missing `src/server.ts` and `src/start.tsx`
+- [ ] Implement `src/agents/prompts.ts`:
+  - `buildCoderPrompt(projectDir)` → string:
+    - Role: code generator for Electric + TanStack DB apps
+    - Workflow: read PLAN.md → identify next task → load playbooks → generate code → build → verify
+    - Inline `patterns.md` content (always loaded)
+    - Error classification guide with examples
+    - Instruction: check `_agent/errors.md` before any fix attempt
+    - Instruction: use `read_playbook` tool for detailed patterns
+    - Instruction: mark tasks complete in PLAN.md after build passes
+  - `buildPlannerPrompt()` → string:
+    - Role: produce detailed implementation plan
+    - Include PLAN.md template (from RFC Section 6)
+    - Include key content from `electric-quickstart`, `tanstack-start-quickstart`, `tanstack-db-electric` playbooks (pre-loaded, not via tool)
+    - Instruction: produce PLAN.md and nothing else
+- [ ] Acceptance: Prompts render correctly, include all required sections, patterns.md has no errors vs. actual APIs
 
-### Phase 6: System Prompts
+### Phase 5: Agent Orchestration
 
-Build the system prompt constructors for each agent.
+Wire the Agent SDK to run planner and coder.
 
-- [ ] Implement `src/prompts/coder.ts`:
-  - Fixed portion (~1,400 tokens): role description, workflow instructions, `patterns.md` content (always loaded), error classification guide with examples per class, guardrail rules, instruction to check `_agent/errors.md` before any fix
-  - Variable portion: current task from `PLAN.md`, loaded playbooks (1-2 as needed)
-  - Build the prompt as a function: `buildCoderPrompt(plan, currentTask, loadedPlaybooks) → string`
-- [ ] Implement `src/prompts/planner.ts`:
-  - App description from developer
-  - Infrastructure playbooks: `schemas.md`, `setup.md`, `shapes.md`, `electric.md`
-  - Plan template (from RFC Section 6)
-  - Instructions to produce `PLAN.md` and nothing else
-  - Build as function: `buildPlannerPrompt(appDescription, playbooks, conversationHistory?) → string`
-- [ ] Acceptance: Prompts render correctly, stay within token budgets, include all required sections
+- [ ] Implement `src/agents/planner.ts`:
+  ```typescript
+  async function runPlanner(appDescription: string, projectDir: string): Promise<string> {
+    const plannerPrompt = buildPlannerPrompt()
+    // Load playbook content to embed in prompt
+    const playbooks = await loadPlannerPlaybooks(projectDir)
 
-### Phase 7: Agent Loop & Orchestration
+    for await (const message of query({
+      prompt: `${appDescription}\n\n${playbooks}`,
+      options: {
+        model: "claude-opus-4-6",
+        systemPrompt: plannerPrompt,
+        maxThinkingTokens: 16384,
+        allowedTools: ["mcp__electric-agent-tools__read_playbook", "mcp__electric-agent-tools__list_playbooks"],
+        mcpServers: { "electric-agent-tools": mcpServer },
+        cwd: projectDir,
+        maxTurns: 10,
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+      },
+    })) {
+      // Stream progress, capture result
+    }
+    return planMd
+  }
+  ```
+- [ ] Implement `src/agents/coder.ts`:
+  ```typescript
+  async function runCoder(projectDir: string, task?: string): Promise<CoderResult> {
+    const coderPrompt = buildCoderPrompt(projectDir)
 
-Build the core agentic loop and the planner/coder orchestration.
+    for await (const message of query({
+      prompt: task || "Read PLAN.md and execute the next unchecked task.",
+      options: {
+        model: "claude-sonnet-4-5-20250929",
+        systemPrompt: coderPrompt,
+        maxThinkingTokens: 8192,
+        allowedTools: [
+          "Read", "Write", "Edit", "Glob", "Grep", "Bash",
+          "mcp__electric-agent-tools__build",
+          "mcp__electric-agent-tools__read_playbook",
+          "mcp__electric-agent-tools__list_playbooks",
+        ],
+        mcpServers: { "electric-agent-tools": mcpServer },
+        hooks: guardrailHooks,
+        cwd: projectDir,
+        maxTurns: 30,
+        maxBudgetUsd: 2.0,
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+      },
+    })) {
+      // Stream progress, handle errors, update working memory
+    }
+    return result
+  }
+  ```
+- [ ] Implement coder task loop:
+  1. Read PLAN.md, find next unchecked task
+  2. Invoke coder with task-specific prompt
+  3. Monitor build results from message stream
+  4. If build fails: classify error, check `_agent/errors.md`, retry or escalate
+  5. If build passes: mark task complete in PLAN.md
+  6. Move to next task
+  7. After all tasks in phase complete: report to developer
+- [ ] Implement error handling:
+  - Parse build tool results from PostToolUse messages
+  - Classify errors (syntax/type/import/architecture/infrastructure/unknown)
+  - Log to `_agent/errors.md`
+  - Check for consecutive identical failures → escalate
+  - Retry budget per error class
+- [ ] Acceptance: Planner produces valid PLAN.md. Coder executes tasks with build verification. Error classification and retry logic works.
 
-- [ ] Implement `src/agents/types.ts`:
-  - `AgentMessage` — role + content
-  - `ToolCall` — tool name, args, id
-  - `ToolResult` — id, content, is_error
-  - `AgentConfig` — model, system prompt, tools, max_turns
-  - `AgentContext` — project directory, session state, plan reference
-- [ ] Implement `src/agents/loop.ts` — Core agentic loop:
-  - Send messages to Claude API with tools
-  - Receive response, check for tool_use blocks
-  - Execute each tool call via tool registry
-  - Collect tool results, send back as next turn
-  - Loop until: assistant responds without tool calls (done), max turns reached, or escalation triggered
-  - Handle prompt caching: stable prefix (system prompt) separate from variable suffix
-  - Token tracking for cost estimation
-- [ ] Implement `src/agents/planner.ts` — Planner sub-agent:
-  - Model: `claude-opus-4-6` with extended thinking, effort `high`
-  - Tools: `read_playbook`, `list_playbooks` only
-  - Input: app description + playbook content
-  - Output: structured `PLAN.md` content
-  - Parse output into plan structure
-  - Approval flow: return plan to caller, caller presents to developer
-- [ ] Implement `src/agents/coder.ts` — Main coder agent:
-  - Model: `claude-sonnet-4-5-20250929` with extended thinking, effort `high`
-  - Tools: all tools (write, edit, view, grep, glob, build, shell, read_playbook, list_playbooks)
-  - Workflow per task:
-    1. Read `PLAN.md`, identify next unchecked task
-    2. Load relevant playbooks for the task
-    3. Generate/modify files
-    4. Run build tool
-    5. If pass → mark task complete in `PLAN.md`, return success
-    6. If fail → classify error, check working memory, attempt fix within retry budget
-    7. If retry exhausted → escalate per classification table
-  - After each build: update `_agent/session.md`
-  - Error handling: read `_agent/errors.md` before any fix attempt
-  - Same-error-twice detection → immediate escalation
-- [ ] Acceptance: Planner produces valid PLAN.md from a test description. Coder can execute a single task (write file + build + verify). Retry logic works with classified errors.
+### Phase 6: CLI Commands
 
-### Phase 8: CLI Commands
-
-Wire everything together through the CLI commands.
+Wire everything together through the CLI.
 
 - [ ] Implement `src/cli/new.ts` — `electric-agent new "description"`:
-  1. Parse app description from args
-  2. Create project directory (kebab-case from description or explicit name)
-  3. Scaffold from template (Phase 1)
-  4. Run `pnpm install` in scaffolded project
-  5. Invoke planner with description → get `PLAN.md`
-  6. Write `PLAN.md` to project
-  7. Present plan to developer (print to stdout)
-  8. Prompt for approval (stdin: approve / revise / cancel)
-  9. If revise → collect feedback, re-invoke planner with history
-  10. If approve → invoke coder for each phase/task in plan
-  11. Stream progress output throughout
-  12. On completion: print summary (tasks done, build status, how to run)
+  1. Parse app description from CLI args
+  2. Derive project name (kebab-case) or accept explicit `--name`
+  3. Run scaffolding (Phase 1)
+  4. Invoke planner → get PLAN.md
+  5. Write PLAN.md to project
+  6. Print plan to stdout, prompt for approval
+  7. On revise: re-invoke planner with feedback
+  8. On approve: run coder task loop
+  9. On completion: generate README.md + CLAUDE.md, print summary
 - [ ] Implement `src/cli/iterate.ts` — `electric-agent iterate`:
-  1. Verify we're in a project directory (check for `PLAN.md`)
-  2. Read `PLAN.md` and `_agent/session.md` to restore context
-  3. Enter conversational loop (readline)
-  4. For each user message: invoke coder with context + request
-  5. Coder updates `PLAN.md` if the request changes the plan
-  6. Coder modifies files and verifies build
-  7. Stream progress output
+  1. Verify we're in a project directory (check for PLAN.md)
+  2. Enter conversational loop (readline or stdin)
+  3. For each user message: invoke coder with message as task
+  4. Stream progress output
 - [ ] Implement `src/cli/status.ts` — `electric-agent status`:
-  1. Read `PLAN.md`, parse task completion
-  2. Read `_agent/session.md` for session metadata
-  3. Print: phases, tasks (done/total), current build status, error count
+  1. Read PLAN.md, parse `- [x]` and `- [ ]` counts
+  2. Read `_agent/session.md`
+  3. Print summary: phases, tasks done/total, build status
 - [ ] Implement `src/cli/up.ts` — `electric-agent up`:
-  1. Run `docker compose up -d` in project directory
-  2. Wait for health checks (Postgres, Electric, Caddy)
-  3. Run migrations: `pnpm run migrate`
-  4. Start dev server: `pnpm dev`
+  1. `docker compose up -d`
+  2. Wait for health checks (`curl http://localhost:30000/health`)
+  3. `pnpm run migrate`
+  4. `pnpm dev`
   5. Print access URL
 - [ ] Implement `src/cli/down.ts` — `electric-agent down`:
-  1. Stop dev server if running
-  2. Run `docker compose down`
+  1. Kill dev server
+  2. `docker compose down`
 - [ ] Implement `src/progress/reporter.ts`:
-  - Prefixed output: `[plan]`, `[approve]`, `[task]`, `[build]`, `[fix]`, `[done]`, `[error]`
-  - Streaming: lines appear as they happen, not batched
-  - Color support (optional): green for pass, red for fail, yellow for fix
-- [ ] Acceptance: Full end-to-end flow works — `electric-agent new "a todo app"` produces a building project with real-time sync
+  - Transform SDK message stream → prefixed CLI lines
+  - `[plan]`, `[approve]`, `[task]`, `[build]`, `[fix]`, `[done]`, `[error]`
+  - Parse tool_use blocks for build results
+  - Color support (green/red/yellow)
+- [ ] Acceptance: Full end-to-end flow: `electric-agent new "a todo app"` → building project
 
-### Phase 9: Generated Documentation
+### Phase 7: Generated Documentation
 
-Implement the documentation generation that runs at the end of code generation.
+Documentation generation at the end of code generation.
 
-- [ ] Implement README.md generation:
-  - Template with dynamic sections filled from `PLAN.md`
-  - Quick start instructions
-  - Architecture section: data model, sync shapes, mutation flow
+- [ ] README.md generation:
+  - Template filled from PLAN.md data model and architecture
+  - Quick start: install, up, migrate, dev
+  - Architecture section: data flow diagram, entities, sync shapes
   - Stack description
-- [ ] Implement CLAUDE.md generation:
-  - Project-specific version of playbook patterns
-  - Concrete imports and file paths from the generated code
-  - Commands reference
-  - Key files listing
-  - Pattern examples extracted from generated code
-  - Common mistakes section
-- [ ] Acceptance: Generated docs are accurate for the specific project, contain correct paths and imports
+- [ ] CLAUDE.md generation:
+  - Project-specific commands
+  - Key files with concrete paths from generated code
+  - Pattern examples extracted from generated collections, queries, mutations
+  - Common mistakes tailored to this project's specific imports
+- [ ] Acceptance: Generated docs are accurate, contain correct paths and imports
 
-### Phase 10: Integration Testing & Polish
+### Phase 8: Working Memory & Session
 
-End-to-end testing of the full flow.
+Implement the agent's persistent memory across tool calls.
 
-- [ ] Integration test: `electric-agent new "a collaborative todo list"`:
-  - Plan is generated and coherent
-  - Code is generated for all plan tasks
+- [ ] Implement `src/working-memory/errors.ts`:
+  - `readErrors(projectDir)` — parse `_agent/errors.md`
+  - `logError(projectDir, { timestamp, errorClass, file, message, attemptedFix })` — append entry
+  - `logOutcome(projectDir, entryIndex, outcome)` — update with result
+  - `hasFailedAttempt(projectDir, errorClass, file, message)` — check for prior failure
+  - `consecutiveIdenticalFailures(projectDir)` — check for same-error-twice
+- [ ] Implement `src/working-memory/session.ts`:
+  - `readSession(projectDir)` — parse `_agent/session.md`
+  - `updateSession(projectDir, data)` — update metadata
+  - Track: app name, current phase, current task, build status, total builds, total errors
+- [ ] Integration with coder: after each build tool result, update session and error log
+- [ ] Acceptance: Error log persists across agent invocations. Session state is accurate.
+
+### Phase 9: Integration Testing & Polish
+
+End-to-end testing.
+
+- [ ] Test: `electric-agent new "a collaborative todo list with projects"`
+  - Plan is generated with correct entities (todos, projects)
+  - Code is generated: migrations, collections, proxy routes, pages
   - Build passes
   - Docker services start
-  - App loads in browser
-  - Data syncs in real-time between two tabs
-- [ ] Integration test: `electric-agent iterate` with "add a due date field":
-  - Migration is created with ALTER TABLE
-  - Collection is updated
-  - UI shows new field
+  - App loads and syncs
+- [ ] Test: `electric-agent iterate` with "add a due date field to todos"
+  - New migration created
+  - Collection and schema updated
+  - UI updated
   - Build passes
-  - Existing data is preserved
-- [ ] Error recovery test: introduce a deliberate error and verify the agent classifies, retries, and fixes
-- [ ] Guardrail tests: verify each guardrail catches its target failure
-- [ ] Acceptance: >70% first-attempt success rate on 3-5 entity CRUD apps, >90% within 3 retries
+- [ ] Test: error recovery — introduce deliberate error, verify classify/retry/fix
+- [ ] Test: each guardrail hook catches its target failure
+- [ ] Acceptance: >70% first-attempt success, >90% within 3 retries
 
 ---
 
 ## Key Technical Decisions
 
-### Anthropic SDK Usage
+### Agent SDK vs. Raw API
 
-Use `@anthropic-ai/sdk` directly. The agentic loop is simple enough that a framework adds overhead without benefit. Key API features:
-- **Tool use**: Define tools as JSON schemas, receive `tool_use` content blocks, return `tool_result` blocks
-- **Extended thinking**: Enable for both planner (Opus) and coder (Sonnet) with `thinking: { type: "enabled", budget_tokens: N }`
-- **Prompt caching**: Structure system prompts with stable prefix for cache hits
-- **Streaming**: Use streaming for progress feedback during generation
+The Agent SDK provides the full agentic loop, built-in tools, and hooks. This eliminates ~60% of the code from the original plan (tool registry, tool implementations for read/write/edit/grep/glob/shell, agentic loop, tool dispatch). The trade-off is a dependency on the SDK, but it's Anthropic's official package.
 
-### Template Strategy
+### Template Strategy: Clone + Extend KPB
 
-The KPB template is copied verbatim. No templating engine — just file copy with `.env.template` → `.env` rename and project name substitution in `package.json`. The template is a valid, building project before the agent writes any app-specific code. This means:
-- `pnpm install && pnpm run build` passes on the bare template
-- The agent only adds to the template, never modifies its core files (enforced by write-protection guardrail)
+Rather than bundling a complete template, we clone KPB via `npx gitpick` and add our Electric infrastructure files on top. This means:
+- KPB updates flow through automatically (or we can pin to a specific commit)
+- We only maintain the Electric-specific additions
+- The template is always a valid KPB project before we touch it
 
-### Migration Execution
+### Playbook Strategy: Use Existing npm Packages
 
-Migrations run via a simple `pnpm run migrate` script defined in the template's `package.json`. The script reads SQL files from `db/migrations/` in order and executes them against the Postgres instance. No migration framework — plain SQL files, numbered ordering.
+The playbook packages (`@electric-sql/playbook`, `@tanstack/db-playbook`) are already comprehensive, well-structured, and maintained by the respective teams. We use them as-is via the `read_playbook` custom tool rather than writing our own. We only write a condensed `patterns.md` for the always-loaded hallucination guard.
 
-### Error Escalation UX
+### Guardrails as Hooks
 
-When the agent escalates to the developer:
-1. Print the error clearly with classification
-2. Print what was tried and why it failed
-3. Ask the developer for guidance
-4. Developer can: provide a fix hint, skip the task, or abort
+Agent SDK hooks provide exactly the right interception points. PreToolUse hooks can deny/modify tool calls before execution. PostToolUse hooks can add context warnings after execution. This is cleaner than wrapping tool implementations because:
+- Hooks compose independently
+- Built-in tools (Write, Edit) don't need modification
+- The agent sees hook feedback as system messages
 
-The agent never silently gives up. Every escalation is visible.
+### Migration Tool: dbmate
+
+dbmate uses standard SQL files with `-- migrate:up` / `-- migrate:down` markers. It supports `DATABASE_URL`, has a `wait` command for Docker, and can dump schema. No ORM, no code generation — just SQL.
 
 ---
 
-## Dependencies
-
-### CLI Tool Dependencies (create-electric-app/package.json)
+## Dependencies (CLI Tool)
 
 | Package | Purpose |
 |---------|---------|
-| `@anthropic-ai/sdk` | Claude API client |
+| `@anthropic-ai/claude-agent-sdk` | Agent loop, tools, hooks, sub-agents |
 | `commander` | CLI argument parsing |
-| `fast-glob` | File globbing for glob tool |
-| `typescript` | Build-time type checking |
+| `zod` | Schema definitions for custom MCP tools |
 
-### Generated Project Dependencies (template/package.json)
-
-| Package | Purpose |
-|---------|---------|
-| `@tanstack/react-start` | TanStack Start framework |
-| `@tanstack/react-router` | File-based routing |
-| `@tanstack/react-db` | Reactive client store |
-| `@tanstack/db` | TanStack DB core |
-| `@electric-sql/client` | Electric sync client |
-| `@radix-ui/themes` | UI component library |
-| `postgres` | Postgres client (for API routes) |
-| `vite` | Build tool |
-| `typescript` | Type checking |
-| `@biomejs/biome` | Lint and format |
+That's it. The SDK handles everything else.
 
 ---
 
@@ -489,18 +642,19 @@ The agent never silently gives up. Every escalation is visible.
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Playbook content is wrong/outdated | Medium | High | Test each playbook against actual Electric + TanStack DB APIs before using. Pin to specific package versions in template. |
-| Agent hallucinates imports despite guardrails | Medium | Medium | Import validation guardrail catches this deterministically. Keep hallucination table in patterns.md comprehensive. |
-| Template project doesn't build | Low | Critical | Test template in CI. Template must be a passing build before anything else. |
-| Claude API rate limits during generation | Medium | Medium | Implement exponential backoff. Typical project is ~20 API calls, well within limits. |
-| Docker not available on developer's machine | Medium | Medium | Detect early, provide clear error message with install instructions. |
-| Build feedback loop gets stuck | Medium | High | Hard limit on retries per error class. Same-error-twice rule. Working memory prevents loops. |
+| Agent SDK API changes | Low | High | Pin to specific version. SDK is Anthropic's official product. |
+| KPB template changes break scaffold | Medium | Medium | Pin to specific git commit if needed. Test scaffold in CI. |
+| Playbook content doesn't match APIs | Low | High | Playbooks are maintained by Electric/TanStack teams. Version-pinned deps. |
+| Agent hallucinates imports | Medium | Medium | Import validation hook catches deterministically. Patterns.md covers all packages. |
+| Build feedback loop gets stuck | Medium | High | Hard retry limits. Same-error-twice rule. Working memory prevents loops. |
+| Docker not available | Medium | Medium | Detect early, clear error message. |
+| SSR/hydration issues | Medium | Medium | Template uses `defaultSsr: false` + `shellComponent` pattern from playbooks. |
 
 ---
 
 ## Success Criteria (from RFC)
 
-- [ ] Given a 3-5 entity CRUD app description → building project on first attempt in >70% of cases
+- [ ] 3-5 entity CRUD app → building project on first attempt in >70% of cases
 - [ ] Building project within 3 retry cycles in >90% of cases
 - [ ] No hallucinated imports in generated code
 - [ ] Correct collection definitions, working optimistic mutations
