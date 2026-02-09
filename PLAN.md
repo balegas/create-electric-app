@@ -4,7 +4,25 @@
 
 A CLI tool (`electric-agent`) that turns natural-language app descriptions into running reactive applications built on Electric SQL + TanStack DB. This plan covers Phase 1 of the RFC: Core Generation MVP.
 
-**Key architectural insight:** The Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) provides the agentic loop, built-in tools (Read, Write, Edit, Glob, Grep, Bash), sub-agent orchestration, and hooks for guardrails out of the box. We build on top of this rather than implementing our own agent infrastructure. The existing playbook npm packages (`@electric-sql/playbook`, `@tanstack/db-playbook`) provide canonical grounding material — we use them as-is rather than rewriting.
+**Key architectural insights:**
+
+1. **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) provides the agentic loop, built-in tools, sub-agent orchestration, and hooks for guardrails. We build on top of this — no custom agent infrastructure needed.
+2. **Existing playbook npm packages** (`@electric-sql/playbook`, `@tanstack/db-playbook`) provide canonical grounding — we use them as-is.
+3. **Drizzle ORM** provides a single source of truth for the data model, with a type chain from schema definition through to UI:
+
+```
+Drizzle pgTable()         ← single source of truth (TypeScript)
+    ↓ drizzle-kit generate
+SQL migration files        ← standard SQL, REPLICA IDENTITY FULL appended by guardrail
+    ↓ drizzle-kit migrate
+Postgres tables            ← Electric syncs from here
+    ↓ drizzle-orm/zod
+Zod schemas                ← auto-generated via createSelectSchema()
+    ↓
+Collection definitions     ← electricCollectionOptions({ schema: zodSchema })
+    ↓ useLiveQuery
+UI components              ← fully typed end-to-end
+```
 
 ---
 
@@ -23,7 +41,6 @@ A CLI tool (`electric-agent`) that turns natural-language app descriptions into 
 │  ┌──────────────┐    ┌────────────────────────┐ │
 │  │ Planner       │    │ Coder                  │ │
 │  │ (Opus 4.6)    │    │ (Sonnet 4.5)           │ │
-│  │ agents: {}    │    │ agents: {}             │ │
 │  │ tools: MCP    │    │ tools: built-in + MCP  │ │
 │  └──────────────┘    └────────────────────────┘ │
 │                                                  │
@@ -34,14 +51,13 @@ A CLI tool (`electric-agent`) that turns natural-language app descriptions into 
 │                    list_playbooks                 │
 │                                                  │
 │  Hooks (PreToolUse):                             │
-│    - Write protection                            │
-│    - Import validation                           │
-│    - SQL migration validation                    │
-│    - Dependency guard                            │
+│    - Write protection (config files)             │
+│    - Import validation (hallucination guard)     │
+│    - Migration validation (REPLICA IDENTITY)     │
+│    - Dependency guard (package.json)             │
 │                                                  │
 │  Hooks (PostToolUse):                            │
-│    - Collection-schema validation (warnings)     │
-│    - Error logging to _agent/errors.md           │
+│    - Schema consistency check (Drizzle ↔ Zod)   │
 │    - Progress reporting                          │
 └─────────────────────────────────────────────────┘
 ```
@@ -97,31 +113,176 @@ create-electric-app/
 │   │   ├── index.ts             # Compose all hooks
 │   │   ├── write-protection.ts  # Block writes to protected files
 │   │   ├── import-validation.ts # Validate imports against known-correct table
-│   │   ├── sql-validation.ts    # Ensure REPLICA IDENTITY FULL
-│   │   ├── collection-schema.ts # Warn on field mismatches (PostToolUse)
+│   │   ├── migration-validation.ts # Ensure REPLICA IDENTITY FULL in SQL migrations
+│   │   ├── schema-consistency.ts   # Warn if collection doesn't use drizzle-orm/zod
 │   │   └── dependency-guard.ts  # Prevent removal of template deps
 │   ├── scaffold/
-│   │   └── index.ts             # Clone KPB template, add Electric deps
-│   ├── progress/
-│   │   └── reporter.ts          # Transform SDK messages → prefixed CLI output
-│   └── working-memory/
-│       ├── errors.ts            # Read/write _agent/errors.md
-│       └── session.ts           # Read/write _agent/session.md
-├── template/                    # Extended KPB starter template
+│   │   └── index.ts             # Clone KPB template, add Electric + Drizzle deps
+│   ├── working-memory/           # Phase 4: persistent memory (before agent orchestration)
+│   │   ├── errors.ts            # Read/write _agent/errors.md
+│   │   └── session.ts           # Read/write _agent/session.md
+│   └── progress/
+│       └── reporter.ts          # Transform SDK messages → prefixed CLI output
+├── template/                    # Files added on top of KPB
 │   ├── docker-compose.yml       # Postgres 17 + Electric + Caddy
 │   ├── Caddyfile                # HTTP/2 reverse proxy
 │   ├── postgres.conf            # wal_level=logical
 │   ├── .env.example             # DATABASE_URL, ELECTRIC_URL
+│   ├── drizzle.config.ts        # Drizzle Kit config
 │   ├── src/
 │   │   ├── server.ts            # TanStack Start server entry
 │   │   ├── start.tsx            # SSR disabled (defaultSsr: false)
+│   │   ├── db/
+│   │   │   ├── schema.ts        # Drizzle schema (pgTable definitions) — placeholder
+│   │   │   ├── index.ts         # Database connection (drizzle + postgres.js)
+│   │   │   └── utils.ts         # generateTxId() helper
 │   │   └── lib/
-│   │       └── electric-proxy.ts # Proxy helpers (prepareElectricUrl, etc.)
+│   │       └── electric-proxy.ts # prepareElectricUrl, proxyElectricRequest
 │   └── (inherits from KPB: package.json, vite, biome, tsconfig, routes, etc.)
 └── tests/
     ├── hooks/                   # Guardrail hook tests
     ├── tools/                   # Custom tool tests
     └── scaffold/                # Template scaffolding tests
+```
+
+---
+
+## Data Model: Drizzle as Single Source of Truth
+
+### Schema Definition
+
+The agent generates `src/db/schema.ts` with Drizzle `pgTable()` definitions:
+
+```typescript
+// src/db/schema.ts
+import { pgTable, uuid, text, boolean, timestamp } from "drizzle-orm/pg-core"
+
+export const todos = pgTable("todos", {
+  id: uuid().primaryKey().defaultRandom(),
+  text: text().notNull(),
+  completed: boolean().notNull().default(false),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
+```
+
+### Zod Schema Derivation
+
+Zod schemas are derived from Drizzle tables — never hand-written:
+
+```typescript
+// src/db/zod-schemas.ts
+import { createSelectSchema, createInsertSchema } from "drizzle-orm/zod"
+import { todos } from "./schema"
+
+export const todoSelectSchema = createSelectSchema(todos)
+export const todoInsertSchema = createInsertSchema(todos)
+
+export type Todo = typeof todoSelectSchema._type
+export type NewTodo = typeof todoInsertSchema._type
+```
+
+### Collection Definition
+
+Collections reference the derived Zod schema:
+
+```typescript
+// src/db/collections/todos.ts
+import { createCollection } from "@tanstack/react-db"
+import { electricCollectionOptions } from "@tanstack/electric-db-collection"
+import { todoSelectSchema } from "../zod-schemas"
+
+export const todoCollection = createCollection(
+  electricCollectionOptions({
+    id: "todos",
+    schema: todoSelectSchema,
+    getKey: (row) => row.id,
+    shapeOptions: {
+      url: new URL(
+        "/api/todos",
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "http://localhost:5173"
+      ).toString(),
+    },
+    onInsert: async ({ transaction }) => {
+      const newTodo = transaction.mutations[0].modified
+      const res = await fetch("/api/mutations/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTodo),
+      })
+      const { txid } = await res.json()
+      return { txid }
+    },
+    // onUpdate, onDelete follow same pattern
+  })
+)
+```
+
+### Server-Side Mutation Route
+
+API routes use Drizzle for type-safe queries:
+
+```typescript
+// src/routes/api/mutations/todos.ts
+import { createFileRoute } from "@tanstack/react-router"
+import { db } from "@/db"
+import { todos } from "@/db/schema"
+import { generateTxId } from "@/db/utils"
+
+export const Route = createFileRoute("/api/mutations/todos")({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const data = await request.json()
+        const result = await db.transaction(async (tx) => {
+          const txid = await generateTxId(tx)
+          const [newTodo] = await tx.insert(todos).values(data).returning()
+          return { todo: newTodo, txid }
+        })
+        return Response.json(result)
+      },
+    },
+  },
+})
+```
+
+### Migration Workflow
+
+```bash
+# Agent modifies src/db/schema.ts, then:
+npx drizzle-kit generate    # generates SQL in drizzle/ directory
+npx drizzle-kit migrate     # applies to Postgres
+```
+
+The migration validation guardrail scans generated `.sql` files and appends `ALTER TABLE ... REPLICA IDENTITY FULL` for any new `CREATE TABLE` statements before `drizzle-kit migrate` runs.
+
+### Database Connection
+
+```typescript
+// src/db/index.ts
+import { drizzle } from "drizzle-orm/postgres-js"
+import postgres from "postgres"
+import * as schema from "./schema"
+
+const client = postgres(process.env.DATABASE_URL!)
+export const db = drizzle(client, { schema })
+```
+
+### txid Helper
+
+```typescript
+// src/db/utils.ts
+import { sql } from "drizzle-orm"
+
+export async function generateTxId(tx: any): Promise<number> {
+  const result = await tx.execute(
+    sql`SELECT pg_current_xact_id()::xid::text as txid`
+  )
+  const txid = result[0]?.txid
+  if (txid === undefined) throw new Error("Failed to get transaction ID")
+  return parseInt(txid as string, 10)
+}
 ```
 
 ---
@@ -138,22 +299,24 @@ create-electric-app/
 
 Each playbook is a `SKILL.md` file with optional `references/*.md` deep-dives. The `read_playbook` custom tool reads these files directly from `node_modules/`.
 
+**Gap: Playbooks don't cover Postgres schema management.** No migration tooling, no `REPLICA IDENTITY FULL`, no schema design conventions. Our `patterns.md` and the planner prompt fill this gap with Drizzle-specific patterns.
+
 ### Playbook loading strategy
 
 **Planner receives** (via system prompt — loaded once):
 - `electric-quickstart` — project structure, setup patterns
 - `tanstack-start-quickstart` — TanStack Start + Electric SSR config, proxy, docker-compose
 - `tanstack-db-electric` — Electric collection setup, txid matching, shapes
+- Drizzle schema patterns and conventions (from our patterns.md)
 
 **Coder receives** (via system prompt — always loaded):
-- A condensed `patterns.md` we write ourselves (~100 lines) — import hallucination guard, correct patterns
+- A condensed `patterns.md` we write ourselves (~120 lines) — import hallucination guard, Drizzle patterns, correct API usage
 - Instructions to use `read_playbook` tool for detailed patterns when needed
 
 **Coder loads on demand** (via `read_playbook` tool):
 - `tanstack-db-collections` — when creating collections
 - `tanstack-db-live-queries` — when writing queries
 - `tanstack-db-mutations` — when implementing mutations
-- `tanstack-db-schemas` — when defining Zod schemas
 - `electric-tanstack-integration` — when wiring Electric + TanStack DB
 - `tanstack-start-quickstart` — when setting up routes, SSR, proxy
 
@@ -161,7 +324,7 @@ Each playbook is a `SKILL.md` file with optional `references/*.md` deep-dives. T
 
 ## Template: Extended KPB
 
-The generated project starts from the KPB template (`npx gitpick KyleAMathews/kpb`) extended with Electric + TanStack DB infrastructure. We add these files on top of KPB:
+The generated project starts from the KPB template (`npx gitpick KyleAMathews/kpb`) extended with Electric + TanStack DB + Drizzle infrastructure.
 
 ### Files we add to KPB
 
@@ -171,22 +334,28 @@ The generated project starts from the KPB template (`npx gitpick KyleAMathews/kp
 | `Caddyfile` | HTTP/2 reverse proxy: `:5173` → dev server + Electric |
 | `postgres.conf` | `listen_addresses=*`, `wal_level=logical`, `max_replication_slots=10` |
 | `.env.example` | `DATABASE_URL`, `ELECTRIC_URL` for local Docker |
+| `drizzle.config.ts` | Drizzle Kit migration config |
 | `src/server.ts` | TanStack Start server entry point |
 | `src/start.tsx` | `createStart({ defaultSsr: false })` |
-| `src/lib/electric-proxy.ts` | `prepareElectricUrl()`, `proxyElectricRequest()` from playbook |
+| `src/db/index.ts` | Database connection (drizzle + postgres.js) |
+| `src/db/schema.ts` | Drizzle schema — placeholder, agent fills in |
+| `src/db/zod-schemas.ts` | Derived Zod schemas from Drizzle tables |
+| `src/db/utils.ts` | `generateTxId()` helper |
+| `src/lib/electric-proxy.ts` | `prepareElectricUrl()`, `proxyElectricRequest()` |
 
 ### Dependencies we add to KPB's package.json
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `@tanstack/db` | `0.5.25` | TanStack DB core |
-| `@tanstack/react-db` | `0.1.69` | React hooks (useLiveQuery, etc.) |
-| `@tanstack/electric-db-collection` | `0.2.31` | electricCollectionOptions |
-| `@electric-sql/client` | `1.5.1` | Electric protocol client |
-| `postgres` | `latest` | Postgres client for API routes |
-| `zod` | `^3.24` | Schema validation |
-| `nitro` | `latest` | Server routes for TanStack Start |
-| `dbmate` | `latest` | Database migrations |
+| Package | Version | Type | Purpose |
+|---------|---------|------|---------|
+| `@tanstack/db` | `0.5.25` | prod | TanStack DB core |
+| `@tanstack/react-db` | `0.1.69` | prod | React hooks (useLiveQuery, etc.) |
+| `@tanstack/electric-db-collection` | `0.2.31` | prod | electricCollectionOptions |
+| `@electric-sql/client` | `1.5.1` | prod | Electric protocol client |
+| `drizzle-orm` | `0.45.1` | prod | Schema definitions, query builder, Zod generation |
+| `postgres` | `^3.4` | prod | Postgres.js client driver |
+| `zod` | `^3.24` | prod | Schema validation (peer dep for drizzle-orm/zod) |
+| `nitro` | `latest` | prod | Server routes for TanStack Start |
+| `drizzle-kit` | `0.31.9` | dev | Migration generation and application |
 
 ### KPB's __root.tsx modification
 
@@ -199,7 +368,7 @@ export const Route = createRootRoute({
   component: () => <Outlet />,    // Client-rendered
 })
 
-function RootDocument({ children }) {
+function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head><HeadContent /></head>
@@ -235,39 +404,12 @@ The template MUST build before the agent writes any app-specific code. Acceptanc
 | `@tanstack/react-router` | `1.158.4` | File-based routing |
 | `@tanstack/router-plugin` | `1.158.4` | Vite plugin |
 | `@radix-ui/themes` | `3.3.0` | UI component library |
+| `drizzle-orm` | `0.45.1` | Schema, queries, Zod generation (drizzle-orm/zod) |
+| `drizzle-kit` | `0.31.9` | Migration generation + application |
+| `postgres` | `^3.4` | Postgres.js driver |
 | `@biomejs/biome` | `2.2.4` | Linting (matches KPB) |
 | `vite` | `7.3.1` | Build tool (matches KPB) |
 | `react` | `19.2.0` | React (matches KPB) |
-
----
-
-## Migration Tool: dbmate
-
-**Choice: dbmate** — standard SQL files, Docker-friendly, `dbmate wait` for health checks.
-
-Migration file convention: `db/migrations/YYYYMMDDHHMMSS_description.sql`
-
-```sql
--- migrate:up
-CREATE TABLE todos (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  text TEXT NOT NULL,
-  completed BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-ALTER TABLE todos REPLICA IDENTITY FULL;
-
--- migrate:down
-DROP TABLE todos;
-```
-
-Template package.json scripts:
-```json
-{
-  "migrate": "dbmate --url $DATABASE_URL --migrations-dir db/migrations up",
-  "migrate:create": "dbmate --url $DATABASE_URL --migrations-dir db/migrations new"
-}
-```
 
 ---
 
@@ -292,37 +434,43 @@ Set up the CLI tool project itself.
 
 Build the extended KPB template and the scaffolding system.
 
-- [ ] Create `template/` directory with Electric infrastructure files:
+- [ ] Create `template/` directory with Electric + Drizzle infrastructure files:
   - `docker-compose.yml` — Postgres 17 + Electric + Caddy
   - `Caddyfile` — reverse proxy config
   - `postgres.conf` — wal_level=logical
   - `.env.example` — local Docker defaults
+  - `drizzle.config.ts` — Drizzle Kit configuration pointing to `src/db/schema.ts`
 - [ ] Create `template/src/server.ts` — TanStack Start server entry
 - [ ] Create `template/src/start.tsx` — `createStart({ defaultSsr: false })`
+- [ ] Create `template/src/db/index.ts` — database connection (`drizzle(postgres(DATABASE_URL), { schema })`)
+- [ ] Create `template/src/db/schema.ts` — empty placeholder with example comment
+- [ ] Create `template/src/db/zod-schemas.ts` — empty placeholder with example comment
+- [ ] Create `template/src/db/utils.ts` — `generateTxId()` helper function
 - [ ] Create `template/src/lib/electric-proxy.ts` — proxy helpers from `tanstack-start-quickstart` playbook
 - [ ] Implement `src/scaffold/index.ts`:
   1. Clone KPB via `npx gitpick KyleAMathews/kpb <target-dir>`
-  2. Copy our Electric infrastructure files into the cloned project
+  2. Copy our Electric + Drizzle infrastructure files into the cloned project
   3. Merge additional dependencies into `package.json` (add, never remove)
-  4. Modify `__root.tsx` to use `shellComponent` pattern
-  5. Copy `.env.example` → `.env`
-  6. Create `db/migrations/` directory
-  7. Create `_agent/` directory with empty `errors.md` and `session.md`
-  8. Append `_agent/` to `.gitignore`
-  9. Run `pnpm install`
+  4. Add scripts: `"generate": "drizzle-kit generate"`, `"migrate": "drizzle-kit migrate"`, `"db:push": "drizzle-kit push"`
+  5. Modify `vite.config.ts` to add `nitro()` plugin (required for server routes)
+  6. Modify `__root.tsx` to use `shellComponent` pattern
+  7. Copy `.env.example` → `.env`
+  8. Create `_agent/` directory with empty `errors.md` and `session.md`
+  9. Append `_agent/` and `drizzle/meta/` to `.gitignore` (`drizzle/meta/` contains internal drizzle-kit snapshots; the `drizzle/*.sql` migration files themselves should be committed)
+  10. Run `pnpm install`
 - [ ] Verify: scaffolded project builds (`pnpm run build` passes)
-- [ ] Acceptance: `electric-agent new "test"` creates a building project with Docker, Electric, and all deps installed
+- [ ] Acceptance: scaffolded project has all template files, deps installed, builds cleanly
 
 ### Phase 2: Custom MCP Tools
 
 Build the three custom tools the agents need beyond the built-in set.
 
 - [ ] Implement `src/tools/build.ts` — `build` tool:
-  - Runs `pnpm run build && pnpm run check` in the project directory
+  - Runs `pnpm run build && pnpm run check` in the agent's `cwd` (set by Agent SDK)
   - Captures stdout/stderr
-  - Parses TypeScript and Biome error output
-  - Returns structured result: `{ success: boolean, output: string, errors: string }`
-  - Zod schema: `{ project_dir: z.string() }`
+  - Parses TypeScript and Biome error output into structured format
+  - Returns: `{ success: boolean, output: string, errors: string }`
+  - Zod schema: `{}` (no args — uses agent's working directory)
 - [ ] Implement `src/tools/playbook.ts` — `read_playbook` tool:
   - Reads a skill SKILL.md from installed playbook packages
   - Searches `node_modules/@electric-sql/playbook/skills/`, `node_modules/@tanstack/db-playbook/skills/`, `node_modules/@durable-streams/playbook/skills/`
@@ -343,90 +491,129 @@ Implement the 5 guardrails from RFC Section 8 as Agent SDK hooks.
 
 - [ ] Implement `src/hooks/write-protection.ts` — PreToolUse hook:
   - Matches: `Write|Edit`
-  - Protected files (after scaffolding): `docker-compose.yml`, `Caddyfile`, `vite.config.ts`, `tsconfig.json`, `biome.json`, `pnpm-lock.yaml`, `postgres.conf`
-  - On match: return `{ permissionDecision: "allow" }` but with `updatedInput` that redirects to `/dev/null` (silent reject)
-  - Alternative: return `{ permissionDecision: "deny", permissionDecisionReason: "..." }` with `suppressOutput: true` to hide from agent
+  - Protected files (after scaffolding): `docker-compose.yml`, `Caddyfile`, `vite.config.ts`, `tsconfig.json`, `biome.json`, `pnpm-lock.yaml`, `postgres.conf`, `drizzle.config.ts`
+  - On match: deny with `suppressOutput: true` (silent reject — agent doesn't see the error)
 - [ ] Implement `src/hooks/import-validation.ts` — PreToolUse hook:
   - Matches: `Write|Edit`
-  - Extracts import statements from file content being written
+  - Extracts import statements from file content
   - Checks against known-correct import table:
     ```
-    @tanstack/react-db → useLiveQuery, eq, and, or, gt, lt, createCollection, ...
-    @tanstack/db → eq, gt, lt, and, or, not, inArray, count, sum, avg, ...
+    @tanstack/react-db      → useLiveQuery, createCollection, eq, and, or, gt, lt, count, sum, ...
+    @tanstack/db            → eq, gt, lt, and, or, not, inArray, count, sum, avg, ...
     @tanstack/electric-db-collection → electricCollectionOptions, isChangeMessage, isControlMessage
-    @electric-sql/client → ELECTRIC_PROTOCOL_QUERY_PARAMS, ShapeStream, Shape
-    @radix-ui/themes → Theme, Container, Flex, Heading, Text, Button, ...
-    @tanstack/react-router → createFileRoute, createRootRoute, Link, Outlet, ...
-    @tanstack/react-start → createStart
-    @tanstack/react-start/server → createServerFileRoute (or server-entry)
+    @electric-sql/client    → ELECTRIC_PROTOCOL_QUERY_PARAMS, ShapeStream, Shape
+    @radix-ui/themes        → Theme, Container, Flex, Heading, Text, Button, ...
+    @tanstack/react-router  → createFileRoute, createRootRoute, Link, Outlet, ...
+    @tanstack/react-start   → createStart
+    drizzle-orm             → sql, eq, and, or, gt, lt, not, inArray, ...
+    drizzle-orm/pg-core     → pgTable, pgEnum, uuid, text, varchar, integer, boolean, timestamp, ...
+    drizzle-orm/zod         → createSelectSchema, createInsertSchema, createUpdateSchema
+    drizzle-orm/postgres-js → drizzle
     ```
-  - On hallucinated import: deny with suggestion
-- [ ] Implement `src/hooks/sql-validation.ts` — PreToolUse hook:
-  - Matches: `Write|Edit` (on `*.sql` files)
-  - For every `CREATE TABLE` statement, verify a corresponding `ALTER TABLE ... REPLICA IDENTITY FULL` exists
-  - On missing: deny with specific error
+  - On hallucinated import: deny with suggestion from the correct table
+- [ ] Implement `src/hooks/migration-validation.ts` — PreToolUse hook:
+  - Matches: `Bash` (when command contains `drizzle-kit migrate` or `drizzle-kit push`)
+  - **Before allowing the command to run:**
+    1. Read all `.sql` files in the project's `drizzle/` directory
+    2. For every `CREATE TABLE <name>` statement, check if a corresponding `ALTER TABLE <name> REPLICA IDENTITY FULL` exists in the same file
+    3. If missing: **write** the `ALTER TABLE ... REPLICA IDENTITY FULL` statements to the end of the migration file using `fs.appendFileSync()` (direct filesystem call, not an agent tool — hooks run in Node.js)
+    4. Then return `{ decision: "allow" }` so the migrate command proceeds with the fixed SQL
+  - This approach works because hooks run synchronously in the host process and can directly modify files — we don't need the agent to make the fix
 - [ ] Implement `src/hooks/dependency-guard.ts` — PreToolUse hook:
   - Matches: `Write|Edit` (on `package.json`)
   - Parses old and new content, compares dependency lists
   - Allows additions, blocks removals of existing deps
-- [ ] Implement `src/hooks/collection-schema.ts` — PostToolUse hook:
-  - Matches: `Write|Edit` (on `src/collections/*.ts` or `src/db/collections/*.ts`)
-  - After write succeeds: reads the collection file and the corresponding migration
-  - Compares schema fields to SQL columns
-  - Returns `additionalContext` warning on mismatch (doesn't block)
+- [ ] Implement `src/hooks/schema-consistency.ts` — PostToolUse hook:
+  - Matches: `Write|Edit` (on `src/db/collections/*.ts`)
+  - After write: verify the collection file imports its schema from `drizzle-orm/zod` derivation (i.e., from `../zod-schemas` or similar), not a hand-written Zod schema
+  - Returns `additionalContext` warning if the collection appears to use a hand-written schema instead of the derived one
 - [ ] Implement `src/hooks/index.ts` — compose all hooks:
   ```typescript
   export const hooks = {
     PreToolUse: [
-      { matcher: "Write|Edit", hooks: [writeProtection, importValidation, sqlValidation, dependencyGuard] },
+      { matcher: "Write|Edit", hooks: [writeProtection, importValidation, dependencyGuard] },
+      { matcher: "Bash", hooks: [migrationValidation] },
     ],
     PostToolUse: [
-      { matcher: "Write|Edit", hooks: [collectionSchemaValidation] },
+      { matcher: "Write|Edit", hooks: [schemaConsistency] },
     ],
   }
   ```
 - [ ] Write tests for each hook
-- [ ] Acceptance: Each hook catches its target failure. Write-protection silently rejects. Import validation catches hallucinated imports. SQL validation catches missing REPLICA IDENTITY.
+- [ ] Acceptance: Write-protection silently rejects. Import validation catches hallucinated imports. Migration validation auto-fixes missing REPLICA IDENTITY. Schema consistency warns on hand-written schemas.
 
-### Phase 4: Patterns File & System Prompts
+### Phase 4: Working Memory & Session
+
+Implement the agent's persistent memory across tool calls. This is needed before agent orchestration (Phase 6) because the coder depends on working memory for error tracking and retry logic.
+
+- [ ] Implement `src/working-memory/errors.ts`:
+  - `readErrors(projectDir)` — parse `_agent/errors.md`
+  - `logError(projectDir, { timestamp, errorClass, file, message, attemptedFix })` — append entry
+  - `logOutcome(projectDir, entryIndex, outcome)` — update with result
+  - `hasFailedAttempt(projectDir, errorClass, file, message)` — check for prior failure
+  - `consecutiveIdenticalFailures(projectDir)` — check for same-error-twice → trigger escalation
+- [ ] Implement `src/working-memory/session.ts`:
+  - `readSession(projectDir)` — parse `_agent/session.md`
+  - `updateSession(projectDir, data)` — update metadata
+  - Track: app name, current phase, current task, build status, total builds, total errors, escalations
+- [ ] Write tests for working memory modules
+- [ ] Acceptance: Error log persists across agent invocations. Session state accurate. Consecutive failure detection works.
+
+### Phase 5: Patterns File & System Prompts
 
 Write the condensed patterns file and build system prompt constructors.
 
-- [ ] Write `src/agents/patterns.md` (~100 lines):
-  - Correct import paths for every package (condensed from playbooks)
-  - Hallucination table: wrong import → correct import
-  - `createCollection(electricCollectionOptions({...}))` wrapping pattern
-  - `shapeOptions: { url: '/api/tablename' }` pattern
-  - SSR-safe URL construction: `new URL('/api/x', typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173').toString()`
-  - `getKey: (row) => row.id` requirement
-  - `onInsert`/`onUpdate`/`onDelete` handler patterns returning `{ txid }`
-  - Backend txid extraction: `pg_current_xact_id()::xid::text` inside transaction
-  - `ELECTRIC_PROTOCOL_QUERY_PARAMS` proxy pattern
-  - `shellComponent` pattern for __root.tsx
-  - Common mistakes:
+- [ ] Write `src/agents/patterns.md` (~120 lines):
+  - **Drizzle patterns:**
+    - `pgTable()` with `uuid().primaryKey().defaultRandom()`, `timestamp({ withTimezone: true }).defaultNow()`
+    - Foreign keys: `.references(() => otherTable.id, { onDelete: "cascade" })`
+    - Schema goes in `src/db/schema.ts`, connection in `src/db/index.ts`
+    - Zod derivation: `createSelectSchema(table)` from `drizzle-orm/zod`
+    - Migration workflow: edit schema → `npx drizzle-kit generate` → `npx drizzle-kit migrate`
+    - Transaction + txid: `db.transaction(async (tx) => { const txid = await generateTxId(tx); ... })`
+    - Query patterns: `tx.insert(table).values(data).returning()`, `tx.update(table).set(data).where(eq(table.id, id))`
+  - **Electric + TanStack DB patterns:**
+    - `createCollection(electricCollectionOptions({...}))` wrapping (not spread)
+    - `shapeOptions: { url: new URL("/api/tablename", ...).toString() }` with SSR-safe URL
+    - `getKey: (row) => row.id` requirement
+    - `onInsert`/`onUpdate`/`onDelete` handler patterns returning `{ txid }`
+    - `ELECTRIC_PROTOCOL_QUERY_PARAMS` proxy pattern
+  - **TanStack Start patterns:**
+    - `shellComponent` in __root.tsx, `defaultSsr: false` in start.tsx
+    - `nitro` plugin required in vite.config.ts
+    - `src/server.ts` entry point required
+    - Route file pattern: `createFileRoute` with `server: { handlers: { GET: fn } }`
+    - **Route naming convention:**
+      - Electric shape proxy routes: `/api/<tablename>` (GET only — forwards to Electric)
+      - Write mutation routes: `/api/mutations/<tablename>` (POST/PUT/DELETE — writes to Postgres via Drizzle)
+      - This separation makes it clear which routes are read-path (Electric) vs. write-path (Drizzle)
+  - **Import hallucination table:**
     - Wrong: `import { useQuery } from '@tanstack/react-db'` → Right: `useLiveQuery`
     - Wrong: `import { electricCollectionOptions } from '@tanstack/react-db'` → Right: `from '@tanstack/electric-db-collection'`
+    - Wrong: `import { createInsertSchema } from 'drizzle-zod'` → Right: `from 'drizzle-orm/zod'` (drizzle-zod is deprecated)
     - Wrong: `createCollection({ ...electricCollectionOptions() })` → Right: `createCollection(electricCollectionOptions({}))`
-    - Missing `REPLICA IDENTITY FULL` after `CREATE TABLE`
-    - Missing `nitro` plugin in vite.config.ts
-    - Missing `src/server.ts` and `src/start.tsx`
+    - Wrong: `import { drizzle } from 'drizzle-orm'` → Right: `from 'drizzle-orm/postgres-js'`
 - [ ] Implement `src/agents/prompts.ts`:
   - `buildCoderPrompt(projectDir)` → string:
-    - Role: code generator for Electric + TanStack DB apps
+    - Role: code generator for Electric + TanStack DB apps using Drizzle ORM
     - Workflow: read PLAN.md → identify next task → load playbooks → generate code → build → verify
     - Inline `patterns.md` content (always loaded)
+    - Drizzle workflow instruction: always edit `src/db/schema.ts` first, then derive Zod schemas, then create collections
     - Error classification guide with examples
     - Instruction: check `_agent/errors.md` before any fix attempt
     - Instruction: use `read_playbook` tool for detailed patterns
+    - Instruction: after modifying schema.ts, run `npx drizzle-kit generate && npx drizzle-kit migrate`
     - Instruction: mark tasks complete in PLAN.md after build passes
   - `buildPlannerPrompt()` → string:
     - Role: produce detailed implementation plan
     - Include PLAN.md template (from RFC Section 6)
-    - Include key content from `electric-quickstart`, `tanstack-start-quickstart`, `tanstack-db-electric` playbooks (pre-loaded, not via tool)
+    - Include Drizzle schema conventions: UUID PKs, timestamptz for dates, snake_case table/column names, camelCase TypeScript
+    - Include key content from `electric-quickstart`, `tanstack-start-quickstart`, `tanstack-db-electric` playbooks
+    - Instruction: plan should specify entities as Drizzle `pgTable()` definitions
     - Instruction: produce PLAN.md and nothing else
-- [ ] Acceptance: Prompts render correctly, include all required sections, patterns.md has no errors vs. actual APIs
+- [ ] Acceptance: Prompts render correctly, patterns.md matches actual APIs
 
-### Phase 5: Agent Orchestration
+### Phase 6: Agent Orchestration
 
 Wire the Agent SDK to run planner and coder.
 
@@ -434,7 +621,6 @@ Wire the Agent SDK to run planner and coder.
   ```typescript
   async function runPlanner(appDescription: string, projectDir: string): Promise<string> {
     const plannerPrompt = buildPlannerPrompt()
-    // Load playbook content to embed in prompt
     const playbooks = await loadPlannerPlaybooks(projectDir)
 
     for await (const message of query({
@@ -443,7 +629,10 @@ Wire the Agent SDK to run planner and coder.
         model: "claude-opus-4-6",
         systemPrompt: plannerPrompt,
         maxThinkingTokens: 16384,
-        allowedTools: ["mcp__electric-agent-tools__read_playbook", "mcp__electric-agent-tools__list_playbooks"],
+        allowedTools: [
+          "mcp__electric-agent-tools__read_playbook",
+          "mcp__electric-agent-tools__list_playbooks",
+        ],
         mcpServers: { "electric-agent-tools": mcpServer },
         cwd: projectDir,
         maxTurns: 10,
@@ -500,10 +689,11 @@ Wire the Agent SDK to run planner and coder.
   - Classify errors (syntax/type/import/architecture/infrastructure/unknown)
   - Log to `_agent/errors.md`
   - Check for consecutive identical failures → escalate
-  - Retry budget per error class
-- [ ] Acceptance: Planner produces valid PLAN.md. Coder executes tasks with build verification. Error classification and retry logic works.
+  - Retry budget per error class (syntax: 2, type: 3, import: 3, architecture: 1, infrastructure: 0, unknown: 1)
+- [ ] Integration: wire working memory (Phase 4) into coder — after each build tool result, update session and error log
+- [ ] Acceptance: Planner produces valid PLAN.md with Drizzle schemas. Coder generates schema → Zod → collections → routes → UI. Build passes.
 
-### Phase 6: CLI Commands
+### Phase 7: CLI Commands
 
 Wire everything together through the CLI.
 
@@ -513,85 +703,79 @@ Wire everything together through the CLI.
   3. Run scaffolding (Phase 1)
   4. Invoke planner → get PLAN.md
   5. Write PLAN.md to project
-  6. Print plan to stdout, prompt for approval
-  7. On revise: re-invoke planner with feedback
-  8. On approve: run coder task loop
+  6. Print plan to stdout, prompt for approval (approve / revise / cancel)
+  7. On revise: collect feedback, re-invoke planner with history
+  8. On approve: run coder task loop for each phase
   9. On completion: generate README.md + CLAUDE.md, print summary
 - [ ] Implement `src/cli/iterate.ts` — `electric-agent iterate`:
   1. Verify we're in a project directory (check for PLAN.md)
-  2. Enter conversational loop (readline or stdin)
-  3. For each user message: invoke coder with message as task
-  4. Stream progress output
+  2. Read PLAN.md and `_agent/session.md` to restore context
+  3. Enter conversational loop (readline)
+  4. For each user message: invoke coder with message as task
+  5. Coder updates PLAN.md if the request changes the plan
+  6. Stream progress output
 - [ ] Implement `src/cli/status.ts` — `electric-agent status`:
-  1. Read PLAN.md, parse `- [x]` and `- [ ]` counts
+  1. Read PLAN.md, parse `- [x]` and `- [ ]` counts per phase
   2. Read `_agent/session.md`
-  3. Print summary: phases, tasks done/total, build status
+  3. Print summary: phases, tasks done/total, build status, error count
 - [ ] Implement `src/cli/up.ts` — `electric-agent up`:
   1. `docker compose up -d`
-  2. Wait for health checks (`curl http://localhost:30000/health`)
-  3. `pnpm run migrate`
-  4. `pnpm dev`
-  5. Print access URL
+  2. Wait for health checks (Postgres ready, Electric `http://localhost:30000/health`)
+  3. Trust Caddy's local CA certificate if not already trusted (`caddy trust` or guide user through manual trust)
+  4. `npx drizzle-kit migrate` (apply any pending migrations)
+  5. `pnpm dev`
+  6. Print access URL (https://localhost:5173 with Caddy, or http://localhost:5174)
 - [ ] Implement `src/cli/down.ts` — `electric-agent down`:
-  1. Kill dev server
+  1. Kill dev server if running
   2. `docker compose down`
 - [ ] Implement `src/progress/reporter.ts`:
   - Transform SDK message stream → prefixed CLI lines
-  - `[plan]`, `[approve]`, `[task]`, `[build]`, `[fix]`, `[done]`, `[error]`
-  - Parse tool_use blocks for build results
-  - Color support (green/red/yellow)
-- [ ] Acceptance: Full end-to-end flow: `electric-agent new "a todo app"` → building project
+  - Prefixes: `[plan]`, `[approve]`, `[task]`, `[build]`, `[fix]`, `[done]`, `[error]`
+  - Parse tool_use blocks: detect build tool calls, file writes, shell commands
+  - Color support: green (pass), red (fail), yellow (fix), dim (progress)
+- [ ] Acceptance: Full end-to-end flow: `electric-agent new "a todo app"` → building project with Drizzle schema, migrations, collections, and UI
 
-### Phase 7: Generated Documentation
+### Phase 8: Generated Documentation
 
 Documentation generation at the end of code generation.
 
 - [ ] README.md generation:
-  - Template filled from PLAN.md data model and architecture
-  - Quick start: install, up, migrate, dev
-  - Architecture section: data flow diagram, entities, sync shapes
-  - Stack description
+  - Template filled from PLAN.md: app name, description, data model, architecture
+  - Quick start: `pnpm install` → `electric-agent up` (or manual: docker compose + migrate + dev)
+  - Architecture: data flow diagram, entities from Drizzle schema, sync shapes
+  - Stack description with version badges
 - [ ] CLAUDE.md generation:
-  - Project-specific commands
+  - Project-specific commands: build, check, generate, migrate, dev
   - Key files with concrete paths from generated code
+  - Drizzle schema location and modification workflow
   - Pattern examples extracted from generated collections, queries, mutations
-  - Common mistakes tailored to this project's specific imports
+  - Common mistakes tailored to this project's imports
 - [ ] Acceptance: Generated docs are accurate, contain correct paths and imports
-
-### Phase 8: Working Memory & Session
-
-Implement the agent's persistent memory across tool calls.
-
-- [ ] Implement `src/working-memory/errors.ts`:
-  - `readErrors(projectDir)` — parse `_agent/errors.md`
-  - `logError(projectDir, { timestamp, errorClass, file, message, attemptedFix })` — append entry
-  - `logOutcome(projectDir, entryIndex, outcome)` — update with result
-  - `hasFailedAttempt(projectDir, errorClass, file, message)` — check for prior failure
-  - `consecutiveIdenticalFailures(projectDir)` — check for same-error-twice
-- [ ] Implement `src/working-memory/session.ts`:
-  - `readSession(projectDir)` — parse `_agent/session.md`
-  - `updateSession(projectDir, data)` — update metadata
-  - Track: app name, current phase, current task, build status, total builds, total errors
-- [ ] Integration with coder: after each build tool result, update session and error log
-- [ ] Acceptance: Error log persists across agent invocations. Session state is accurate.
 
 ### Phase 9: Integration Testing & Polish
 
 End-to-end testing.
 
 - [ ] Test: `electric-agent new "a collaborative todo list with projects"`
-  - Plan is generated with correct entities (todos, projects)
-  - Code is generated: migrations, collections, proxy routes, pages
+  - Planner generates plan with correct entities (todos, projects, foreign keys)
+  - Drizzle schema generated in `src/db/schema.ts` with `pgTable()` definitions
+  - Zod schemas derived in `src/db/zod-schemas.ts` via `createSelectSchema()`
+  - Collections reference derived schemas
+  - SQL migrations generated and include REPLICA IDENTITY FULL
+  - Proxy routes and mutation routes created
   - Build passes
-  - Docker services start
-  - App loads and syncs
+  - Docker services start, migrations apply
+  - App loads and syncs data in real-time between tabs
 - [ ] Test: `electric-agent iterate` with "add a due date field to todos"
-  - New migration created
-  - Collection and schema updated
-  - UI updated
+  - `src/db/schema.ts` updated with new column
+  - `npx drizzle-kit generate` creates ALTER TABLE migration
+  - REPLICA IDENTITY FULL preserved
+  - Zod schemas auto-updated
+  - Collection and UI updated to show new field
   - Build passes
-- [ ] Test: error recovery — introduce deliberate error, verify classify/retry/fix
+- [ ] Test: error recovery — introduce deliberate type error, verify classify → retry → fix
 - [ ] Test: each guardrail hook catches its target failure
+- [ ] Test: import hallucination — verify the agent can't use `drizzle-zod` (deprecated) or `useQuery`
 - [ ] Acceptance: >70% first-attempt success, >90% within 3 retries
 
 ---
@@ -600,29 +784,27 @@ End-to-end testing.
 
 ### Agent SDK vs. Raw API
 
-The Agent SDK provides the full agentic loop, built-in tools, and hooks. This eliminates ~60% of the code from the original plan (tool registry, tool implementations for read/write/edit/grep/glob/shell, agentic loop, tool dispatch). The trade-off is a dependency on the SDK, but it's Anthropic's official package.
+The Agent SDK provides the full agentic loop, built-in tools, and hooks — eliminating ~60% of custom code. The trade-off is a dependency on Anthropic's SDK, but it's their official product with stable APIs.
 
 ### Template Strategy: Clone + Extend KPB
 
-Rather than bundling a complete template, we clone KPB via `npx gitpick` and add our Electric infrastructure files on top. This means:
-- KPB updates flow through automatically (or we can pin to a specific commit)
-- We only maintain the Electric-specific additions
-- The template is always a valid KPB project before we touch it
+Clone KPB via `npx gitpick` and overlay Electric + Drizzle infrastructure. KPB updates flow through; we only maintain the additions.
 
-### Playbook Strategy: Use Existing npm Packages
+### Drizzle ORM as Single Source of Truth
 
-The playbook packages (`@electric-sql/playbook`, `@tanstack/db-playbook`) are already comprehensive, well-structured, and maintained by the respective teams. We use them as-is via the `read_playbook` custom tool rather than writing our own. We only write a condensed `patterns.md` for the always-loaded hallucination guard.
+Drizzle provides the complete type chain: `pgTable()` → SQL migrations → Zod schemas → TanStack DB collections → typed UI. This eliminates the manual schema synchronization that was the biggest correctness risk. Key benefits:
+- **No hand-written Zod schemas** — `createSelectSchema()` from `drizzle-orm/zod` derives them
+- **Type-safe mutations** — Drizzle query builder catches column/type mismatches at build time
+- **Migration generation** — `drizzle-kit generate` produces SQL from schema diffs; no manual SQL
+- **The REPLICA IDENTITY guardrail auto-fixes** — we scan generated SQL and inject the ALTER TABLE statements
 
-### Guardrails as Hooks
+### Playbook Strategy: Existing npm Packages + Custom Patterns
 
-Agent SDK hooks provide exactly the right interception points. PreToolUse hooks can deny/modify tool calls before execution. PostToolUse hooks can add context warnings after execution. This is cleaner than wrapping tool implementations because:
-- Hooks compose independently
-- Built-in tools (Write, Edit) don't need modification
-- The agent sees hook feedback as system messages
+Playbooks cover Electric → TanStack DB → UI excellently. They don't cover Postgres schema management. Our `patterns.md` fills this gap with Drizzle conventions. We don't fork or rewrite playbooks.
 
-### Migration Tool: dbmate
+### Guardrails as SDK Hooks
 
-dbmate uses standard SQL files with `-- migrate:up` / `-- migrate:down` markers. It supports `DATABASE_URL`, has a `wait` command for Docker, and can dump schema. No ORM, no code generation — just SQL.
+PreToolUse hooks intercept writes before execution. PostToolUse hooks add warnings after. The migration validation hook is the most interesting: it intercepts `drizzle-kit migrate` Bash calls and auto-fixes the generated SQL to include REPLICA IDENTITY FULL, rather than blocking or requiring the agent to write SQL manually.
 
 ---
 
@@ -634,21 +816,21 @@ dbmate uses standard SQL files with `-- migrate:up` / `-- migrate:down` markers.
 | `commander` | CLI argument parsing |
 | `zod` | Schema definitions for custom MCP tools |
 
-That's it. The SDK handles everything else.
-
 ---
 
 ## Risk Register
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Agent SDK API changes | Low | High | Pin to specific version. SDK is Anthropic's official product. |
-| KPB template changes break scaffold | Medium | Medium | Pin to specific git commit if needed. Test scaffold in CI. |
-| Playbook content doesn't match APIs | Low | High | Playbooks are maintained by Electric/TanStack teams. Version-pinned deps. |
-| Agent hallucinates imports | Medium | Medium | Import validation hook catches deterministically. Patterns.md covers all packages. |
-| Build feedback loop gets stuck | Medium | High | Hard retry limits. Same-error-twice rule. Working memory prevents loops. |
-| Docker not available | Medium | Medium | Detect early, clear error message. |
-| SSR/hydration issues | Medium | Medium | Template uses `defaultSsr: false` + `shellComponent` pattern from playbooks. |
+| Agent SDK API changes | Low | High | Pin version. Official Anthropic product. |
+| KPB template drift | Medium | Medium | Pin to git commit if needed. Test scaffold in CI. |
+| Drizzle ORM breaking changes | Low | High | Pin to 0.45.1. Drizzle is stable, widely adopted. |
+| `drizzle-orm/zod` API changes | Medium | Medium | Pin version. Feature has been stable since 0.44.0. |
+| Agent hallucinates imports | Medium | Medium | Import validation hook + patterns.md hallucination table. |
+| drizzle-kit generates incompatible SQL | Low | Medium | Migration validation hook auto-fixes REPLICA IDENTITY. |
+| Build feedback loop stuck | Medium | High | Retry limits, same-error-twice rule, working memory. |
+| Docker not available | Medium | Medium | Detect early, clear error. |
+| SSR/hydration issues | Medium | Medium | Template uses `defaultSsr: false` + `shellComponent`. |
 
 ---
 
@@ -657,6 +839,6 @@ That's it. The SDK handles everything else.
 - [ ] 3-5 entity CRUD app → building project on first attempt in >70% of cases
 - [ ] Building project within 3 retry cycles in >90% of cases
 - [ ] No hallucinated imports in generated code
-- [ ] Correct collection definitions, working optimistic mutations
-- [ ] Developer can iterate without breaking existing functionality
+- [ ] Correct collection definitions with derived Zod schemas, working optimistic mutations
+- [ ] Developer can iterate (add fields, add pages) without breaking existing functionality
 - [ ] Total generation time under 5 minutes for a typical app
