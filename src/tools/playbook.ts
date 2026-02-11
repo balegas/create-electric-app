@@ -9,20 +9,25 @@ const PLAYBOOK_PACKAGES = [
 	{ pkg: "@durable-streams/playbook", prefix: "durable-streams" },
 ]
 
+/**
+ * Find a skill directory by name. Supports:
+ * - Direct match: skills/<name>/SKILL.md
+ * - Nested match: skills/<parent>/<name>/SKILL.md (e.g., tanstack-db/collections)
+ */
 function findPlaybookSkillDir(skillName: string, projectDir: string): string | null {
 	for (const { pkg } of PLAYBOOK_PACKAGES) {
 		const skillsDir = path.join(projectDir, "node_modules", pkg, "skills")
 		if (!fs.existsSync(skillsDir)) continue
 
-		// Check if skill directory exists directly
-		const skillDir = path.join(skillsDir, skillName)
-		if (fs.existsSync(skillDir)) return skillDir
+		// Direct match
+		const direct = path.join(skillsDir, skillName)
+		if (fs.existsSync(path.join(direct, "SKILL.md"))) return direct
 
-		// Check subdirectories
+		// Nested one level: skills/<parent>/<name>
 		for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
 			if (entry.isDirectory()) {
 				const nested = path.join(skillsDir, entry.name, skillName)
-				if (fs.existsSync(nested)) return nested
+				if (fs.existsSync(path.join(nested, "SKILL.md"))) return nested
 			}
 		}
 	}
@@ -33,9 +38,13 @@ function findPlaybookSkillDir(skillName: string, projectDir: string): string | n
 export function createPlaybookTools(projectDir: string) {
 	const readPlaybookTool = tool(
 		"read_playbook",
-		"Read a playbook skill file (SKILL.md) and optionally its reference files. Available playbooks: electric, electric-quickstart, electric-tanstack-integration, electric-security-check, electric-go-live, deploying-electric, tanstack-start-quickstart, tanstack-db, tanstack-db-collections, tanstack-db-electric, tanstack-db-live-queries, tanstack-db-mutations, tanstack-db-schemas, tanstack-db-query, durable-streams, durable-state, durable-streams-dev-setup",
+		"Read a playbook skill file (SKILL.md) and optionally its reference files. Use list_playbooks first to see available skill names.",
 		{
-			name: z.string().describe("Name of the playbook skill to read"),
+			name: z
+				.string()
+				.describe(
+					"Name of the playbook skill to read (e.g., 'collections', 'mutations', 'electric-quickstart')",
+				),
 			include_references: z
 				.boolean()
 				.optional()
@@ -92,27 +101,33 @@ export function createPlaybookTools(projectDir: string) {
 		"List all available playbook skills across all installed playbook packages",
 		{},
 		async () => {
-			const skills: Array<{ name: string; pkg: string; hasReferences: boolean }> = []
+			const skills: Array<{
+				name: string
+				pkg: string
+				parent?: string
+				hasReferences: boolean
+			}> = []
 
 			for (const { pkg } of PLAYBOOK_PACKAGES) {
 				const skillsDir = path.join(projectDir, "node_modules", pkg, "skills")
 				if (!fs.existsSync(skillsDir)) continue
 
-				const scanDir = (dir: string) => {
+				const scanDir = (dir: string, parent?: string) => {
 					for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 						if (entry.isDirectory()) {
-							const skillFile = path.join(dir, entry.name, "SKILL.md")
+							const entryDir = path.join(dir, entry.name)
+							const skillFile = path.join(entryDir, "SKILL.md")
 							if (fs.existsSync(skillFile)) {
-								const refsDir = path.join(dir, entry.name, "references")
+								const refsDir = path.join(entryDir, "references")
 								skills.push({
 									name: entry.name,
 									pkg,
+									parent,
 									hasReferences: fs.existsSync(refsDir),
 								})
-							} else {
-								// Check nested
-								scanDir(path.join(dir, entry.name))
 							}
+							// Always recurse to find nested skills
+							scanDir(entryDir, entry.name)
 						}
 					}
 				}
@@ -121,7 +136,11 @@ export function createPlaybookTools(projectDir: string) {
 			}
 
 			const output = skills
-				.map((s) => `- ${s.name} (from ${s.pkg})${s.hasReferences ? " [has references]" : ""}`)
+				.map((s) => {
+					const indent = s.parent ? "  " : ""
+					const refs = s.hasReferences ? " [has references]" : ""
+					return `${indent}- ${s.name} (from ${s.pkg})${refs}`
+				})
 				.join("\n")
 
 			return {

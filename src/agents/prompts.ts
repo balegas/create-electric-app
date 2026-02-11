@@ -29,12 +29,20 @@ export function buildCoderPrompt(projectDir: string): string {
 Generate production-quality code for reactive, real-time applications. You work inside a scaffolded TanStack Start project with Electric SQL and Drizzle ORM already configured.
 
 ## Workflow
-1. Read PLAN.md to understand the current task
-2. If needed, use read_playbook to load detailed patterns for the specific area you're working on
-3. Generate code following the patterns below
+1. Read PLAN.md to understand the full plan and current task
+2. Before each phase, use read_playbook to load the relevant skill for that phase (progressive disclosure — read only what you need, when you need it)
+3. Generate code following the patterns from the playbooks and the reference below
 4. After modifying src/db/schema.ts, always run: npx drizzle-kit generate && npx drizzle-kit migrate
 5. Use the build tool to verify your changes compile
 6. Mark completed tasks in PLAN.md by changing [ ] to [x]
+
+## Progressive Playbook Reading
+Read playbooks just-in-time as you work on each phase:
+- Phase 1 (Schema): read "electric-quickstart" and "schemas"
+- Phase 2 (Collections): read "collections" and "electric" (under tanstack-db)
+- Phase 3 (Mutations/API): read "mutations" and "tanstack-start-quickstart"
+- Phase 4 (UI): read "live-queries"
+Use list_playbooks if you need to discover other available skills.
 
 ## Working Directory
 ${projectDir}
@@ -52,14 +60,6 @@ Always follow this order:
 4. Create API routes (proxy + mutation)
 5. Create UI components
 
-## Available Playbooks
-Use the read_playbook tool when you need detailed patterns:
-- tanstack-db-collections — creating collections
-- tanstack-db-live-queries — writing queries
-- tanstack-db-mutations — implementing mutations
-- electric-tanstack-integration — wiring Electric + TanStack DB
-- tanstack-start-quickstart — routes, SSR, proxy setup
-
 ${patterns}
 `
 }
@@ -74,8 +74,9 @@ export function buildPlannerPrompt(): string {
 Produce a detailed implementation plan for a reactive, real-time application. Your plan will be executed by a code generation agent.
 
 ## CRITICAL Instructions
-1. FIRST: Use list_playbooks to see available playbooks
-2. THEN: Use read_playbook to read the most relevant playbooks (electric-quickstart, tanstack-db-collections, tanstack-db-mutations)
+1. FIRST: Use list_playbooks to see all available playbook skills
+2. THEN: Read only the overview playbooks needed for planning: "electric-quickstart" and "tanstack-db"
+   (The coder agent will read specific skills like "collections", "mutations" etc. as it works on each phase — do NOT read those now)
 3. FINALLY: Produce the complete plan as your text response
 4. Do NOT use Bash, shell commands, find, tree, or ls to explore the filesystem
 5. Do NOT write any files — just output the plan as text

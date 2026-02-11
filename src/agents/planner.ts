@@ -25,10 +25,10 @@ export async function runPlanner(appDescription: string, projectDir: string): Pr
 
 Follow these steps in order:
 1. Use list_playbooks to see available playbooks
-2. Use read_playbook for these specific playbooks: electric-quickstart, tanstack-db-collections, tanstack-db-mutations
-3. Then produce the PLAN.md content as your final text response — include complete Drizzle pgTable() definitions for ALL entities
+2. Read only the overview playbooks: "electric-quickstart" and "tanstack-db" (the coder will read specific skills like "collections", "mutations" later)
+3. Produce the PLAN.md content as your final text response — include complete Drizzle pgTable() definitions for ALL entities
 
-IMPORTANT: Do NOT explore the filesystem or run shell commands. Just read the playbooks and produce the plan.`,
+Do NOT explore the filesystem. Do NOT read more than 2-3 playbooks — the coder reads specific ones per phase.`,
 			},
 		}
 	}
