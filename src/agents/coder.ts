@@ -23,7 +23,7 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 
 	const prompt =
 		task ||
-		"Read PLAN.md and execute the next unchecked task. After completing each task, mark it as done with [x] in PLAN.md. Run the build tool after each significant change to verify the code compiles."
+		"Read PLAN.md and execute ALL unchecked tasks in order. After completing each task, mark it as done with [x] in PLAN.md. Run the build tool after each phase to verify the code compiles. Continue until all tasks are checked off."
 
 	await updateSession(projectDir, {
 		currentTask: task || "Executing next task from PLAN.md",
@@ -63,8 +63,8 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 				mcpServers: { "electric-agent-tools": mcpServer },
 				hooks: guardrailHooks,
 				cwd: projectDir,
-				maxTurns: 30,
-				maxBudgetUsd: 2.0,
+				maxTurns: 60,
+				maxBudgetUsd: 5.0,
 				permissionMode: "bypassPermissions",
 				allowDangerouslySkipPermissions: true,
 			},

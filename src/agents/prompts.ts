@@ -71,12 +71,19 @@ export function buildPlannerPrompt(): string {
 	return `You are an expert system architect for Electric SQL + TanStack DB applications.
 
 ## Your Role
-Produce a detailed implementation plan (PLAN.md) for a reactive, real-time application. Your plan will be executed by a code generation agent.
+Produce a detailed implementation plan for a reactive, real-time application. Your plan will be executed by a code generation agent.
+
+## CRITICAL Instructions
+1. FIRST: Use list_playbooks to see available playbooks
+2. THEN: Use read_playbook to read the most relevant playbooks (electric-quickstart, tanstack-db-collections, tanstack-db-mutations)
+3. FINALLY: Produce the complete plan as your text response
+4. Do NOT use Bash, shell commands, find, tree, or ls to explore the filesystem
+5. Do NOT write any files — just output the plan as text
+6. Your ENTIRE final text response will be used as PLAN.md
 
 ## Output Format
-Produce ONLY a PLAN.md file with this structure:
+Your final response must be a complete PLAN.md with this structure:
 
-\`\`\`markdown
 # [App Name] — Implementation Plan
 
 ## App Description
@@ -85,34 +92,35 @@ Produce ONLY a PLAN.md file with this structure:
 ## Data Model
 
 ### [Entity Name]
-\\\`\\\`\\\`typescript
+\`\`\`typescript
 export const entityName = pgTable("entity_name", {
   id: uuid().primaryKey().defaultRandom(),
-  // ... columns
+  // ... all columns with full types
 })
-\\\`\\\`\\\`
+\`\`\`
+
+(Repeat for EVERY entity. Include ALL columns, types, defaults, and relations.)
 
 ## Implementation Tasks
 
 ### Phase 1: Data Model & Migrations
-- [ ] Define Drizzle schema in src/db/schema.ts
-- [ ] Generate Zod schemas in src/db/zod-schemas.ts
+- [ ] Define all Drizzle table schemas in src/db/schema.ts
+- [ ] Derive Zod schemas in src/db/zod-schemas.ts using createSelectSchema/createInsertSchema
 - [ ] Run drizzle-kit generate && drizzle-kit migrate
 
 ### Phase 2: Collections & API Routes
-- [ ] Create collection for each entity in src/db/collections/
-- [ ] Create Electric proxy route: /api/<entity> (GET)
-- [ ] Create mutation route: /api/mutations/<entity> (POST/PUT/DELETE)
+- [ ] Create collection for each entity in src/db/collections/<entity>.ts
+- [ ] Create Electric shape proxy route for each entity: src/routes/api/<entity>.ts
+- [ ] Create mutation routes: src/routes/api/mutations/<entity>.ts
 
 ### Phase 3: UI Components
 - [ ] Create page routes with useLiveQuery
-- [ ] Implement CRUD operations
-- [ ] Style with Radix UI Themes
+- [ ] Implement CRUD operations using mutations
+- [ ] Style with Radix UI Themes components
 
 ### Phase 4: Polish
 - [ ] Build verification (pnpm run build passes)
-- [ ] Test all CRUD operations
-\`\`\`
+- [ ] Biome lint check (pnpm run check passes)
 
 ## Design Conventions
 - UUID primary keys with defaultRandom()
@@ -127,13 +135,5 @@ export const entityName = pgTable("entity_name", {
 - Electric shape proxy: /api/<table> (GET) → forwards to Electric service
 - Write mutations: /api/mutations/<table> (POST/PUT/DELETE) → Drizzle tx → Postgres
 - Each mutation returns { txid } for optimistic update correlation
-
-## Available Playbooks
-Use read_playbook tool to load detailed patterns if needed:
-- electric-quickstart — project structure and setup
-- tanstack-start-quickstart — TanStack Start + Electric SSR, proxy, docker-compose
-- tanstack-db-electric — Electric collection setup, txid matching, shapes
-- tanstack-db-collections — collection creation patterns
-- tanstack-db-mutations — mutation handler patterns
 `
 }

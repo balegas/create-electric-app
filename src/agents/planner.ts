@@ -20,7 +20,14 @@ export async function runPlanner(appDescription: string, projectDir: string): Pr
 			parent_tool_use_id: null,
 			message: {
 				role: "user" as const,
-				content: `Create a detailed implementation plan for the following app:\n\n${appDescription}\n\nProduce a PLAN.md following the format specified in your instructions. Include complete Drizzle pgTable() definitions for all entities.`,
+				content: `Create a detailed implementation plan for this app: "${appDescription}"
+
+Follow these steps in order:
+1. Use list_playbooks to see available playbooks
+2. Use read_playbook for these specific playbooks: electric-quickstart, tanstack-db-collections, tanstack-db-mutations
+3. Then produce the PLAN.md content as your final text response — include complete Drizzle pgTable() definitions for ALL entities
+
+IMPORTANT: Do NOT explore the filesystem or run shell commands. Just read the playbooks and produce the plan.`,
 			},
 		}
 	}
@@ -32,12 +39,14 @@ export async function runPlanner(appDescription: string, projectDir: string): Pr
 			systemPrompt: plannerPrompt,
 			maxThinkingTokens: 16384,
 			allowedTools: [
+				"Read",
+				"Glob",
 				"mcp__electric-agent-tools__read_playbook",
 				"mcp__electric-agent-tools__list_playbooks",
 			],
 			mcpServers: { "electric-agent-tools": mcpServer },
 			cwd: projectDir,
-			maxTurns: 10,
+			maxTurns: 20,
 			permissionMode: "bypassPermissions",
 			allowDangerouslySkipPermissions: true,
 		},
