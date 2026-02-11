@@ -17,7 +17,7 @@ export interface CoderResult {
 export async function runCoder(projectDir: string, task?: string): Promise<CoderResult> {
 	const reporter = createProgressReporter()
 	const coderPrompt = buildCoderPrompt(projectDir)
-	const mcpServer = createToolServer()
+	const mcpServer = createToolServer(projectDir)
 	const errors: string[] = []
 	let success = true
 

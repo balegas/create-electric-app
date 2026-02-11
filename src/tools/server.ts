@@ -1,8 +1,11 @@
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk"
-import { buildTool } from "./build.js"
-import { listPlaybooksTool, readPlaybookTool } from "./playbook.js"
+import { createBuildTool } from "./build.js"
+import { createPlaybookTools } from "./playbook.js"
 
-export function createToolServer() {
+export function createToolServer(projectDir: string) {
+	const buildTool = createBuildTool(projectDir)
+	const { readPlaybookTool, listPlaybooksTool } = createPlaybookTools(projectDir)
+
 	return createSdkMcpServer({
 		name: "electric-agent-tools",
 		version: "1.0.0",

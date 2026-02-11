@@ -1,4 +1,5 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { plannerHooks } from "../hooks/index.js"
 import { createProgressReporter, processAgentMessage } from "../progress/reporter.js"
 import { createToolServer } from "../tools/server.js"
 import { buildPlannerPrompt } from "./prompts.js"
@@ -9,7 +10,7 @@ import { buildPlannerPrompt } from "./prompts.js"
 export async function runPlanner(appDescription: string, projectDir: string): Promise<string> {
 	const reporter = createProgressReporter()
 	const plannerPrompt = buildPlannerPrompt()
-	const mcpServer = createToolServer()
+	const mcpServer = createToolServer(projectDir)
 
 	let planContent = ""
 
@@ -45,6 +46,7 @@ IMPORTANT: Do NOT explore the filesystem or run shell commands. Just read the pl
 				"mcp__electric-agent-tools__list_playbooks",
 			],
 			mcpServers: { "electric-agent-tools": mcpServer },
+			hooks: plannerHooks,
 			cwd: projectDir,
 			maxTurns: 20,
 			permissionMode: "bypassPermissions",
