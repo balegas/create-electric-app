@@ -6,7 +6,7 @@ import type { HookCallback, PostToolUseHookInput } from "@anthropic-ai/claude-ag
  */
 export const schemaConsistency: HookCallback = async (input, _toolUseID, _opts) => {
 	const postInput = input as PostToolUseHookInput
-	const toolInput = postInput.tool_input as any
+	const toolInput = postInput.tool_input as Record<string, unknown> | undefined
 
 	const filePath = (toolInput?.file_path || "") as string
 
@@ -26,8 +26,7 @@ export const schemaConsistency: HookCallback = async (input, _toolUseID, _opts) 
 		content.includes("z.number(") ||
 		content.includes("z.boolean(")
 
-	const importsFromZodSchemas =
-		content.includes("zod-schemas") || content.includes("zod_schemas")
+	const importsFromZodSchemas = content.includes("zod-schemas") || content.includes("zod_schemas")
 
 	if (hasHandWrittenZod && !importsFromZodSchemas) {
 		return {

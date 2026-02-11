@@ -104,7 +104,7 @@ function mergeDependencies(projectDir: string): void {
 	pkg.devDependencies = { ...(pkg.devDependencies || {}), ...ADDED_DEV_DEPENDENCIES }
 	pkg.scripts = { ...(pkg.scripts || {}), ...ADDED_SCRIPTS }
 
-	fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n", "utf-8")
+	fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")
 }
 
 function patchViteConfig(projectDir: string): void {
@@ -153,7 +153,7 @@ function patchGitignore(projectDir: string): void {
 	if (!content.includes("drizzle/meta/")) additions.push("drizzle/meta/")
 
 	if (additions.length > 0) {
-		content += "\n# Electric Agent\n" + additions.join("\n") + "\n"
+		content += `\n# Electric Agent\n${additions.join("\n")}\n`
 		fs.writeFileSync(gitignorePath, content, "utf-8")
 	}
 }

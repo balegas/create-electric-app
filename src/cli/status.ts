@@ -1,7 +1,7 @@
-import path from "node:path"
 import fs from "node:fs"
-import { readSession } from "../working-memory/session.js"
+import path from "node:path"
 import { createProgressReporter } from "../progress/reporter.js"
+import { readSession } from "../working-memory/session.js"
 
 export async function statusCommand(): Promise<void> {
 	const projectDir = process.cwd()

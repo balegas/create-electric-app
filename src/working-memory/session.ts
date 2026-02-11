@@ -32,7 +32,7 @@ export async function readSession(projectDir: string): Promise<SessionState> {
 	if (!fs.existsSync(filePath)) return { ...DEFAULTS }
 
 	const content = fs.readFileSync(filePath, "utf-8")
-	const state: Record<string, any> = { ...DEFAULTS }
+	const state = { ...DEFAULTS } as SessionState
 
 	for (const line of content.split("\n")) {
 		const match = line.match(/^- \*\*(.+?):\*\*\s*(.+)$/)

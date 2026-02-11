@@ -1,6 +1,6 @@
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk"
 import { buildTool } from "./build.js"
-import { readPlaybookTool, listPlaybooksTool } from "./playbook.js"
+import { listPlaybooksTool, readPlaybookTool } from "./playbook.js"
 
 export function createToolServer() {
 	return createSdkMcpServer({

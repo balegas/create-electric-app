@@ -1,9 +1,9 @@
-import path from "node:path"
 import fs from "node:fs"
+import path from "node:path"
 import readline from "node:readline"
 import { runCoder } from "../agents/coder.js"
-import { readSession } from "../working-memory/session.js"
 import { createProgressReporter } from "../progress/reporter.js"
+import { readSession } from "../working-memory/session.js"
 
 export async function iterateCommand(): Promise<void> {
 	const projectDir = process.cwd()

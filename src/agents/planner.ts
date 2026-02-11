@@ -1,15 +1,12 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { buildPlannerPrompt } from "./prompts.js"
-import { createToolServer } from "../tools/server.js"
 import { createProgressReporter, processAgentMessage } from "../progress/reporter.js"
+import { createToolServer } from "../tools/server.js"
+import { buildPlannerPrompt } from "./prompts.js"
 
 /**
  * Run the planner agent to generate a PLAN.md from an app description.
  */
-export async function runPlanner(
-	appDescription: string,
-	projectDir: string,
-): Promise<string> {
+export async function runPlanner(appDescription: string, projectDir: string): Promise<string> {
 	const reporter = createProgressReporter()
 	const plannerPrompt = buildPlannerPrompt()
 	const mcpServer = createToolServer()

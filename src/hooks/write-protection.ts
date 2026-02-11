@@ -17,7 +17,8 @@ const PROTECTED_FILES = new Set([
  */
 export const writeProtection: HookCallback = async (input, _toolUseID, _opts) => {
 	const preInput = input as PreToolUseHookInput
-	const filePath = (preInput.tool_input as any)?.file_path as string | undefined
+	const toolInput = preInput.tool_input as Record<string, unknown> | undefined
+	const filePath = toolInput?.file_path as string | undefined
 
 	if (!filePath) return {}
 

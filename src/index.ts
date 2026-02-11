@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { Command } from "commander"
-import { newCommand } from "./cli/new.js"
+import { downCommand } from "./cli/down.js"
 import { iterateCommand } from "./cli/iterate.js"
+import { newCommand } from "./cli/new.js"
 import { statusCommand } from "./cli/status.js"
 import { upCommand } from "./cli/up.js"
-import { downCommand } from "./cli/down.js"
 
 const program = new Command()
 

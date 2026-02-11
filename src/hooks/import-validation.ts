@@ -77,7 +77,20 @@ const CORRECT_IMPORTS: Record<string, string[]> = {
 		"redirect",
 	],
 	"@tanstack/react-start": ["createStart"],
-	"drizzle-orm": ["sql", "eq", "and", "or", "gt", "lt", "gte", "lte", "not", "inArray", "desc", "asc"],
+	"drizzle-orm": [
+		"sql",
+		"eq",
+		"and",
+		"or",
+		"gt",
+		"lt",
+		"gte",
+		"lte",
+		"not",
+		"inArray",
+		"desc",
+		"asc",
+	],
 	"drizzle-orm/pg-core": [
 		"pgTable",
 		"pgEnum",
@@ -112,7 +125,7 @@ const IMPORT_REGEX = /import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g
  */
 export const importValidation: HookCallback = async (input, _toolUseID, _opts) => {
 	const preInput = input as PreToolUseHookInput
-	const toolInput = preInput.tool_input as any
+	const toolInput = preInput.tool_input as Record<string, unknown> | undefined
 
 	// Get file content from either Write (content) or Edit (new_string)
 	const content = toolInput?.content || toolInput?.new_string

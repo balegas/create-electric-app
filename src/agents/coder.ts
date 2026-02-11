@@ -1,10 +1,10 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { buildCoderPrompt } from "./prompts.js"
-import { createToolServer } from "../tools/server.js"
 import { hooks as guardrailHooks } from "../hooks/index.js"
 import { createProgressReporter, processAgentMessage } from "../progress/reporter.js"
+import { createToolServer } from "../tools/server.js"
+import { consecutiveIdenticalFailures, logError } from "../working-memory/errors.js"
 import { updateSession } from "../working-memory/session.js"
-import { logError, consecutiveIdenticalFailures } from "../working-memory/errors.js"
+import { buildCoderPrompt } from "./prompts.js"
 
 export interface CoderResult {
 	success: boolean
@@ -14,17 +14,16 @@ export interface CoderResult {
 /**
  * Run the coder agent to execute tasks from PLAN.md.
  */
-export async function runCoder(
-	projectDir: string,
-	task?: string,
-): Promise<CoderResult> {
+export async function runCoder(projectDir: string, task?: string): Promise<CoderResult> {
 	const reporter = createProgressReporter()
 	const coderPrompt = buildCoderPrompt(projectDir)
 	const mcpServer = createToolServer()
 	const errors: string[] = []
 	let success = true
 
-	const prompt = task || "Read PLAN.md and execute the next unchecked task. After completing each task, mark it as done with [x] in PLAN.md. Run the build tool after each significant change to verify the code compiles."
+	const prompt =
+		task ||
+		"Read PLAN.md and execute the next unchecked task. After completing each task, mark it as done with [x] in PLAN.md. Run the build tool after each significant change to verify the code compiles."
 
 	await updateSession(projectDir, {
 		currentTask: task || "Executing next task from PLAN.md",
@@ -89,14 +88,15 @@ export async function runCoder(
 				}
 			}
 		}
-	} catch (err: any) {
+	} catch (err: unknown) {
 		success = false
-		errors.push(err.message || "Unknown error")
+		const errMsg = err instanceof Error ? err.message : "Unknown error"
+		errors.push(errMsg)
 
 		logError(projectDir, {
 			errorClass: "infrastructure",
 			file: "agent",
-			message: err.message || "Agent execution failed",
+			message: errMsg,
 			attemptedFix: "none",
 		})
 	}

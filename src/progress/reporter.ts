@@ -33,11 +33,15 @@ export function createProgressReporter(): ProgressReporter {
  * Process SDK messages and route them to the progress reporter.
  */
 export function processAgentMessage(
-	message: any,
+	message: Record<string, unknown>,
 	reporter: ProgressReporter,
 ): void {
-	if (message.type === "assistant" && message.message?.content) {
-		for (const block of message.message.content) {
+	if (message.type === "assistant" && (message.message as Record<string, unknown>)?.content) {
+		const content = (message.message as Record<string, unknown>).content as Record<
+			string,
+			unknown
+		>[]
+		for (const block of content) {
 			if ("text" in block && block.text) {
 				// Only show substantive text, not thinking
 				const text = block.text as string
@@ -46,7 +50,7 @@ export function processAgentMessage(
 				}
 			} else if ("name" in block) {
 				const name = block.name as string
-				const input = (block as any).input || {}
+				const input = (block.input || {}) as Record<string, unknown>
 
 				// Summarize common tool uses
 				if (name === "Write" || name === "Edit") {
@@ -63,7 +67,8 @@ export function processAgentMessage(
 		}
 	} else if (message.type === "result") {
 		if (message.subtype === "success") {
-			reporter.log("done", `Agent completed (cost: $${message.total_cost_usd?.toFixed(4) || "?"})`)
+			const cost = message.total_cost_usd as number | undefined
+			reporter.log("done", `Agent completed (cost: $${cost?.toFixed(4) || "?"})`)
 		} else {
 			reporter.log("error", `Agent stopped: ${message.subtype}`)
 		}

@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process"
-import path from "node:path"
 import fs from "node:fs"
+import path from "node:path"
 import { createProgressReporter } from "../progress/reporter.js"
 
 function run(cmd: string, cwd: string): void {

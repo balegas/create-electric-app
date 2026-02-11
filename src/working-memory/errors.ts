@@ -29,12 +29,16 @@ export function readErrors(projectDir: string): ErrorEntry[] {
 		const entry: Partial<ErrorEntry> = {}
 
 		for (const line of lines) {
-			if (line.startsWith("- **Timestamp:**")) entry.timestamp = line.replace("- **Timestamp:**", "").trim()
-			if (line.startsWith("- **Class:**")) entry.errorClass = line.replace("- **Class:**", "").trim()
+			if (line.startsWith("- **Timestamp:**"))
+				entry.timestamp = line.replace("- **Timestamp:**", "").trim()
+			if (line.startsWith("- **Class:**"))
+				entry.errorClass = line.replace("- **Class:**", "").trim()
 			if (line.startsWith("- **File:**")) entry.file = line.replace("- **File:**", "").trim()
-			if (line.startsWith("- **Message:**")) entry.message = line.replace("- **Message:**", "").trim()
+			if (line.startsWith("- **Message:**"))
+				entry.message = line.replace("- **Message:**", "").trim()
 			if (line.startsWith("- **Fix:**")) entry.attemptedFix = line.replace("- **Fix:**", "").trim()
-			if (line.startsWith("- **Outcome:**")) entry.outcome = line.replace("- **Outcome:**", "").trim()
+			if (line.startsWith("- **Outcome:**"))
+				entry.outcome = line.replace("- **Outcome:**", "").trim()
 		}
 
 		if (entry.errorClass && entry.message) {
@@ -45,10 +49,7 @@ export function readErrors(projectDir: string): ErrorEntry[] {
 	return entries
 }
 
-export function logError(
-	projectDir: string,
-	entry: Omit<ErrorEntry, "timestamp">,
-): void {
+export function logError(projectDir: string, entry: Omit<ErrorEntry, "timestamp">): void {
 	const filePath = errorsPath(projectDir)
 	const errors = readErrors(projectDir)
 	const index = errors.length + 1
@@ -66,11 +67,7 @@ export function logError(
 	fs.appendFileSync(filePath, block, "utf-8")
 }
 
-export function logOutcome(
-	projectDir: string,
-	entryIndex: number,
-	outcome: string,
-): void {
+export function logOutcome(projectDir: string, entryIndex: number, outcome: string): void {
 	const filePath = errorsPath(projectDir)
 	if (!fs.existsSync(filePath)) return
 

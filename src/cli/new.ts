@@ -1,9 +1,9 @@
 import path from "node:path"
 import readline from "node:readline"
-import { scaffold } from "../scaffold/index.js"
-import { runPlanner } from "../agents/planner.js"
 import { runCoder } from "../agents/coder.js"
+import { runPlanner } from "../agents/planner.js"
 import { createProgressReporter } from "../progress/reporter.js"
+import { scaffold } from "../scaffold/index.js"
 import { updateSession } from "../working-memory/session.js"
 
 function toKebabCase(str: string): string {
@@ -61,14 +61,14 @@ export async function newCommand(
 
 	// Step 3: Approve
 	if (opts.approve !== false) {
-		console.log("\n" + plan + "\n")
+		console.log(`\n${plan}\n`)
 		let decision = await promptApproval()
 
 		while (decision === "revise") {
 			const feedback = await promptRevision()
 			reporter.log("plan", "Re-running planner with feedback...")
 			plan = await runPlanner(`${description}\n\nRevision feedback: ${feedback}`, projectDir)
-			console.log("\n" + plan + "\n")
+			console.log(`\n${plan}\n`)
 			decision = await promptApproval()
 		}
 

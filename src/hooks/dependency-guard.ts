@@ -6,7 +6,7 @@ import type { HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-age
  */
 export const dependencyGuard: HookCallback = async (input, _toolUseID, _opts) => {
 	const preInput = input as PreToolUseHookInput
-	const toolInput = preInput.tool_input as any
+	const toolInput = preInput.tool_input as Record<string, unknown> | undefined
 
 	const filePath = (toolInput?.file_path || "") as string
 	if (!filePath.endsWith("package.json")) return {}

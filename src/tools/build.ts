@@ -1,6 +1,5 @@
-import { tool } from "@anthropic-ai/claude-agent-sdk"
 import { execSync } from "node:child_process"
-import { z } from "zod"
+import { tool } from "@anthropic-ai/claude-agent-sdk"
 
 export const buildTool = tool(
 	"build",
@@ -17,9 +16,10 @@ export const buildTool = tool(
 				encoding: "utf-8",
 				timeout: 120_000,
 			})
-		} catch (e: any) {
+		} catch (e: unknown) {
 			success = false
-			buildOutput = e.stdout || e.message || "Build failed"
+			buildOutput =
+				(e as Record<string, string>)?.stdout || (e instanceof Error ? e.message : "Build failed")
 			errors.push("build")
 		}
 
@@ -28,9 +28,10 @@ export const buildTool = tool(
 				encoding: "utf-8",
 				timeout: 60_000,
 			})
-		} catch (e: any) {
+		} catch (e: unknown) {
 			success = false
-			checkOutput = e.stdout || e.message || "Check failed"
+			checkOutput =
+				(e as Record<string, string>)?.stdout || (e instanceof Error ? e.message : "Check failed")
 			errors.push("check")
 		}
 

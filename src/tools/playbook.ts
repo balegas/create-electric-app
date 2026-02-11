@@ -1,7 +1,7 @@
-import { tool } from "@anthropic-ai/claude-agent-sdk"
-import { z } from "zod"
 import fs from "node:fs"
 import path from "node:path"
+import { tool } from "@anthropic-ai/claude-agent-sdk"
+import { z } from "zod"
 
 const PLAYBOOK_PACKAGES = [
 	{ pkg: "@electric-sql/playbook", prefix: "electric" },
@@ -122,10 +122,7 @@ export const listPlaybooksTool = tool(
 		}
 
 		const output = skills
-			.map(
-				(s) =>
-					`- ${s.name} (from ${s.pkg})${s.hasReferences ? " [has references]" : ""}`,
-			)
+			.map((s) => `- ${s.name} (from ${s.pkg})${s.hasReferences ? " [has references]" : ""}`)
 			.join("\n")
 
 		return {

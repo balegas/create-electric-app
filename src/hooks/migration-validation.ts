@@ -1,6 +1,6 @@
-import type { HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk"
 import fs from "node:fs"
 import path from "node:path"
+import type { HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk"
 
 const CREATE_TABLE_REGEX = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/gi
 const REPLICA_IDENTITY_REGEX = /ALTER\s+TABLE\s+["']?(\w+)["']?\s+REPLICA\s+IDENTITY\s+FULL/gi
@@ -13,7 +13,8 @@ const REPLICA_IDENTITY_REGEX = /ALTER\s+TABLE\s+["']?(\w+)["']?\s+REPLICA\s+IDEN
  */
 export const migrationValidation: HookCallback = async (input, _toolUseID, _opts) => {
 	const preInput = input as PreToolUseHookInput
-	const command = (preInput.tool_input as any)?.command as string | undefined
+	const toolInput = preInput.tool_input as Record<string, unknown> | undefined
+	const command = toolInput?.command as string | undefined
 
 	if (!command) return {}
 
@@ -33,7 +34,7 @@ export const migrationValidation: HookCallback = async (input, _toolUseID, _opts
 		if (!file.endsWith(".sql")) continue
 
 		const filePath = path.join(drizzleDir, file)
-		let content = fs.readFileSync(filePath, "utf-8")
+		const content = fs.readFileSync(filePath, "utf-8")
 
 		// Find all CREATE TABLE statements
 		const createTables = new Set<string>()
@@ -54,7 +55,7 @@ export const migrationValidation: HookCallback = async (input, _toolUseID, _opts
 				.map((table) => `\nALTER TABLE "${table}" REPLICA IDENTITY FULL;`)
 				.join("\n")
 
-			fs.appendFileSync(filePath, additions + "\n", "utf-8")
+			fs.appendFileSync(filePath, `${additions}\n`, "utf-8")
 			fixed = true
 		}
 	}
