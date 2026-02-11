@@ -52,7 +52,15 @@ export async function newCommand(
 
 	// Step 1: Scaffold
 	reporter.log("task", "Scaffolding project from KPB template...")
-	await scaffold(projectDir)
+	const scaffoldResult = await scaffold(projectDir, { projectName })
+	if (scaffoldResult.errors.length > 0) {
+		for (const err of scaffoldResult.errors) {
+			reporter.log("error", err)
+		}
+	}
+	if (scaffoldResult.skippedInstall) {
+		reporter.log("error", "Dependency install failed. You may need to run 'pnpm install' manually.")
+	}
 	reporter.log("done", "Scaffold complete")
 
 	// Step 2: Plan
