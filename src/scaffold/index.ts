@@ -205,16 +205,26 @@ function patchPublicCssImports(projectDir: string): void {
 
 	let content = fs.readFileSync(rootPath, "utf-8")
 
-	// KPB imports typography.css from the public dir via absolute path:
+	// KPB imports typography.css from the public dir via a module import:
 	//   import typographyCss from '/typography.css?url'
 	// Rollup can't resolve absolute public-dir paths during production builds.
-	// Move the file into src/ and rewrite the import to a relative path.
-	const publicCss = path.join(projectDir, "public/typography.css")
-	const srcCss = path.join(projectDir, "src/typography.css")
-	if (fs.existsSync(publicCss)) {
-		fs.renameSync(publicCss, srcCss)
-		content = content.replace(`'/typography.css?url'`, `'../typography.css?url'`)
-		content = content.replace(`"/typography.css?url"`, `"../typography.css?url"`)
+	// The capsizeRadixPlugin generates this file into public/ only when Vite
+	// runs, so it may not exist yet at scaffold time.
+	//
+	// Fix: remove the module import and inline the public path as a string
+	// literal. Vite serves public/ files at the root, so "/typography.css"
+	// works in both dev and production.
+	const hasTypographyImport =
+		content.includes(`'/typography.css?url'`) || content.includes(`"/typography.css?url"`)
+
+	if (hasTypographyImport) {
+		// Remove the import statement
+		content = content.replace(
+			/import\s+typographyCss\s+from\s+['"]\/typography\.css\?url['"];?\s*\n/,
+			"",
+		)
+		// Replace the variable reference with a string literal
+		content = content.replace(/href:\s*typographyCss/g, 'href: "/typography.css"')
 		fs.writeFileSync(rootPath, content, "utf-8")
 	}
 }

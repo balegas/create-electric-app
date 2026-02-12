@@ -149,10 +149,21 @@ export const Route = createFileRoute("/api/mutations/todos")({
 })
 ```
 
+## Icons
+Use `lucide-react` for all icons — it is already installed. Do NOT use `@radix-ui/react-icons` (not installed).
+```typescript
+import { Trash2, Plus, ArrowLeft, Check, X, Search, Settings } from "lucide-react"
+```
+Lucide icons render as SVG at the current font size by default. Use the `size` prop if you need a specific pixel size:
+```tsx
+<IconButton variant="ghost" color="red"><Trash2 size={16} /></IconButton>
+```
+
 ## Hallucination Guard
 
 | WRONG | RIGHT |
 |-------|-------|
+| `import { X } from '@radix-ui/react-icons'` | `from 'lucide-react'` (e.g. `import { Trash2, ArrowLeft } from "lucide-react"`) |
 | `import { useQuery } from '@tanstack/react-db'` | `useLiveQuery` |
 | `import { electricCollectionOptions } from '@tanstack/react-db'` | `from '@tanstack/electric-db-collection'` |
 | `import { createInsertSchema } from 'drizzle-orm/zod'` | `from 'drizzle-zod'` (drizzle-orm/zod not available in 0.45.x) |

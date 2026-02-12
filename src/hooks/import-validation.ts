@@ -137,8 +137,14 @@ const CORRECT_IMPORTS: Record<string, string[]> = {
 
 /**
  * Known hallucinated imports that should be corrected.
+ * Maps wrong package → guidance on the correct package.
  */
-const HALLUCINATION_MAP: Record<string, string> = {}
+const HALLUCINATION_MAP: Record<string, string> = {
+	"@radix-ui/react-icons":
+		'lucide-react (already installed). Use named imports: import { Trash2, ArrowLeft, Plus, Check } from "lucide-react"',
+	"drizzle-orm/zod":
+		'drizzle-zod (drizzle-orm/zod does not exist in drizzle-orm 0.45.x). Use: import { createSelectSchema, createInsertSchema } from "drizzle-zod"',
+}
 
 const IMPORT_REGEX = /import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g
 
