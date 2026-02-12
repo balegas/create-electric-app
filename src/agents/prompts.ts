@@ -55,7 +55,7 @@ After fixing an error, log the outcome.
 ## Drizzle Workflow (CRITICAL)
 Always follow this order:
 1. Edit src/db/schema.ts (Drizzle pgTable definitions)
-2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-orm/zod)
+2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas)
 3. Create collection files in src/db/collections/ (import from ../zod-schemas)
 4. Create API routes (proxy + mutation)
 5. Create UI components
@@ -132,7 +132,7 @@ export const entityName = pgTable("entity_name", {
 
 ## Architecture
 - Drizzle pgTable() → drizzle-kit generate → SQL migrations → drizzle-kit migrate → Postgres
-- drizzle-orm/zod createSelectSchema() → Zod schemas → Collection definitions → useLiveQuery → UI
+- drizzle-zod createSelectSchema() → Zod schemas → Collection definitions → useLiveQuery → UI
 - Electric shape proxy: /api/<table> (GET) → forwards to Electric service
 - Write mutations: /api/mutations/<table> (POST/PUT/DELETE) → Drizzle tx → Postgres
 - Each mutation returns { txid } for optimistic update correlation

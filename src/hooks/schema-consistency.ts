@@ -33,7 +33,7 @@ export const schemaConsistency: HookCallback = async (input, _toolUseID, _opts) 
 			hookSpecificOutput: {
 				hookEventName: "PostToolUse" as const,
 				additionalContext:
-					"WARNING: This collection file appears to use hand-written Zod schemas instead of Drizzle-derived schemas. Import schemas from '../zod-schemas' (generated via createSelectSchema from drizzle-orm/zod) to maintain the single-source-of-truth type chain.",
+					"WARNING: This collection file appears to use hand-written Zod schemas instead of Drizzle-derived schemas. Import schemas from '../zod-schemas' (generated via createSelectSchema from drizzle-zod) to maintain the single-source-of-truth type chain.",
 			},
 		}
 	}
