@@ -15,6 +15,7 @@ export const todos = pgTable("todos", {
 ```
 
 ### Foreign Keys
+Use `.references()` on the column — do NOT import `relations` from `drizzle-orm` (not used in this stack; joins happen client-side via `useLiveQuery`).
 ```typescript
 export const comments = pgTable("comments", {
   id: uuid().primaryKey().defaultRandom(),
@@ -294,6 +295,7 @@ describe("todo data flow", () => {
 | `import { eq } from '@tanstack/react-db'` | Both `@tanstack/react-db` and `@tanstack/db` work; prefer `@tanstack/db` for filter-only imports |
 | `ssr: false` on `__root.tsx` | NEVER — root must SSR (it renders the HTML shell). Add `ssr: false` to leaf routes instead |
 | `ssr: true` on a leaf route using `useLiveQuery` | Add `ssr: false` to that leaf route |
+| `import { relations } from "drizzle-orm"` | NOT used — define FKs with `.references()` on the column. Joins happen client-side via `useLiveQuery` |
 | `import { todoCollection } from ...` in smoke tests | NEVER — collections connect to Electric on import. Import from `@/db/zod-schemas` only |
 | `import { db } from "@/db"` in smoke tests | NEVER — requires Postgres. Only in integration tests |
 | Testing with partial fields `{ text: "foo" }` | Always use `generateValidRow(schema)` to get ALL fields |
