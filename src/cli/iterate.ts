@@ -53,18 +53,24 @@ export async function iterateCommand(): Promise<void> {
 
 		reporter.log("task", "Running coder with your request...")
 		let result = await runCoder(projectDir, userInput)
+		let userDeclined = false
 
 		while (result.stopReason === "max_turns") {
 			reporter.log("task", "Agent reached turn limit but has more work to do")
 			const shouldContinue = await promptContinue(rl)
-			if (!shouldContinue) break
+			if (!shouldContinue) {
+				userDeclined = true
+				break
+			}
 			reporter.log("task", "Continuing coder agent...")
-			result = await runCoder(projectDir)
+			result = await runCoder(projectDir, `Continue the previous task: ${userInput}`)
 		}
 
-		if (result.success) {
+		if (userDeclined) {
+			reporter.log("done", "Paused. You can continue this work in the next iteration.")
+		} else if (result.success) {
 			reporter.log("done", "Changes applied successfully")
-		} else if (result.stopReason !== "max_turns") {
+		} else {
 			reporter.log("error", `Issues: ${result.errors.join(", ")}`)
 		}
 
