@@ -61,6 +61,9 @@ export async function scaffold(
 	// Step 6: Patch root route for shellComponent
 	patchRootRoute(projectDir)
 
+	// Step 6b: Fix public-dir CSS imports that break Rollup production builds
+	patchPublicCssImports(projectDir)
+
 	// Step 7: Copy .env.example -> .env
 	const envExample = path.join(projectDir, ".env.example")
 	const envFile = path.join(projectDir, ".env")
@@ -194,6 +197,26 @@ function patchRootRoute(projectDir: string): void {
 	}
 
 	fs.writeFileSync(rootPath, content, "utf-8")
+}
+
+function patchPublicCssImports(projectDir: string): void {
+	const rootPath = path.join(projectDir, "src/routes/__root.tsx")
+	if (!fs.existsSync(rootPath)) return
+
+	let content = fs.readFileSync(rootPath, "utf-8")
+
+	// KPB imports typography.css from the public dir via absolute path:
+	//   import typographyCss from '/typography.css?url'
+	// Rollup can't resolve absolute public-dir paths during production builds.
+	// Move the file into src/ and rewrite the import to a relative path.
+	const publicCss = path.join(projectDir, "public/typography.css")
+	const srcCss = path.join(projectDir, "src/typography.css")
+	if (fs.existsSync(publicCss)) {
+		fs.renameSync(publicCss, srcCss)
+		content = content.replace(`'/typography.css?url'`, `'../typography.css?url'`)
+		content = content.replace(`"/typography.css?url"`, `"../typography.css?url"`)
+		fs.writeFileSync(rootPath, content, "utf-8")
+	}
 }
 
 function patchGitignore(projectDir: string): void {
