@@ -81,10 +81,13 @@ export async function scaffold(
 	patchGitignore(projectDir)
 
 	// Step 10: Install dependencies
+	// Use --ignore-workspace to ensure packages install into the project's own
+	// node_modules, not a parent workspace. Generated apps are standalone.
 	if (!skippedInstall) {
 		try {
 			const installer = detectPackageManager(projectDir)
-			execSync(`${installer} install`, {
+			const ignoreWs = installer === "pnpm" ? " --ignore-workspace" : ""
+			execSync(`${installer} install${ignoreWs}`, {
 				cwd: projectDir,
 				stdio: "pipe",
 				timeout: 180_000,
