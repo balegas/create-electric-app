@@ -39,6 +39,20 @@ async function promptRevision(): Promise<string> {
 	})
 }
 
+async function promptContinue(): Promise<boolean> {
+	const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+	return new Promise((resolve) => {
+		rl.question(
+			"\n[turns] Agent needs more turns to finish. Continue? (y)es / (n)o: ",
+			(answer) => {
+				rl.close()
+				const a = answer.trim().toLowerCase()
+				resolve(a === "y" || a === "yes" || a === "")
+			},
+		)
+	})
+}
+
 export async function newCommand(
 	description: string,
 	opts: { name?: string; approve?: boolean },
@@ -99,9 +113,20 @@ export async function newCommand(
 		escalations: 0,
 	})
 
-	// Step 5: Run coder
+	// Step 5: Run coder (with continuation on max turns)
 	reporter.log("task", "Running coder agent...")
-	const result = await runCoder(projectDir)
+	let result = await runCoder(projectDir)
+
+	while (result.stopReason === "max_turns") {
+		reporter.log("task", "Agent reached turn limit but has more work to do")
+		const shouldContinue = await promptContinue()
+		if (!shouldContinue) {
+			reporter.log("done", "Stopped by user. Run 'electric-agent iterate' to continue later.")
+			return
+		}
+		reporter.log("task", "Continuing coder agent...")
+		result = await runCoder(projectDir)
+	}
 
 	if (result.success) {
 		reporter.log("done", `Project ${projectName} created successfully!`)

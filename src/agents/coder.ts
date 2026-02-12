@@ -6,9 +6,12 @@ import { consecutiveIdenticalFailures, logError } from "../working-memory/errors
 import { updateSession } from "../working-memory/session.js"
 import { buildCoderPrompt } from "./prompts.js"
 
+export type StopReason = "complete" | "max_turns" | "max_budget" | "error"
+
 export interface CoderResult {
 	success: boolean
 	errors: string[]
+	stopReason: StopReason
 }
 
 /**
@@ -20,6 +23,7 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 	const mcpServer = createToolServer(projectDir)
 	const errors: string[] = []
 	let success = true
+	let stopReason: StopReason = "complete"
 
 	const prompt =
 		task ||
@@ -82,7 +86,17 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 
 			// Handle result messages
 			if (message.type === "result") {
-				if (message.subtype !== "success") {
+				if (message.subtype === "success") {
+					stopReason = "complete"
+				} else if (message.subtype === "error_max_turns") {
+					stopReason = "max_turns"
+					// Not a hard failure — work can be continued
+				} else if (message.subtype === "error_max_budget_usd") {
+					stopReason = "max_budget"
+					success = false
+					errors.push("Budget limit reached")
+				} else {
+					stopReason = "error"
 					success = false
 					errors.push(message.subtype)
 				}
@@ -90,6 +104,7 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 		}
 	} catch (err: unknown) {
 		success = false
+		stopReason = "error"
 		const errMsg = err instanceof Error ? err.message : "Unknown error"
 		errors.push(errMsg)
 
@@ -111,5 +126,5 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 		})
 	}
 
-	return { success, errors }
+	return { success, errors, stopReason }
 }

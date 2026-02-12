@@ -5,6 +5,18 @@ import { runCoder } from "../agents/coder.js"
 import { createProgressReporter } from "../progress/reporter.js"
 import { readSession } from "../working-memory/session.js"
 
+function promptContinue(rl: readline.Interface): Promise<boolean> {
+	return new Promise((resolve) => {
+		rl.question(
+			"\n[turns] Agent needs more turns to finish. Continue? (y)es / (n)o: ",
+			(answer) => {
+				const a = answer.trim().toLowerCase()
+				resolve(a === "y" || a === "yes" || a === "")
+			},
+		)
+	})
+}
+
 export async function iterateCommand(): Promise<void> {
 	const projectDir = process.cwd()
 	const reporter = createProgressReporter()
@@ -40,11 +52,19 @@ export async function iterateCommand(): Promise<void> {
 		if (!userInput) continue
 
 		reporter.log("task", "Running coder with your request...")
-		const result = await runCoder(projectDir, userInput)
+		let result = await runCoder(projectDir, userInput)
+
+		while (result.stopReason === "max_turns") {
+			reporter.log("task", "Agent reached turn limit but has more work to do")
+			const shouldContinue = await promptContinue(rl)
+			if (!shouldContinue) break
+			reporter.log("task", "Continuing coder agent...")
+			result = await runCoder(projectDir)
+		}
 
 		if (result.success) {
 			reporter.log("done", "Changes applied successfully")
-		} else {
+		} else if (result.stopReason !== "max_turns") {
 			reporter.log("error", `Issues: ${result.errors.join(", ")}`)
 		}
 
