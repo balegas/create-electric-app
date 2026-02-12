@@ -179,24 +179,21 @@ function patchViteConfig(projectDir: string): void {
 	// Change port to 5174 so Caddy can proxy on 5173
 	content = content.replace(/port:\s*5173/, "port: 5174")
 
+	// Bind to all interfaces so Caddy in Docker can reach the dev server
+	// via host.docker.internal
+	if (!content.includes("host:")) {
+		content = content.replace(/port:\s*5174,?/, "port: 5174,\n\t\thost: true,")
+	}
+
 	fs.writeFileSync(vitePath, content, "utf-8")
 }
 
-function patchRootRoute(projectDir: string): void {
-	const rootPath = path.join(projectDir, "src/routes/__root.tsx")
-	if (!fs.existsSync(rootPath)) return
-
-	let content = fs.readFileSync(rootPath, "utf-8")
-
-	// Disable SSR on the root route — Electric/TanStack DB collections use
-	// useSyncExternalStore without getServerSnapshot, so all page routes
-	// that call useLiveQuery must be client-only. Setting ssr: false on the
-	// root propagates to all child routes.
-	if (!content.includes("ssr:") && content.includes("createRootRoute({")) {
-		content = content.replace("createRootRoute({", "createRootRoute({\n\tssr: false,")
-	}
-
-	fs.writeFileSync(rootPath, content, "utf-8")
+// NOTE: patchRootRoute intentionally does NOT add ssr: false to the root
+// route. The root renders the HTML shell (<html>, <head>, <Scripts>).
+// Disabling SSR there prevents the document from rendering — blank page.
+// The coder agent adds ssr: false to individual leaf routes instead.
+function patchRootRoute(_projectDir: string): void {
+	// no-op — root route must always SSR
 }
 
 function patchPublicCssImports(projectDir: string): void {

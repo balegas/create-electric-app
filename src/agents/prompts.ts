@@ -52,9 +52,10 @@ Before fixing any error, check _agent/errors.md for previous attempts at the sam
 If you see the same error has failed before, try a different approach.
 After fixing an error, log the outcome.
 
-## SSR is DISABLED (CRITICAL)
-The root route has ssr: false because useLiveQuery uses useSyncExternalStore without getServerSnapshot.
-All page routes are client-rendered. NEVER add ssr: true to any route that uses collections or useLiveQuery.
+## SSR Configuration (CRITICAL)
+NEVER add ssr: false to __root.tsx — it renders the HTML shell and must always SSR.
+Instead, add ssr: false to each LEAF route that uses useLiveQuery or collections.
+This is needed because useLiveQuery uses useSyncExternalStore without getServerSnapshot.
 
 ## Drizzle Workflow (CRITICAL)
 Always follow this order:

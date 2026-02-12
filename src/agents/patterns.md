@@ -111,20 +111,47 @@ const { data: todo } = useLiveQuery((q) =>
 **CRITICAL**: Do NOT call `.toArray()` — it does not exist. Just return the query chain.
 **CRITICAL**: `.where()` and `.orderBy()` take callbacks that destructure the collection aliases — do NOT pass string field paths.
 
+### Client-Side Mutations (CRITICAL)
+When calling `collection.insert()`, you MUST provide ALL fields including `id` and timestamps.
+The collection schema validates data client-side BEFORE any server call — Postgres defaults do NOT apply.
+```typescript
+// INSERT — provide ALL fields, generate id and timestamps client-side
+todoCollection.insert({
+  id: crypto.randomUUID(),
+  text: "Buy groceries",
+  completed: false,
+  projectId: projectId,
+  position: 0,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+})
+
+// UPDATE — pass the id and a callback that mutates the draft
+todoCollection.update(todoId, (draft) => {
+  draft.completed = !draft.completed
+  draft.updatedAt = new Date()
+})
+
+// DELETE — pass the id
+todoCollection.delete(todoId)
+```
+**CRITICAL**: Never omit `id`, `createdAt`, or `updatedAt` from inserts — they are validated by the Zod selectSchema and will throw `SchemaValidationError` if missing.
+
 ## TanStack Start Patterns
 
-### SSR is DISABLED (CRITICAL)
-The root route has `ssr: false` because `useLiveQuery` uses `useSyncExternalStore` without `getServerSnapshot`. This propagates to all child routes — every page route is client-rendered.
+### SSR Configuration (CRITICAL)
+The **root route** (`__root.tsx`) must ALWAYS have SSR enabled (the default). It renders the HTML shell (`<html>`, `<head>`, `<Scripts>`). If you add `ssr: false` to the root, the HTML document won't render and the page will be blank.
 
-**Do NOT add `ssr: true` to any route that uses `useLiveQuery` or TanStack DB collections.**
-
-If a component conditionally uses collections, wrap the collection-dependent part:
+Instead, add `ssr: false` to each **leaf route** that uses `useLiveQuery` or TanStack DB collections:
 ```typescript
-import { ClientOnly } from "@tanstack/react-router"
-<ClientOnly fallback={<div>Loading...</div>}>
-  <CollectionDependentComponent />
-</ClientOnly>
+export const Route = createFileRoute("/")({
+  ssr: false,  // Disable SSR on this route — it uses useLiveQuery
+  component: HomePage,
+})
 ```
+This is needed because `useLiveQuery` uses `useSyncExternalStore` without `getServerSnapshot`.
+
+**NEVER add `ssr: false` to `__root.tsx`** — it breaks the entire app.
 
 ### Route Naming Convention
 - `/api/<tablename>` — Electric shape proxy (GET only)
@@ -163,6 +190,7 @@ Lucide icons render as SVG at the current font size by default. Use the `size` p
 
 | WRONG | RIGHT |
 |-------|-------|
+| `collection.insert({ name: "foo" })` (partial) | Always provide ALL fields: `{ id: crypto.randomUUID(), name: "foo", createdAt: new Date(), updatedAt: new Date() }` |
 | `import { X } from '@radix-ui/react-icons'` | `from 'lucide-react'` (e.g. `import { Trash2, ArrowLeft } from "lucide-react"`) |
 | `import { useQuery } from '@tanstack/react-db'` | `useLiveQuery` |
 | `import { electricCollectionOptions } from '@tanstack/react-db'` | `from '@tanstack/electric-db-collection'` |
@@ -174,7 +202,8 @@ Lucide icons render as SVG at the current font size by default. Use the `size` p
 | `.where(eq("todos.field", val))` | `.where(({ todos }) => eq(todos.field, val))` (callback with proxy) |
 | `.orderBy("todos.field", "asc")` | `.orderBy(({ todos }) => todos.field, "asc")` (callback with proxy) |
 | `import { eq } from '@tanstack/react-db'` | Both `@tanstack/react-db` and `@tanstack/db` work; prefer `@tanstack/db` for filter-only imports |
-| `ssr: true` on a route using `useLiveQuery` | Remove — SSR is disabled globally via root route `ssr: false` |
+| `ssr: false` on `__root.tsx` | NEVER — root must SSR (it renders the HTML shell). Add `ssr: false` to leaf routes instead |
+| `ssr: true` on a leaf route using `useLiveQuery` | Add `ssr: false` to that leaf route |
 
 ## vite.config.ts
 Must include `nitro()` plugin for server routes:
