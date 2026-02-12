@@ -146,7 +146,8 @@ const ADDED_DEPENDENCIES: Record<string, string> = {
 
 const ADDED_DEV_DEPENDENCIES: Record<string, string> = {
 	"drizzle-kit": "0.31.9",
-	"@tanstack/db-playbook": "0.0.1",
+	// Playbook packages (@electric-sql/playbook, @tanstack/db-playbook,
+	// @durable-streams/playbook) come from the KPB template — don't duplicate here.
 }
 
 const ADDED_SCRIPTS: Record<string, string> = {
