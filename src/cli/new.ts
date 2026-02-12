@@ -4,6 +4,7 @@ import { runCoder } from "../agents/coder.js"
 import { runPlanner } from "../agents/planner.js"
 import { createProgressReporter } from "../progress/reporter.js"
 import { scaffold } from "../scaffold/index.js"
+import { validatePlaybooks } from "../tools/playbook.js"
 import { updateSession } from "../working-memory/session.js"
 
 function toKebabCase(str: string): string {
@@ -76,6 +77,14 @@ export async function newCommand(
 		reporter.log("error", "Dependency install failed. You may need to run 'pnpm install' manually.")
 	}
 	reporter.log("done", "Scaffold complete")
+
+	// Step 1b: Validate playbooks are installed
+	try {
+		validatePlaybooks(projectDir)
+	} catch (e) {
+		reporter.log("error", e instanceof Error ? e.message : "Playbook validation failed")
+		process.exit(1)
+	}
 
 	// Step 2: Plan
 	reporter.log("plan", "Running planner agent...")

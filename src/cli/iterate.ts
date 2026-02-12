@@ -3,6 +3,7 @@ import path from "node:path"
 import readline from "node:readline"
 import { runCoder } from "../agents/coder.js"
 import { createProgressReporter } from "../progress/reporter.js"
+import { validatePlaybooks } from "../tools/playbook.js"
 import { readSession } from "../working-memory/session.js"
 
 function promptContinue(rl: readline.Interface): Promise<boolean> {
@@ -25,6 +26,13 @@ export async function iterateCommand(): Promise<void> {
 	if (!fs.existsSync(path.join(projectDir, "PLAN.md"))) {
 		reporter.log("error", "Not in an Electric Agent project directory (no PLAN.md found)")
 		reporter.log("error", "Run 'electric-agent new' to create a project first")
+		process.exit(1)
+	}
+
+	try {
+		validatePlaybooks(projectDir)
+	} catch (e) {
+		reporter.log("error", e instanceof Error ? e.message : "Playbook validation failed")
 		process.exit(1)
 	}
 

@@ -35,6 +35,45 @@ function findPlaybookSkillDir(skillName: string, projectDir: string): string | n
 	return null
 }
 
+/**
+ * Required playbook skills that must be present for code generation to work.
+ * Each entry is a skill name that must be findable via findPlaybookSkillDir.
+ */
+const REQUIRED_SKILLS = ["live-queries", "collections", "mutations", "schemas"]
+
+/**
+ * Validate that all required playbook skills are installed in the project.
+ * Throws if any are missing so generation fails fast.
+ */
+export function validatePlaybooks(projectDir: string): void {
+	const missing: string[] = []
+
+	for (const skill of REQUIRED_SKILLS) {
+		if (!findPlaybookSkillDir(skill, projectDir)) {
+			missing.push(skill)
+		}
+	}
+
+	if (missing.length > 0) {
+		const installed = PLAYBOOK_PACKAGES.filter(({ pkg }) =>
+			fs.existsSync(path.join(projectDir, "node_modules", pkg, "skills")),
+		).map(({ pkg }) => pkg)
+
+		const notInstalled = PLAYBOOK_PACKAGES.filter(
+			({ pkg }) => !fs.existsSync(path.join(projectDir, "node_modules", pkg, "skills")),
+		).map(({ pkg }) => pkg)
+
+		const lines = [
+			`Required playbook skills missing: ${missing.join(", ")}`,
+			installed.length > 0 ? `Installed playbook packages: ${installed.join(", ")}` : "",
+			notInstalled.length > 0 ? `Missing playbook packages: ${notInstalled.join(", ")}` : "",
+			"Run 'pnpm install' in the project directory to install playbook packages.",
+		].filter(Boolean)
+
+		throw new Error(lines.join("\n"))
+	}
+}
+
 export function createPlaybookTools(projectDir: string) {
 	const readPlaybookTool = tool(
 		"read_playbook",
