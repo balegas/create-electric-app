@@ -86,19 +86,20 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 
 			// Handle result messages
 			if (message.type === "result") {
-				if (message.subtype === "success") {
+				const sub = String(message.subtype)
+				if (sub === "success") {
 					stopReason = "complete"
-				} else if (message.subtype === "error_max_turns") {
+				} else if (sub.includes("max_turns")) {
 					stopReason = "max_turns"
 					// Not a hard failure — work can be continued
-				} else if (message.subtype === "error_max_budget_usd") {
+				} else if (sub.includes("max_budget")) {
 					stopReason = "max_budget"
 					success = false
 					errors.push("Budget limit reached")
 				} else {
 					stopReason = "error"
 					success = false
-					errors.push(message.subtype)
+					errors.push(sub)
 				}
 			}
 		}

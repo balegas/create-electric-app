@@ -66,11 +66,15 @@ export function processAgentMessage(
 			}
 		}
 	} else if (message.type === "result") {
-		if (message.subtype === "success") {
-			const cost = message.total_cost_usd as number | undefined
-			reporter.log("done", `Agent completed (cost: $${cost?.toFixed(4) || "?"})`)
+		const sub = String(message.subtype)
+		const cost = message.total_cost_usd as number | undefined
+		const costStr = `(cost: $${cost?.toFixed(4) || "?"})`
+		if (sub === "success") {
+			reporter.log("done", `Agent completed ${costStr}`)
+		} else if (sub.includes("max_turns")) {
+			reporter.log("task", `Agent reached turn limit ${costStr}`)
 		} else {
-			reporter.log("error", `Agent stopped: ${message.subtype}`)
+			reporter.log("error", `Agent stopped: ${sub} ${costStr}`)
 		}
 	}
 }
