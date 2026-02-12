@@ -131,16 +131,14 @@ const CORRECT_IMPORTS: Record<string, string[]> = {
 		"real",
 		"date",
 	],
-	"drizzle-orm/zod": ["createSelectSchema", "createInsertSchema", "createUpdateSchema"],
+	"drizzle-zod": ["createSelectSchema", "createInsertSchema", "createUpdateSchema"],
 	"drizzle-orm/postgres-js": ["drizzle"],
 }
 
 /**
  * Known hallucinated imports that should be corrected.
  */
-const HALLUCINATION_MAP: Record<string, string> = {
-	"drizzle-zod": "drizzle-orm/zod (drizzle-zod is deprecated since drizzle-orm 0.44.0)",
-}
+const HALLUCINATION_MAP: Record<string, string> = {}
 
 const IMPORT_REGEX = /import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g
 

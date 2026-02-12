@@ -2,7 +2,7 @@
 // Never hand-write Zod schemas — always use createSelectSchema / createInsertSchema.
 //
 // Example:
-// import { createSelectSchema, createInsertSchema } from "drizzle-orm/zod"
+// import { createSelectSchema, createInsertSchema } from "drizzle-zod"
 // import { todos } from "./schema"
 //
 // export const todoSelectSchema = createSelectSchema(todos)

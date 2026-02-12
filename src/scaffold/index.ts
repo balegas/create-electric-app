@@ -133,6 +133,7 @@ const ADDED_DEPENDENCIES: Record<string, string> = {
 	"@tanstack/electric-db-collection": "0.2.31",
 	"@electric-sql/client": "1.5.1",
 	"drizzle-orm": "0.45.1",
+	"drizzle-zod": "^0.8.3",
 	postgres: "^3.4",
 	zod: "^3.24",
 }

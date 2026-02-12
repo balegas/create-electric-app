@@ -25,7 +25,7 @@ export const comments = pgTable("comments", {
 
 ### Zod Derivation (src/db/zod-schemas.ts)
 ```typescript
-import { createSelectSchema, createInsertSchema } from "drizzle-orm/zod"
+import { createSelectSchema, createInsertSchema } from "drizzle-zod"
 import { todos } from "./schema"
 export const todoSelectSchema = createSelectSchema(todos)
 export const todoInsertSchema = createInsertSchema(todos)
@@ -154,7 +154,7 @@ export const Route = createFileRoute("/api/mutations/todos")({
 |-------|-------|
 | `import { useQuery } from '@tanstack/react-db'` | `useLiveQuery` |
 | `import { electricCollectionOptions } from '@tanstack/react-db'` | `from '@tanstack/electric-db-collection'` |
-| `import { createInsertSchema } from 'drizzle-zod'` | `from 'drizzle-orm/zod'` (drizzle-zod is deprecated) |
+| `import { createInsertSchema } from 'drizzle-orm/zod'` | `from 'drizzle-zod'` (drizzle-orm/zod not available in 0.45.x) |
 | `createCollection({ ...electricCollectionOptions() })` | `createCollection(electricCollectionOptions({}))` (no spread) |
 | `import { drizzle } from 'drizzle-orm'` | `from 'drizzle-orm/postgres-js'` |
 | `.toArray()` on query builder | Remove — just return the chain from the callback |
