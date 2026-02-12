@@ -73,11 +73,43 @@ export const todoCollection = createCollection(
 )
 ```
 
-### Live Query
+### Live Queries
+`useLiveQuery` returns `{ data }` and the query callback uses proxy objects (NOT string paths).
 ```typescript
-import { useLiveQuery, eq } from "@tanstack/react-db"
-const todos = useLiveQuery((query) => query.from({ todos: todoCollection }).where(eq("todos.completed", false)).toArray())
+import { useLiveQuery } from "@tanstack/react-db"
+import { eq } from "@tanstack/db"
+
+// Basic query — destructure { data } from the result
+const { data: todos } = useLiveQuery((q) =>
+  q.from({ todos: todoCollection })
+    .where(({ todos }) => eq(todos.completed, false))
+    .orderBy(({ todos }) => todos.createdAt, "desc")
+)
+
+// With .select() to pick specific fields
+const { data: todoItems } = useLiveQuery((q) =>
+  q.from({ todos: todoCollection })
+    .where(({ todos }) => eq(todos.completed, false))
+    .select(({ todos }) => ({ id: todos.id, text: todos.text }))
+)
+
+// Join across collections
+const { data: todosWithProject } = useLiveQuery((q) =>
+  q.from({ t: todoCollection })
+    .innerJoin({ p: projectCollection }, ({ t, p }) => eq(t.projectId, p.id))
+    .where(({ t }) => eq(t.completed, false))
+    .select(({ t, p }) => ({ id: t.id, text: t.text, projectName: p.name }))
+)
+
+// Single item lookup
+const { data: todo } = useLiveQuery((q) =>
+  q.from({ todos: todoCollection })
+    .where(({ todos }) => eq(todos.id, someId))
+    .findOne()
+)
 ```
+**CRITICAL**: Do NOT call `.toArray()` — it does not exist. Just return the query chain.
+**CRITICAL**: `.where()` and `.orderBy()` take callbacks that destructure the collection aliases — do NOT pass string field paths.
 
 ## TanStack Start Patterns
 
@@ -116,7 +148,7 @@ export const Route = createFileRoute("/api/mutations/todos")({
 })
 ```
 
-## Import Hallucination Guard
+## Hallucination Guard
 
 | WRONG | RIGHT |
 |-------|-------|
@@ -125,6 +157,11 @@ export const Route = createFileRoute("/api/mutations/todos")({
 | `import { createInsertSchema } from 'drizzle-zod'` | `from 'drizzle-orm/zod'` (drizzle-zod is deprecated) |
 | `createCollection({ ...electricCollectionOptions() })` | `createCollection(electricCollectionOptions({}))` (no spread) |
 | `import { drizzle } from 'drizzle-orm'` | `from 'drizzle-orm/postgres-js'` |
+| `.toArray()` on query builder | Remove — just return the chain from the callback |
+| `const todos = useLiveQuery(...)` | `const { data: todos } = useLiveQuery(...)` (returns `{ data }`) |
+| `.where(eq("todos.field", val))` | `.where(({ todos }) => eq(todos.field, val))` (callback with proxy) |
+| `.orderBy("todos.field", "asc")` | `.orderBy(({ todos }) => todos.field, "asc")` (callback with proxy) |
+| `import { eq } from '@tanstack/react-db'` | `from '@tanstack/db'` (re-export works but canonical is `@tanstack/db`) |
 
 ## vite.config.ts
 Must include `nitro()` plugin for server routes:
