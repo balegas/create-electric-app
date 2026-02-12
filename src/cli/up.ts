@@ -56,20 +56,7 @@ export async function upCommand(): Promise<void> {
 		reporter.log("error", "Electric failed to start. Check 'docker compose logs electric'")
 	}
 
-	// Step 4: Trust Caddy CA (best effort)
-	reporter.log("task", "Checking Caddy certificate trust...")
-	try {
-		runQuiet("which caddy", projectDir)
-		run("caddy trust 2>/dev/null || true", projectDir)
-		reporter.log("done", "Caddy CA trusted")
-	} catch {
-		reporter.log(
-			"task",
-			"Caddy not found locally. You may need to accept the self-signed certificate in your browser.",
-		)
-	}
-
-	// Step 5: Run migrations
+	// Step 4: Run migrations
 	reporter.log("task", "Running database migrations...")
 	try {
 		run("npx drizzle-kit migrate", projectDir)
@@ -78,8 +65,8 @@ export async function upCommand(): Promise<void> {
 		reporter.log("error", "Migration failed. Check your schema and database connection.")
 	}
 
-	// Step 6: Start dev server
+	// Step 5: Start dev server
 	reporter.log("task", "Starting dev server...")
-	reporter.log("done", "Access your app at https://localhost:5173 (Caddy) or http://localhost:5174")
+	reporter.log("done", "Access your app at http://localhost:5173 (Caddy) or http://localhost:5174")
 	run("pnpm dev", projectDir)
 }

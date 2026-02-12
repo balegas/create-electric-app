@@ -1,4 +1,4 @@
-localhost:5173 {
+http://localhost:5173 {
 	# Proxy Electric shape API
 	handle /v1/shape* {
 		reverse_proxy electric:3000
