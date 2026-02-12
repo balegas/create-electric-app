@@ -78,13 +78,13 @@ export function buildPlannerPrompt(): string {
 Produce a detailed implementation plan for a reactive, real-time application. Your plan will be executed by a code generation agent.
 
 ## CRITICAL Instructions
-1. FIRST: Use list_playbooks to see all available playbook skills
-2. THEN: Read only the overview playbooks needed for planning: "electric-quickstart" and "tanstack-db"
-   (The coder agent will read specific skills like "collections", "mutations" etc. as it works on each phase — do NOT read those now)
-3. FINALLY: Produce the complete plan as your text response
-4. Do NOT use Bash, shell commands, find, tree, or ls to explore the filesystem
+1. Use list_playbooks to see available skills
+2. Read ONLY "electric-quickstart" and "tanstack-db" — do NOT read any other playbooks
+3. Output the complete plan as your final text response
+4. Do NOT explore the filesystem — you have no Read/Glob/Bash tools
 5. Do NOT write any files — just output the plan as text
-6. Your ENTIRE final text response will be used as PLAN.md
+6. Your ENTIRE final text response will be saved as PLAN.md
+7. You should need at most 3 tool calls total: list_playbooks, read_playbook × 2
 
 ## Output Format
 Your final response must be a complete PLAN.md with this structure:

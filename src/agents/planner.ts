@@ -23,12 +23,13 @@ export async function runPlanner(appDescription: string, projectDir: string): Pr
 				role: "user" as const,
 				content: `Create a detailed implementation plan for this app: "${appDescription}"
 
-Follow these steps in order:
-1. Use list_playbooks to see available playbooks
-2. Read only the overview playbooks: "electric-quickstart" and "tanstack-db" (the coder will read specific skills like "collections", "mutations" later)
-3. Produce the PLAN.md content as your final text response — include complete Drizzle pgTable() definitions for ALL entities
+Steps (exactly 3 tool calls, then output):
+1. list_playbooks — see what's available
+2. read_playbook("electric-quickstart")
+3. read_playbook("tanstack-db")
+4. Output the PLAN.md with complete Drizzle pgTable() definitions for ALL entities
 
-Do NOT explore the filesystem. Do NOT read more than 2-3 playbooks — the coder reads specific ones per phase.`,
+Do NOT read any other playbooks. Do NOT explore the filesystem. The coder agent reads specific playbooks (collections, mutations, etc.) as it works on each phase.`,
 			},
 		}
 	}
@@ -38,17 +39,15 @@ Do NOT explore the filesystem. Do NOT read more than 2-3 playbooks — the coder
 		options: {
 			model: "claude-opus-4-6",
 			systemPrompt: plannerPrompt,
-			maxThinkingTokens: 16384,
+			maxThinkingTokens: 10000,
 			allowedTools: [
-				"Read",
-				"Glob",
 				"mcp__electric-agent-tools__read_playbook",
 				"mcp__electric-agent-tools__list_playbooks",
 			],
 			mcpServers: { "electric-agent-tools": mcpServer },
 			hooks: plannerHooks,
 			cwd: projectDir,
-			maxTurns: 20,
+			maxTurns: 10,
 			permissionMode: "bypassPermissions",
 			allowDangerouslySkipPermissions: true,
 		},
