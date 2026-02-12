@@ -18,9 +18,9 @@ function promptContinue(rl: readline.Interface): Promise<boolean> {
 	})
 }
 
-export async function iterateCommand(): Promise<void> {
+export async function iterateCommand(opts?: { debug?: boolean }): Promise<void> {
 	const projectDir = process.cwd()
-	const reporter = createProgressReporter()
+	const reporter = createProgressReporter({ debug: opts?.debug })
 
 	// Verify we're in a project directory
 	if (!fs.existsSync(path.join(projectDir, "PLAN.md"))) {
@@ -60,7 +60,7 @@ export async function iterateCommand(): Promise<void> {
 		if (!userInput) continue
 
 		reporter.log("task", "Running coder with your request...")
-		let result = await runCoder(projectDir, userInput)
+		let result = await runCoder(projectDir, userInput, reporter)
 		let userDeclined = false
 
 		while (result.stopReason === "max_turns") {
@@ -71,7 +71,7 @@ export async function iterateCommand(): Promise<void> {
 				break
 			}
 			reporter.log("task", "Continuing coder agent...")
-			result = await runCoder(projectDir, `Continue the previous task: ${userInput}`)
+			result = await runCoder(projectDir, `Continue the previous task: ${userInput}`, reporter)
 		}
 
 		if (userDeclined) {

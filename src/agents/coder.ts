@@ -1,6 +1,10 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { hooks as guardrailHooks } from "../hooks/index.js"
-import { createProgressReporter, processAgentMessage } from "../progress/reporter.js"
+import {
+	createProgressReporter,
+	type ProgressReporter,
+	processAgentMessage,
+} from "../progress/reporter.js"
 import { createToolServer } from "../tools/server.js"
 import { consecutiveIdenticalFailures, logError } from "../working-memory/errors.js"
 import { updateSession } from "../working-memory/session.js"
@@ -17,10 +21,14 @@ export interface CoderResult {
 /**
  * Run the coder agent to execute tasks from PLAN.md.
  */
-export async function runCoder(projectDir: string, task?: string): Promise<CoderResult> {
-	const reporter = createProgressReporter()
+export async function runCoder(
+	projectDir: string,
+	task?: string,
+	reporter?: ProgressReporter,
+): Promise<CoderResult> {
+	const r = reporter ?? createProgressReporter()
 	const coderPrompt = buildCoderPrompt(projectDir)
-	const mcpServer = createToolServer(projectDir)
+	const mcpServer = createToolServer(projectDir, r)
 	const errors: string[] = []
 	let success = true
 	let stopReason: StopReason = "complete"
@@ -73,7 +81,7 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 				allowDangerouslySkipPermissions: true,
 			},
 		})) {
-			processAgentMessage(message, reporter)
+			processAgentMessage(message, r)
 
 			// Check for build failures in tool results
 			if (message.type === "assistant" && message.message?.content) {
@@ -119,7 +127,7 @@ export async function runCoder(projectDir: string, task?: string): Promise<Coder
 
 	// Check for consecutive identical failures
 	if (consecutiveIdenticalFailures(projectDir)) {
-		reporter.log("error", "Consecutive identical failures detected — escalation needed")
+		r.log("error", "Consecutive identical failures detected — escalation needed")
 		await updateSession(projectDir, { buildStatus: "escalation-needed" })
 	} else {
 		await updateSession(projectDir, {

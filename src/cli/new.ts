@@ -56,18 +56,18 @@ async function promptContinue(): Promise<boolean> {
 
 export async function newCommand(
 	description: string,
-	opts: { name?: string; approve?: boolean },
+	opts: { name?: string; approve?: boolean; debug?: boolean },
 ): Promise<void> {
 	const projectName = opts.name || toKebabCase(description)
 	const projectDir = path.resolve(process.cwd(), projectName)
-	const reporter = createProgressReporter()
+	const reporter = createProgressReporter({ debug: opts.debug })
 
 	reporter.log("plan", `Creating project: ${projectName}`)
 	reporter.log("plan", `Description: ${description}`)
 
 	// Step 1: Scaffold
 	reporter.log("task", "Scaffolding project from KPB template...")
-	const scaffoldResult = await scaffold(projectDir, { projectName })
+	const scaffoldResult = await scaffold(projectDir, { projectName, reporter })
 	if (scaffoldResult.errors.length > 0) {
 		for (const err of scaffoldResult.errors) {
 			reporter.log("error", err)
@@ -88,7 +88,7 @@ export async function newCommand(
 
 	// Step 2: Plan
 	reporter.log("plan", "Running planner agent...")
-	let plan = await runPlanner(description, projectDir)
+	let plan = await runPlanner(description, projectDir, reporter)
 
 	// Step 3: Approve
 	if (opts.approve !== false) {
@@ -98,7 +98,11 @@ export async function newCommand(
 		while (decision === "revise") {
 			const feedback = await promptRevision()
 			reporter.log("plan", "Re-running planner with feedback...")
-			plan = await runPlanner(`${description}\n\nRevision feedback: ${feedback}`, projectDir)
+			plan = await runPlanner(
+				`${description}\n\nRevision feedback: ${feedback}`,
+				projectDir,
+				reporter,
+			)
 			console.log(`\n${plan}\n`)
 			decision = await promptApproval()
 		}
@@ -124,7 +128,7 @@ export async function newCommand(
 
 	// Step 5: Run coder (with continuation on max turns)
 	reporter.log("task", "Running coder agent...")
-	let result = await runCoder(projectDir)
+	let result = await runCoder(projectDir, undefined, reporter)
 
 	while (result.stopReason === "max_turns") {
 		reporter.log("task", "Agent reached turn limit but has more work to do")
@@ -134,7 +138,7 @@ export async function newCommand(
 			return
 		}
 		reporter.log("task", "Continuing coder agent...")
-		result = await runCoder(projectDir)
+		result = await runCoder(projectDir, undefined, reporter)
 	}
 
 	if (result.success) {

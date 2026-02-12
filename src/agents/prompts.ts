@@ -42,6 +42,8 @@ Read playbooks just-in-time as you work on each phase:
 - Phase 2 (Collections): read "collections" and "electric" (under tanstack-db)
 - Phase 3 (Mutations/API): read "mutations" and "tanstack-start-quickstart"
 - Phase 4 (UI): read "live-queries"
+- Phase 5 (Testing): no playbook needed — use test patterns from the reference below
+  and the helpers in tests/helpers/schema-test-utils.ts
 Use list_playbooks if you need to discover other available skills.
 
 ## Working Directory
@@ -127,6 +129,12 @@ export const entityName = pgTable("entity_name", {
 ### Phase 4: Polish
 - [ ] Build verification (pnpm run build passes)
 - [ ] Biome lint check (pnpm run check passes)
+
+### Phase 5: Testing
+- [ ] Create schema smoke tests in tests/schema.test.ts
+- [ ] Create collection insert validation tests in tests/collections.test.ts
+- [ ] Create integration tests in tests/integration/data-flow.test.ts
+- [ ] Smoke tests pass (pnpm test)
 
 ## Design Conventions
 - UUID primary keys with defaultRandom()

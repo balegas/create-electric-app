@@ -1,4 +1,4 @@
-type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error"
+type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "debug"
 
 const PREFIXES: Record<LogLevel, string> = {
 	plan: "\x1b[36m[plan]\x1b[0m",
@@ -8,16 +8,22 @@ const PREFIXES: Record<LogLevel, string> = {
 	fix: "\x1b[33m[fix]\x1b[0m",
 	done: "\x1b[32m[done]\x1b[0m",
 	error: "\x1b[31m[error]\x1b[0m",
+	debug: "\x1b[2m[debug]\x1b[0m",
 }
 
 export interface ProgressReporter {
 	log(level: LogLevel, message: string): void
 	logToolUse(toolName: string, summary: string): void
+	debugMode: boolean
 }
 
-export function createProgressReporter(): ProgressReporter {
+export function createProgressReporter(opts?: { debug?: boolean }): ProgressReporter {
+	const debugMode = opts?.debug ?? false
 	return {
+		debugMode,
+
 		log(level: LogLevel, message: string) {
+			if (level === "debug" && !debugMode) return
 			console.log(`${PREFIXES[level]} ${message}`)
 		},
 
@@ -43,16 +49,19 @@ export function processAgentMessage(
 		>[]
 		for (const block of content) {
 			if ("text" in block && block.text) {
-				// Only show substantive text, not thinking
 				const text = block.text as string
-				if (text.length > 10) {
+				if (reporter.debugMode) {
+					reporter.log("debug", text)
+				} else if (text.length > 10) {
 					reporter.log("task", text.slice(0, 200))
 				}
+			} else if ("thinking" in block && block.thinking && reporter.debugMode) {
+				const thinking = block.thinking as string
+				reporter.log("debug", `[thinking] ${thinking.slice(0, 500)}`)
 			} else if ("name" in block) {
 				const name = block.name as string
 				const input = (block.input || {}) as Record<string, unknown>
 
-				// Summarize common tool uses
 				if (name === "Write" || name === "Edit") {
 					reporter.logToolUse(name, (input.file_path || "unknown file") as string)
 				} else if (name === "Bash") {
@@ -62,6 +71,17 @@ export function processAgentMessage(
 					reporter.log("build", "Running build...")
 				} else if (name.includes("playbook")) {
 					reporter.logToolUse("Playbook", (input.name || "read") as string)
+				}
+			}
+		}
+	} else if (message.type === "tool_result" && reporter.debugMode) {
+		const content = (message as Record<string, unknown>).content
+		if (typeof content === "string") {
+			reporter.log("debug", `[tool_result] ${content.slice(0, 1000)}`)
+		} else if (Array.isArray(content)) {
+			for (const block of content) {
+				if (typeof block === "object" && block && "text" in block) {
+					reporter.log("debug", `[tool_result] ${(block.text as string).slice(0, 1000)}`)
 				}
 			}
 		}

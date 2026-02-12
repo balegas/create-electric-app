@@ -15,6 +15,7 @@ program
 		"Turn natural-language app descriptions into running reactive Electric SQL + TanStack DB applications",
 	)
 	.version("0.1.0")
+	.option("--debug", "Enable debug logging")
 
 program
 	.command("new")
@@ -23,35 +24,40 @@ program
 	.option("-n, --name <name>", "Project name (derived from description if not provided)")
 	.option("--no-approve", "Skip plan approval prompt and start building immediately")
 	.action(async (description: string, opts: { name?: string; approve?: boolean }) => {
-		await newCommand(description, opts)
+		const debug = program.opts().debug ?? false
+		await newCommand(description, { ...opts, debug })
 	})
 
 program
 	.command("iterate")
 	.description("Enter conversational iteration mode for an existing project")
 	.action(async () => {
-		await iterateCommand()
+		const debug = program.opts().debug ?? false
+		await iterateCommand({ debug })
 	})
 
 program
 	.command("status")
 	.description("Show the current project status and progress")
 	.action(async () => {
-		await statusCommand()
+		const debug = program.opts().debug ?? false
+		await statusCommand({ debug })
 	})
 
 program
 	.command("up")
 	.description("Start Docker services, run migrations, and launch the dev server")
 	.action(async () => {
-		await upCommand()
+		const debug = program.opts().debug ?? false
+		await upCommand({ debug })
 	})
 
 program
 	.command("down")
 	.description("Stop Docker services and dev server")
 	.action(async () => {
-		await downCommand()
+		const debug = program.opts().debug ?? false
+		await downCommand({ debug })
 	})
 
 program.parse()

@@ -3,9 +3,9 @@ import path from "node:path"
 import { createProgressReporter } from "../progress/reporter.js"
 import { readSession } from "../working-memory/session.js"
 
-export async function statusCommand(): Promise<void> {
+export async function statusCommand(opts?: { debug?: boolean }): Promise<void> {
 	const projectDir = process.cwd()
-	const reporter = createProgressReporter()
+	const reporter = createProgressReporter({ debug: opts?.debug })
 
 	if (!fs.existsSync(path.join(projectDir, "PLAN.md"))) {
 		reporter.log("error", "Not in an Electric Agent project directory (no PLAN.md found)")

@@ -1,16 +1,24 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { plannerHooks } from "../hooks/index.js"
-import { createProgressReporter, processAgentMessage } from "../progress/reporter.js"
+import {
+	createProgressReporter,
+	type ProgressReporter,
+	processAgentMessage,
+} from "../progress/reporter.js"
 import { createToolServer } from "../tools/server.js"
 import { buildPlannerPrompt } from "./prompts.js"
 
 /**
  * Run the planner agent to generate a PLAN.md from an app description.
  */
-export async function runPlanner(appDescription: string, projectDir: string): Promise<string> {
-	const reporter = createProgressReporter()
+export async function runPlanner(
+	appDescription: string,
+	projectDir: string,
+	reporter?: ProgressReporter,
+): Promise<string> {
+	const r = reporter ?? createProgressReporter()
 	const plannerPrompt = buildPlannerPrompt()
-	const mcpServer = createToolServer(projectDir)
+	const mcpServer = createToolServer(projectDir, r)
 
 	let planContent = ""
 
@@ -52,7 +60,7 @@ Do NOT read any other playbooks. Do NOT explore the filesystem. The coder agent 
 			allowDangerouslySkipPermissions: true,
 		},
 	})) {
-		processAgentMessage(message, reporter)
+		processAgentMessage(message, r)
 
 		// Capture the final text output as the plan
 		if (message.type === "assistant" && message.message?.content) {

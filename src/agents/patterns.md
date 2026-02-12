@@ -186,6 +186,96 @@ Lucide icons render as SVG at the current font size by default. Use the `size` p
 <IconButton variant="ghost" color="red"><Trash2 size={16} /></IconButton>
 ```
 
+## Testing Patterns
+
+### Test File Structure
+```
+tests/
+├── helpers/
+│   └── schema-test-utils.ts    # generateValidRow, generateRowWithout (provided by scaffold)
+├── schema.test.ts              # Zod schema smoke tests — no Docker needed
+├── collections.test.ts         # Collection insert validation — no Docker needed
+└── integration/
+    └── data-flow.test.ts       # Drizzle insert + read back — requires Docker
+```
+
+### Schema Smoke Test (tests/schema.test.ts)
+Validates that Zod selectSchemas accept complete rows (as TanStack DB collections would).
+```typescript
+import { describe, it, expect } from "vitest"
+import { generateValidRow, generateRowWithout } from "./helpers/schema-test-utils"
+import { todoSelectSchema } from "@/db/zod-schemas"
+
+describe("todo schema", () => {
+  it("accepts a complete row", () => {
+    const row = generateValidRow(todoSelectSchema)
+    const result = todoSelectSchema.safeParse(row)
+    expect(result.success).toBe(true)
+  })
+
+  it("rejects a row without id", () => {
+    const row = generateRowWithout(todoSelectSchema, "id")
+    const result = todoSelectSchema.safeParse(row)
+    expect(result.success).toBe(false)
+  })
+
+  it("rejects a row without createdAt", () => {
+    const row = generateRowWithout(todoSelectSchema, "createdAt")
+    const result = todoSelectSchema.safeParse(row)
+    expect(result.success).toBe(false)
+  })
+})
+```
+Repeat the describe block for EVERY entity's selectSchema.
+
+### Collection Insert Validation Test (tests/collections.test.ts)
+Simulates what `collection.insert()` does: validate with the selectSchema BEFORE sending to server.
+```typescript
+import { describe, it, expect } from "vitest"
+import { generateValidRow } from "./helpers/schema-test-utils"
+import { todoSelectSchema } from "@/db/zod-schemas"
+
+describe("todo collection insert validation", () => {
+  it("validates a complete insert payload", () => {
+    const row = generateValidRow(todoSelectSchema)
+    // This is exactly what collection.insert() does client-side
+    const result = todoSelectSchema.safeParse(row)
+    expect(result.success).toBe(true)
+  })
+
+  it("has all required fields for client-side insert", () => {
+    // Verify the schema shape includes id and timestamps
+    const shape = todoSelectSchema.shape
+    expect(shape).toHaveProperty("id")
+    expect(shape).toHaveProperty("createdAt")
+  })
+})
+```
+
+### Integration Test (tests/integration/data-flow.test.ts)
+Inserts via Drizzle → reads back → parses with Zod. Requires Docker (Postgres running).
+```typescript
+import { describe, it, expect } from "vitest"
+import { db } from "@/db"
+import { todos } from "@/db/schema"
+import { todoSelectSchema } from "@/db/zod-schemas"
+
+describe("todo data flow", () => {
+  it("inserts and reads back a valid row", async () => {
+    const [row] = await db.insert(todos).values({ text: "test" }).returning()
+    const result = todoSelectSchema.safeParse(row)
+    expect(result.success).toBe(true)
+  })
+})
+```
+
+### Testing Critical Rules
+- **DO NOT** import collection files in smoke tests — collections connect to Electric on import
+- **DO NOT** import `@/db` (Drizzle client) in smoke tests — it requires a Postgres connection
+- **ONLY** import from `@/db/zod-schemas` and `@/db/schema` in smoke tests
+- **ALWAYS** test that removing `id`, `createdAt`, and `updatedAt` causes validation to fail
+- Smoke tests MUST work without Docker — they only validate Zod schemas in memory
+
 ## Hallucination Guard
 
 | WRONG | RIGHT |
@@ -204,6 +294,9 @@ Lucide icons render as SVG at the current font size by default. Use the `size` p
 | `import { eq } from '@tanstack/react-db'` | Both `@tanstack/react-db` and `@tanstack/db` work; prefer `@tanstack/db` for filter-only imports |
 | `ssr: false` on `__root.tsx` | NEVER — root must SSR (it renders the HTML shell). Add `ssr: false` to leaf routes instead |
 | `ssr: true` on a leaf route using `useLiveQuery` | Add `ssr: false` to that leaf route |
+| `import { todoCollection } from ...` in smoke tests | NEVER — collections connect to Electric on import. Import from `@/db/zod-schemas` only |
+| `import { db } from "@/db"` in smoke tests | NEVER — requires Postgres. Only in integration tests |
+| Testing with partial fields `{ text: "foo" }` | Always use `generateValidRow(schema)` to get ALL fields |
 
 ## vite.config.ts
 Must include `nitro()` plugin for server routes:

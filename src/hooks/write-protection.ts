@@ -9,6 +9,7 @@ const PROTECTED_FILES = new Set([
 	"pnpm-lock.yaml",
 	"postgres.conf",
 	"drizzle.config.ts",
+	"vitest.config.ts",
 ])
 
 /**
