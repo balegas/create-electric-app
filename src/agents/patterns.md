@@ -161,7 +161,7 @@ export const Route = createFileRoute("/api/mutations/todos")({
 | `const todos = useLiveQuery(...)` | `const { data: todos } = useLiveQuery(...)` (returns `{ data }`) |
 | `.where(eq("todos.field", val))` | `.where(({ todos }) => eq(todos.field, val))` (callback with proxy) |
 | `.orderBy("todos.field", "asc")` | `.orderBy(({ todos }) => todos.field, "asc")` (callback with proxy) |
-| `import { eq } from '@tanstack/react-db'` | `from '@tanstack/db'` (re-export works but canonical is `@tanstack/db`) |
+| `import { eq } from '@tanstack/react-db'` | Both `@tanstack/react-db` and `@tanstack/db` work; prefer `@tanstack/db` for filter-only imports |
 
 ## vite.config.ts
 Must include `nitro()` plugin for server routes:

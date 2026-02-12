@@ -139,6 +139,7 @@ const ADDED_DEPENDENCIES: Record<string, string> = {
 
 const ADDED_DEV_DEPENDENCIES: Record<string, string> = {
 	"drizzle-kit": "0.31.9",
+	"@tanstack/db-playbook": "0.0.1",
 }
 
 const ADDED_SCRIPTS: Record<string, string> = {
