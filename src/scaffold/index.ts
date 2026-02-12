@@ -183,12 +183,14 @@ function patchRootRoute(projectDir: string): void {
 	const rootPath = path.join(projectDir, "src/routes/__root.tsx")
 	if (!fs.existsSync(rootPath)) return
 
-	const content = fs.readFileSync(rootPath, "utf-8")
+	let content = fs.readFileSync(rootPath, "utf-8")
 
-	// Add defaultSsr: false via createRootRoute if not present
-	if (!content.includes("defaultSsr") && content.includes("createRootRoute")) {
-		// The KPB root uses component: RootComponent which renders html/head/body
-		// For Electric apps with client-only rendering, this is fine as-is
+	// Disable SSR on the root route — Electric/TanStack DB collections use
+	// useSyncExternalStore without getServerSnapshot, so all page routes
+	// that call useLiveQuery must be client-only. Setting ssr: false on the
+	// root propagates to all child routes.
+	if (!content.includes("ssr:") && content.includes("createRootRoute({")) {
+		content = content.replace("createRootRoute({", "createRootRoute({\n\tssr: false,")
 	}
 
 	fs.writeFileSync(rootPath, content, "utf-8")

@@ -113,16 +113,17 @@ const { data: todo } = useLiveQuery((q) =>
 
 ## TanStack Start Patterns
 
-### Root Route (__root.tsx)
-Use `shellComponent` (always SSR'd) and `component` (client-rendered):
-```typescript
-shellComponent: RootDocument,
-component: () => <Outlet />,
-```
+### SSR is DISABLED (CRITICAL)
+The root route has `ssr: false` because `useLiveQuery` uses `useSyncExternalStore` without `getServerSnapshot`. This propagates to all child routes — every page route is client-rendered.
 
-### start.tsx
+**Do NOT add `ssr: true` to any route that uses `useLiveQuery` or TanStack DB collections.**
+
+If a component conditionally uses collections, wrap the collection-dependent part:
 ```typescript
-createStart({ defaultSsr: false })
+import { ClientOnly } from "@tanstack/react-router"
+<ClientOnly fallback={<div>Loading...</div>}>
+  <CollectionDependentComponent />
+</ClientOnly>
 ```
 
 ### Route Naming Convention
@@ -162,6 +163,7 @@ export const Route = createFileRoute("/api/mutations/todos")({
 | `.where(eq("todos.field", val))` | `.where(({ todos }) => eq(todos.field, val))` (callback with proxy) |
 | `.orderBy("todos.field", "asc")` | `.orderBy(({ todos }) => todos.field, "asc")` (callback with proxy) |
 | `import { eq } from '@tanstack/react-db'` | Both `@tanstack/react-db` and `@tanstack/db` work; prefer `@tanstack/db` for filter-only imports |
+| `ssr: true` on a route using `useLiveQuery` | Remove — SSR is disabled globally via root route `ssr: false` |
 
 ## vite.config.ts
 Must include `nitro()` plugin for server routes:

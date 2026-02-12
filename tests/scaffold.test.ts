@@ -143,6 +143,14 @@ describe("scaffold", () => {
 		)
 	})
 
+	it("patches root route with ssr: false", () => {
+		const rootRoute = fs.readFileSync(
+			path.join(TEST_DIR, "src/routes/__root.tsx"),
+			"utf-8",
+		)
+		assert.ok(rootRoute.includes("ssr: false"), "ssr: false injected into root route")
+	})
+
 	it("patches .gitignore with Electric entries", () => {
 		const gitignore = fs.readFileSync(path.join(TEST_DIR, ".gitignore"), "utf-8")
 		assert.ok(gitignore.includes("_agent/"), "_agent/ in .gitignore")
