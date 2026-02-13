@@ -15,6 +15,7 @@ export async function runPlanner(
 	appDescription: string,
 	projectDir: string,
 	reporter?: ProgressReporter,
+	onMessage?: (msg: Record<string, unknown>) => void,
 ): Promise<string> {
 	const r = reporter ?? createProgressReporter()
 	const plannerPrompt = buildPlannerPrompt()
@@ -61,6 +62,7 @@ Do NOT read any other playbooks. Do NOT explore the filesystem. The coder agent 
 		},
 	})) {
 		processAgentMessage(message, r)
+		onMessage?.(message)
 
 		// Capture the final text output as the plan
 		if (message.type === "assistant" && message.message?.content) {

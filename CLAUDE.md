@@ -20,13 +20,19 @@ node dist/index.js --help        # run the CLI
 ```
 src/
 ├── index.ts                     # CLI entry point (commander)
-├── cli/                         # Command implementations
-│   ├── new.ts                   # `electric-agent new <desc>` — scaffold + plan + generate
-│   ├── iterate.ts               # `electric-agent iterate` — conversational iteration
+├── cli/                         # Command implementations (thin wrappers)
+│   ├── new.ts                   # `electric-agent new <desc>` — prompts + calls engine
+│   ├── iterate.ts               # `electric-agent iterate` — REPL + calls engine
+│   ├── serve.ts                 # `electric-agent serve` — starts web UI server
 │   ├── status.ts                # `electric-agent status` — show progress
 │   ├── up.ts                    # `electric-agent up` — docker + migrations + dev server
 │   └── down.ts                  # `electric-agent down` — stop services
-├── agents/                      # Agent orchestration via Claude Agent SDK
+├── engine/                      # Shared orchestration (used by CLI + web)
+│   ├── events.ts                # EngineEvent union type — single source of truth
+│   ├── orchestrator.ts          # runNew() + runIterate() with callback-driven I/O
+│   ├── message-parser.ts        # SDK message → EngineEvent[] conversion
+│   └── cli-adapter.ts           # OrchestratorCallbacks using readline (CLI mode)
+├── agents/                      # Agent execution via Claude Agent SDK
 │   ├── planner.ts               # Planner agent (Opus) — generates PLAN.md
 │   ├── coder.ts                 # Coder agent (Sonnet) — executes plan tasks
 │   ├── prompts.ts               # System prompt builders for both agents
@@ -47,8 +53,30 @@ src/
 ├── working-memory/              # Agent state persistence
 │   ├── session.ts               # Session state (phase, task, build status)
 │   └── errors.ts                # Error log with dedup detection
-└── progress/                    # CLI output
-    └── reporter.ts              # Color-coded progress logging
+├── progress/                    # CLI output
+│   └── reporter.ts              # Color-coded progress logging
+└── web/                         # Web UI server + client
+    ├── server.ts                # Hono API server (REST + static files)
+    ├── infra.ts                 # Durable streams server lifecycle
+    ├── gate.ts                  # Promise-based gate management for user decisions
+    ├── sessions.ts              # Session index (JSON file)
+    └── client/                  # React SPA (built with Vite)
+        ├── index.html
+        ├── vite.config.ts
+        └── src/
+            ├── main.tsx         # Entry point
+            ├── App.tsx          # Top-level layout + session management
+            ├── hooks/
+            │   └── useSession.ts   # Durable stream subscription + event reducer
+            ├── components/
+            │   ├── Console.tsx     # Scrolling event log
+            │   ├── ConsoleEntry.tsx # Log line (level-colored)
+            │   ├── ToolExecution.tsx # Clickable/collapsible tool block
+            │   ├── GatePrompt.tsx   # Approval/clarification/continue UI
+            │   └── PromptInput.tsx  # Text input + send button
+            └── lib/
+                ├── api.ts          # fetch wrappers for /api/*
+                └── event-types.ts  # Client-side event type definitions
 template/                        # Files overlaid onto KPB scaffold
 ├── docker-compose.yml           # Postgres + Electric + Caddy
 ├── Caddyfile                    # Reverse proxy config
@@ -65,7 +93,10 @@ template/                        # Files overlaid onto KPB scaffold
 
 ## Key Patterns
 
-- **Agent SDK**: Uses `query()` with async generator for streaming input (required for MCP tools). Planner uses Opus, Coder uses Sonnet.
+- **Engine layer**: `src/engine/orchestrator.ts` contains the shared orchestration logic. Both CLI (`cli-adapter.ts`) and web (`web/server.ts`) provide different `OrchestratorCallbacks` implementations. The engine emits `EngineEvent`s that each adapter routes to its output (console or durable stream).
+- **Durable Streams**: The web UI uses `@durable-streams/server` (in-process, file-backed) to persist and stream all events. Each session gets a stream at `/session/{id}`. The React client subscribes via SSE for real-time updates and offset-based catch-up on reconnect.
+- **Gate mechanism**: When the orchestrator needs user input (plan approval, clarification, continue), it pauses on a Promise created by `web/gate.ts`. The browser POSTs to `/api/sessions/:id/respond` to resolve it.
+- **Agent SDK**: Uses `query()` with async generator for streaming input (required for MCP tools). Planner uses Opus, Coder uses Sonnet. Both accept an optional `onMessage` callback for event forwarding.
 - **Hooks**: PreToolUse hooks run before Write/Edit/Bash. PostToolUse hooks run after. Return `{ hookSpecificOutput: { permissionDecision: "deny" } }` to block.
 - **MCP Tools**: Defined via `tool()` + `createSdkMcpServer()`. Tool names become `mcp__<server>__<tool>` in allowedTools.
 - **Scaffold**: Clones KPB via gitpick, overlays template files, merges deps, deletes stale lockfile, installs.

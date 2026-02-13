@@ -25,6 +25,7 @@ export async function runCoder(
 	projectDir: string,
 	task?: string,
 	reporter?: ProgressReporter,
+	onMessage?: (msg: Record<string, unknown>) => void,
 ): Promise<CoderResult> {
 	const r = reporter ?? createProgressReporter()
 	const coderPrompt = buildCoderPrompt(projectDir)
@@ -82,6 +83,7 @@ export async function runCoder(
 			},
 		})) {
 			processAgentMessage(message, r)
+			onMessage?.(message)
 
 			// Check for build failures in tool results
 			if (message.type === "assistant" && message.message?.content) {

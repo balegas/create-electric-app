@@ -4,6 +4,7 @@ import { Command } from "commander"
 import { downCommand } from "./cli/down.js"
 import { iterateCommand } from "./cli/iterate.js"
 import { newCommand } from "./cli/new.js"
+import { serveCommand } from "./cli/serve.js"
 import { statusCommand } from "./cli/status.js"
 import { upCommand } from "./cli/up.js"
 
@@ -58,5 +59,23 @@ program
 		const debug = program.opts().debug ?? false
 		await downCommand({ debug })
 	})
+
+program
+	.command("serve")
+	.description("Start the web UI server")
+	.option("-p, --port <number>", "Web server port", "4400")
+	.option("--streams-port <number>", "Durable streams server port", "4437")
+	.option("--data-dir <path>", "Data directory for persistence", ".electric-agent")
+	.option("--open", "Open browser on start")
+	.action(
+		async (opts: { port?: string; streamsPort?: string; dataDir?: string; open?: boolean }) => {
+			await serveCommand({
+				port: opts.port ? parseInt(opts.port, 10) : undefined,
+				streamsPort: opts.streamsPort ? parseInt(opts.streamsPort, 10) : undefined,
+				dataDir: opts.dataDir,
+				open: opts.open,
+			})
+		},
+	)
 
 program.parse()
