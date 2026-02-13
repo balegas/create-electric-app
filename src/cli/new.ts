@@ -1,5 +1,6 @@
 import path from "node:path"
 import readline from "node:readline"
+import { evaluateDescription } from "../agents/clarifier.js"
 import { runCoder } from "../agents/coder.js"
 import { runPlanner } from "../agents/planner.js"
 import { createProgressReporter } from "../progress/reporter.js"
@@ -17,8 +18,78 @@ function toKebabCase(str: string): string {
 		.slice(0, 50)
 }
 
+async function promptDescription(): Promise<string> {
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	})
+
+	console.log("\n  Describe the application you want to build.")
+	console.log("  Type your description below. Press Enter on an empty line to finish.\n")
+
+	return new Promise((resolve) => {
+		const lines: string[] = []
+
+		const askLine = () => {
+			rl.question("> ", (line) => {
+				if (line.trim() === "" && lines.length > 0) {
+					rl.close()
+					resolve(lines.join("\n"))
+					return
+				}
+				if (line.trim() !== "") {
+					lines.push(line)
+				}
+				askLine()
+			})
+		}
+
+		askLine()
+	})
+}
+
+async function promptClarificationAnswers(questions: string[]): Promise<string[]> {
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	})
+	const answers: string[] = []
+
+	for (const [i, question] of questions.entries()) {
+		const answer = await new Promise<string>((resolve) => {
+			rl.question(`\n  ${i + 1}. ${question}\n  > `, (ans) => {
+				resolve(ans.trim())
+			})
+		})
+		answers.push(answer)
+	}
+
+	rl.close()
+	return answers
+}
+
+function buildEnhancedDescription(
+	original: string,
+	questions: string[],
+	answers: string[],
+): string {
+	let enhanced = original
+	if (questions.length > 0) {
+		enhanced += "\n\nAdditional details:"
+		for (let i = 0; i < questions.length; i++) {
+			if (answers[i]) {
+				enhanced += `\n- ${questions[i]} ${answers[i]}`
+			}
+		}
+	}
+	return enhanced
+}
+
 async function promptApproval(): Promise<"approve" | "revise" | "cancel"> {
-	const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	})
 	return new Promise((resolve) => {
 		rl.question("\n[approve] Approve plan? (a)pprove / (r)evise / (c)ancel: ", (answer) => {
 			rl.close()
@@ -31,7 +102,10 @@ async function promptApproval(): Promise<"approve" | "revise" | "cancel"> {
 }
 
 async function promptRevision(): Promise<string> {
-	const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	})
 	return new Promise((resolve) => {
 		rl.question("[revise] What would you like to change? ", (answer) => {
 			rl.close()
@@ -41,7 +115,10 @@ async function promptRevision(): Promise<string> {
 }
 
 async function promptContinue(): Promise<boolean> {
-	const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+	const rl = readline.createInterface({
+		input: process.stdin,
+		output: process.stdout,
+	})
 	return new Promise((resolve) => {
 		rl.question(
 			"\n[turns] Agent needs more turns to finish. Continue? (y)es / (n)o: ",
@@ -54,20 +131,57 @@ async function promptContinue(): Promise<boolean> {
 	})
 }
 
-export async function newCommand(
-	description: string,
-	opts: { name?: string; approve?: boolean; debug?: boolean },
-): Promise<void> {
-	const projectName = opts.name || toKebabCase(description)
-	const projectDir = path.resolve(process.cwd(), projectName)
+export async function newCommand(opts: {
+	name?: string
+	approve?: boolean
+	debug?: boolean
+}): Promise<void> {
 	const reporter = createProgressReporter({ debug: opts.debug })
+
+	// Step 0: Get description interactively
+	const rawDescription = await promptDescription()
+	if (!rawDescription.trim()) {
+		reporter.log("error", "No description provided")
+		process.exit(1)
+	}
+
+	// Step 0b: Evaluate confidence and clarify if needed
+	let description = rawDescription
+	reporter.log("plan", "Analyzing your description...")
+	try {
+		const evaluation = await evaluateDescription(rawDescription)
+
+		if (evaluation.confidence < 70) {
+			reporter.log(
+				"plan",
+				`Confidence: ${evaluation.confidence}% — need more details before planning`,
+			)
+			if (evaluation.summary) {
+				console.log(`\n  Current understanding: ${evaluation.summary}`)
+			}
+			console.log("\n  Please answer the following questions to help build a better plan:\n")
+			const answers = await promptClarificationAnswers(evaluation.questions)
+			description = buildEnhancedDescription(rawDescription, evaluation.questions, answers)
+			reporter.log("plan", "Description enriched with your answers")
+		} else {
+			reporter.log("plan", `Confidence: ${evaluation.confidence}% — description is clear`)
+		}
+	} catch {
+		reporter.log("plan", "Skipping clarification step")
+	}
+
+	const projectName = opts.name || toKebabCase(rawDescription.split("\n")[0])
+	const projectDir = path.resolve(process.cwd(), projectName)
 
 	reporter.log("plan", `Creating project: ${projectName}`)
 	reporter.log("plan", `Description: ${description}`)
 
 	// Step 1: Scaffold
 	reporter.log("task", "Scaffolding project from KPB template...")
-	const scaffoldResult = await scaffold(projectDir, { projectName, reporter })
+	const scaffoldResult = await scaffold(projectDir, {
+		projectName,
+		reporter,
+	})
 	if (scaffoldResult.errors.length > 0) {
 		for (const err of scaffoldResult.errors) {
 			reporter.log("error", err)
