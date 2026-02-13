@@ -20,12 +20,11 @@ program
 program
 	.command("new")
 	.description("Create a new Electric app from a natural-language description")
-	.argument("<description>", "Natural-language description of the app to build")
 	.option("-n, --name <name>", "Project name (derived from description if not provided)")
 	.option("--no-approve", "Skip plan approval prompt and start building immediately")
-	.action(async (description: string, opts: { name?: string; approve?: boolean }) => {
+	.action(async (opts: { name?: string; approve?: boolean }) => {
 		const debug = program.opts().debug ?? false
-		await newCommand(description, { ...opts, debug })
+		await newCommand({ ...opts, debug })
 	})
 
 program
