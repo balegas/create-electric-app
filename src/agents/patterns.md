@@ -154,6 +154,21 @@ This is needed because `useLiveQuery` uses `useSyncExternalStore` without `getSe
 
 **NEVER add `ssr: false` to `__root.tsx`** — it breaks the entire app.
 
+### Components with useLiveQuery in __root.tsx (CRITICAL)
+If a component uses `useLiveQuery` (e.g. a Sidebar) and must be rendered from `__root.tsx`, wrap it with `ClientOnly` to prevent SSR crashes:
+```typescript
+import { ClientOnly } from "../components/ClientOnly"
+import { Sidebar } from "../components/Sidebar"
+
+// In RootComponent:
+<ClientOnly fallback={<Box style={{ width: 240 }} />}>
+  {() => <Sidebar />}
+</ClientOnly>
+```
+`ClientOnly` is provided by the scaffold. It uses `useSyncExternalStore` with `getServerSnapshot=false` to skip SSR cleanly without hydration mismatch.
+
+**NEVER render a component that uses `useLiveQuery` or collections directly in `__root.tsx` without `ClientOnly`** — it will crash with `Missing getServerSnapshot`.
+
 ### Route Naming Convention
 - `/api/<tablename>` — Electric shape proxy (GET only)
 - `/api/mutations/<tablename>` — Write mutations (POST/PUT/DELETE)
@@ -312,6 +327,7 @@ This test catches the #1 runtime bug: `toISOString is not a function` when mutat
 | `import { eq } from '@tanstack/react-db'` | Both `@tanstack/react-db` and `@tanstack/db` work; prefer `@tanstack/db` for filter-only imports |
 | `ssr: false` on `__root.tsx` | NEVER — root must SSR (it renders the HTML shell). Add `ssr: false` to leaf routes instead |
 | `ssr: true` on a leaf route using `useLiveQuery` | Add `ssr: false` to that leaf route |
+| `<Sidebar />` (useLiveQuery) directly in `__root.tsx` | Wrap with `<ClientOnly>{() => <Sidebar />}</ClientOnly>` — SSR will crash without it |
 | `import { relations } from "drizzle-orm"` | NOT used — define FKs with `.references()` on the column. Joins happen client-side via `useLiveQuery` |
 | `import { todoCollection } from ...` in smoke tests | NEVER — collections connect to Electric on import. Import from `@/db/zod-schemas` only |
 | `import { db } from "@/db"` in smoke tests | NEVER — requires Postgres. Only in integration tests |

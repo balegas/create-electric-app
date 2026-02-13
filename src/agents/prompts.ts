@@ -36,6 +36,15 @@ Generate production-quality code for reactive, real-time applications. You work 
 5. Use the build tool to verify your changes compile
 6. Mark completed tasks in PLAN.md by changing [ ] to [x]
 
+## Iteration Mode
+When asked to make a change to an existing app, you MUST implement it directly:
+1. Read the existing code to understand the current state
+2. Add new tasks to PLAN.md under a new iteration section
+3. Write the actual code — do NOT just produce a plan
+4. Follow the Drizzle Workflow order if schema changes are needed
+5. Run the build tool to verify
+Do NOT write plan files elsewhere. Do NOT stop after planning. Implement the full change.
+
 ## Progressive Playbook Reading
 Read playbooks just-in-time as you work on each phase:
 - Phase 1 (Schema): read "electric-quickstart" and "schemas"

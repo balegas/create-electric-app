@@ -60,7 +60,29 @@ export async function iterateCommand(opts?: { debug?: boolean }): Promise<void> 
 		if (!userInput) continue
 
 		reporter.log("task", "Running coder with your request...")
-		let result = await runCoder(projectDir, userInput, reporter)
+		const iterationPrompt = `The user wants the following change to the existing app:
+
+${userInput}
+
+Instructions:
+1. Read PLAN.md and the current codebase to understand the existing app
+2. Read relevant playbooks before coding (use list_playbooks, then read what you need):
+   - UI changes → read "live-queries" playbook (covers useLiveQuery + SSR rules)
+   - Schema changes → read "schemas" and "electric-quickstart"
+   - Collection/mutation changes → read "collections" and "mutations"
+3. Add a new "## Iteration: ${userInput.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
+4. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
+5. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
+6. Mark tasks as done in PLAN.md after completing them
+7. Run the build tool to verify everything compiles
+
+CRITICAL reminders:
+- Components using useLiveQuery MUST NOT be rendered directly in __root.tsx — wrap with ClientOnly
+- Leaf routes using useLiveQuery need ssr: false
+- Mutation routes must use parseDates(await request.json())
+
+Do NOT just write a plan — implement the changes directly.`
+		let result = await runCoder(projectDir, iterationPrompt, reporter)
 		let userDeclined = false
 
 		while (result.stopReason === "max_turns") {
@@ -71,7 +93,11 @@ export async function iterateCommand(opts?: { debug?: boolean }): Promise<void> 
 				break
 			}
 			reporter.log("task", "Continuing coder agent...")
-			result = await runCoder(projectDir, `Continue the previous task: ${userInput}`, reporter)
+			result = await runCoder(
+				projectDir,
+				`Continue implementing the previous request: ${userInput}\nRead PLAN.md to see what tasks remain unchecked, then implement them. Do NOT just plan — write code.`,
+				reporter,
+			)
 		}
 
 		if (userDeclined) {
