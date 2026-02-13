@@ -41,7 +41,7 @@ export const todoInsertSchema = createInsertSchema(todos)
 ```typescript
 import { db } from "@/db"
 import { todos } from "@/db/schema"
-import { generateTxId } from "@/db/utils"
+import { generateTxId, parseDates } from "@/db/utils"
 const result = await db.transaction(async (tx) => {
   const txid = await generateTxId(tx)
   const [row] = await tx.insert(todos).values(data).returning()
@@ -167,10 +167,12 @@ export const Route = createFileRoute("/api/todos")({
 ```
 
 ### Mutation Route Pattern
+**CRITICAL**: Always wrap `request.json()` with `parseDates()` — JSON serialization turns `Date` objects into ISO strings, and Drizzle's timestamp columns crash on strings.
 ```typescript
+import { parseDates } from "@/db/utils"
 export const Route = createFileRoute("/api/mutations/todos")({
   server: { handlers: { POST: async ({ request }) => {
-    const data = await request.json()
+    const data = parseDates(await request.json())
     const result = await db.transaction(async (tx) => { const txid = await generateTxId(tx); const [row] = await tx.insert(todos).values(data).returning(); return { row, txid } })
     return Response.json(result)
   } } },
@@ -270,6 +272,21 @@ describe("todo data flow", () => {
 })
 ```
 
+### JSON Round-Trip Test (tests/collections.test.ts)
+Simulates the actual mutation path: `Date` → `JSON.stringify` → string → must survive Drizzle insert.
+```typescript
+it("survives JSON round-trip (Date → string → Date)", () => {
+  const row = generateValidRow(todoSelectSchema)
+  // Simulate what fetch() does: serialize to JSON and back
+  const serialized = JSON.parse(JSON.stringify(row))
+  // parseDates is what mutation routes must call
+  const revived = parseDates(serialized)
+  const result = todoSelectSchema.safeParse(revived)
+  expect(result.success).toBe(true)
+})
+```
+This test catches the #1 runtime bug: `toISOString is not a function` when mutation routes forget `parseDates()`.
+
 ### Testing Critical Rules
 - **DO NOT** import collection files in smoke tests — collections connect to Electric on import
 - **DO NOT** import `@/db` (Drizzle client) in smoke tests — it requires a Postgres connection
@@ -299,6 +316,7 @@ describe("todo data flow", () => {
 | `import { todoCollection } from ...` in smoke tests | NEVER — collections connect to Electric on import. Import from `@/db/zod-schemas` only |
 | `import { db } from "@/db"` in smoke tests | NEVER — requires Postgres. Only in integration tests |
 | Testing with partial fields `{ text: "foo" }` | Always use `generateValidRow(schema)` to get ALL fields |
+| `const data = await request.json()` then `db.insert().values(data)` | ALWAYS use `parseDates(await request.json())` — JSON turns Dates into strings, Drizzle crashes |
 
 ## vite.config.ts
 Must include `nitro()` plugin for server routes:

@@ -1,5 +1,8 @@
 import type { ZodObject, ZodRawShape, ZodTypeAny } from "zod"
 
+// Re-export parseDates so tests can import from the test helper
+export { parseDates } from "@/db/utils"
+
 /**
  * Generate a valid row from a Zod schema by introspecting its shape.
  * Produces type-appropriate default values for each field.
