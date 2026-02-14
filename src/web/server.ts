@@ -55,21 +55,14 @@ function createWebCallbacks(
 			}
 		},
 
-		async onClarificationNeeded(questions, summary) {
-			// Emit a gate event so the UI knows to prompt the user
-			await callbacks.onEvent({
-				type: "clarification_needed",
-				questions,
-				confidence: 0,
-				summary,
-				ts: ts(),
-			})
-			// Block until the user answers via POST /api/sessions/:id/respond
+		async onClarificationNeeded(_questions, _summary) {
+			// The orchestrator already emits the clarification_needed event via onEvent.
+			// We only need to block until the user answers via POST /api/sessions/:id/respond.
 			return createGate<string[]>(sessionId, "clarification")
 		},
 
-		async onPlanReady(plan) {
-			await callbacks.onEvent({ type: "plan_ready", plan, ts: ts() })
+		async onPlanReady(_plan) {
+			// The orchestrator already emits the plan_ready event via onEvent.
 			return createGate<"approve" | "revise" | "cancel">(sessionId, "approval")
 		},
 
@@ -78,11 +71,7 @@ function createWebCallbacks(
 		},
 
 		async onContinueNeeded() {
-			await callbacks.onEvent({
-				type: "continue_needed",
-				reason: "max_turns",
-				ts: ts(),
-			})
+			// The orchestrator already emits the continue_needed event via onEvent.
 			return createGate<boolean>(sessionId, "continue")
 		},
 	}
