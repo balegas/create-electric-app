@@ -74,47 +74,60 @@ export function processAgentMessage(
 				}
 			}
 		}
-	} else if (message.type === "tool_result") {
-		const content = (message as Record<string, unknown>).content
-		const texts: string[] = []
-		if (typeof content === "string") {
-			texts.push(content)
-		} else if (Array.isArray(content)) {
-			for (const block of content) {
-				if (typeof block === "object" && block && "text" in block) {
-					texts.push(block.text as string)
-				}
-			}
-		}
-
-		for (const text of texts) {
-			// Always surface build tool results (even without --debug)
-			if (text.includes("=== pnpm run build ===")) {
-				try {
-					const result = JSON.parse(text) as {
-						success?: boolean
-						output?: string
-						errors?: string
+	} else if (message.type === "user" && (message.message as Record<string, unknown>)?.content) {
+		// SDK sends tool results as user messages with tool_result content blocks
+		const msgContent = (message.message as Record<string, unknown>).content
+		if (Array.isArray(msgContent)) {
+			for (const block of msgContent) {
+				if (
+					typeof block === "object" &&
+					block &&
+					(block as Record<string, unknown>).type === "tool_result"
+				) {
+					const b = block as Record<string, unknown>
+					const content = b.content
+					const texts: string[] = []
+					if (typeof content === "string") {
+						texts.push(content)
+					} else if (Array.isArray(content)) {
+						for (const inner of content) {
+							if (typeof inner === "object" && inner && "text" in inner) {
+								texts.push((inner as Record<string, unknown>).text as string)
+							}
+						}
 					}
-					const output = result.output || ""
-					const lines = output.split("\n").filter((l) => l.trim())
-					const tail = lines.slice(-8).join("\n")
-					if (!result.success) {
-						reporter.log("build", `FAILED (${result.errors})`)
-						reporter.log("build", tail)
-					} else {
-						reporter.log("build", "Build passed")
-					}
-				} catch {
-					// Not JSON — show raw tail
-					const lines = text.split("\n").filter((l) => l.trim())
-					reporter.log("build", lines.slice(-5).join("\n"))
-				}
-				continue
-			}
 
-			if (reporter.debugMode) {
-				reporter.log("debug", `[tool_result] ${text.slice(0, 1000)}`)
+					for (const text of texts) {
+						// Always surface build tool results (even without --debug)
+						if (text.includes("=== pnpm run build ===")) {
+							try {
+								const result = JSON.parse(text) as {
+									success?: boolean
+									output?: string
+									errors?: string
+								}
+								const output = result.output || ""
+								const lines = output.split("\n").filter((l) => l.trim())
+								const tail = lines.slice(-8).join("\n")
+								if (!result.success) {
+									reporter.log("build", `FAILED (${result.errors})`)
+									reporter.log("build", tail)
+								} else {
+									reporter.log("build", "Build passed")
+								}
+							} catch {
+								// Not JSON — show raw tail
+								const lines = text.split("\n").filter((l) => l.trim())
+								reporter.log("build", lines.slice(-5).join("\n"))
+							}
+							continue
+						}
+
+						if (reporter.debugMode) {
+							reporter.log("debug", `[tool_result] ${text.slice(0, 1000)}`)
+						}
+					}
+				}
 			}
 		}
 	} else if (message.type === "result") {
