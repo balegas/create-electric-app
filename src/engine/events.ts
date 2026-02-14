@@ -6,6 +6,7 @@ export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | 
  */
 export type EngineEvent =
 	| { type: "log"; level: LogLevel; message: string; ts: string }
+	| { type: "user_message"; message: string; ts: string }
 	| {
 			type: "tool_start"
 			toolName: string

@@ -20,6 +20,21 @@ export function ConsoleLogEntry({ entry }: { entry: Extract<ConsoleEntryType, { 
 	)
 }
 
+export function ConsoleUserMessage({
+	entry,
+}: {
+	entry: Extract<ConsoleEntryType, { kind: "user_message" }>
+}) {
+	return (
+		<div className="console-entry user-message">
+			<span className="prefix" style={{ color: "var(--cyan)" }}>
+				[you]
+			</span>
+			<span>{entry.message}</span>
+		</div>
+	)
+}
+
 export function ConsoleTextEntry({
 	entry,
 }: {

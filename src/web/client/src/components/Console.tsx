@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
-import { ConsoleLogEntry, ConsoleTextEntry } from "./ConsoleEntry"
+import { ConsoleLogEntry, ConsoleTextEntry, ConsoleUserMessage } from "./ConsoleEntry"
 import { GatePrompt } from "./GatePrompt"
 import { ToolExecution } from "./ToolExecution"
 
@@ -24,6 +24,8 @@ export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
 				switch (entry.kind) {
 					case "log":
 						return <ConsoleLogEntry key={`log-${i}`} entry={entry} />
+					case "user_message":
+						return <ConsoleUserMessage key={`user-${i}`} entry={entry} />
 					case "tool":
 						return <ToolExecution key={entry.toolUseId || `tool-${i}`} entry={entry} />
 					case "text":

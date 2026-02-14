@@ -17,6 +17,9 @@ export function useSession(sessionId: string | null) {
 				case "log":
 					return [...prev, { kind: "log" as const, level: event.level, message: event.message }]
 
+				case "user_message":
+					return [...prev, { kind: "user_message" as const, message: event.message }]
+
 				case "tool_start":
 					return [
 						...prev,

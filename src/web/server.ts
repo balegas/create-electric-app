@@ -152,6 +152,13 @@ export function createApp(config: ServerConfig) {
 
 		const { callbacks } = createWebCallbacks(sessionId, config.streamsPort)
 
+		// Write user prompt to the stream so it shows in the UI
+		await callbacks.onEvent({
+			type: "user_message",
+			message: body.description,
+			ts: ts(),
+		})
+
 		// Fire and forget — the orchestrator writes results to the stream
 		runNew({
 			description: body.description,
@@ -192,6 +199,13 @@ export function createApp(config: ServerConfig) {
 
 		// Re-use the existing stream (append to same log)
 		const { callbacks } = createWebCallbacks(sessionId, config.streamsPort)
+
+		// Write user prompt to the stream so it shows in the UI
+		await callbacks.onEvent({
+			type: "user_message",
+			message: body.request,
+			ts: ts(),
+		})
 
 		updateSessionInfo(config.dataDir, sessionId, { status: "running" })
 		const controller = new AbortController()
