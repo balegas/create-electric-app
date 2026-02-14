@@ -225,14 +225,14 @@ export async function runNew(opts: {
 		escalations: 0,
 	})
 
-	// Step 5: Run coder (with continuation on max turns)
+	// Step 5: Run coder (with continuation on max turns / max budget)
 	emit({ type: "log", level: "task", message: "Running coder agent...", ts: ts() })
 	let result = await runCoder(projectDir, undefined, reporter, messageForwarder)
 
-	while (result.stopReason === "max_turns") {
+	while (result.stopReason === "max_turns" || result.stopReason === "max_budget") {
 		emit({
 			type: "continue_needed",
-			reason: "max_turns",
+			reason: result.stopReason,
 			ts: ts(),
 		})
 		const shouldContinue = await callbacks.onContinueNeeded()
@@ -247,7 +247,13 @@ export async function runNew(opts: {
 			return
 		}
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
-		result = await runCoder(projectDir, undefined, reporter, messageForwarder)
+		result = await runCoder(
+			projectDir,
+			"Continue where you left off. Keep working on the remaining unchecked tasks in PLAN.md.",
+			reporter,
+			messageForwarder,
+			result.sessionId,
+		)
 	}
 
 	if (result.success) {
@@ -323,8 +329,8 @@ Do NOT just write a plan — implement the changes directly.`
 	emit({ type: "log", level: "task", message: "Running coder with your request...", ts: ts() })
 	let result = await runCoder(projectDir, iterationPrompt, reporter, messageForwarder)
 
-	while (result.stopReason === "max_turns") {
-		emit({ type: "continue_needed", reason: "max_turns", ts: ts() })
+	while (result.stopReason === "max_turns" || result.stopReason === "max_budget") {
+		emit({ type: "continue_needed", reason: result.stopReason, ts: ts() })
 		const shouldContinue = await callbacks.onContinueNeeded()
 		if (!shouldContinue) {
 			emit({
@@ -338,9 +344,10 @@ Do NOT just write a plan — implement the changes directly.`
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
 		result = await runCoder(
 			projectDir,
-			`Continue implementing the previous request: ${userRequest}\nRead PLAN.md to see what tasks remain unchecked, then implement them. Do NOT just plan — write code.`,
+			"Continue where you left off. Keep implementing the remaining changes.",
 			reporter,
 			messageForwarder,
+			result.sessionId,
 		)
 	}
 

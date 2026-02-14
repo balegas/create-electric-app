@@ -105,7 +105,15 @@ function PlanGate({
 	)
 }
 
-function ContinueGate({ sessionId, onResolved }: { sessionId: string; onResolved: () => void }) {
+function ContinueGate({
+	sessionId,
+	reason,
+	onResolved,
+}: {
+	sessionId: string
+	reason: string
+	onResolved: () => void
+}) {
 	const [submitting, setSubmitting] = useState(false)
 
 	async function handleDecision(proceed: boolean) {
@@ -118,11 +126,15 @@ function ContinueGate({ sessionId, onResolved }: { sessionId: string; onResolved
 		}
 	}
 
+	const isBudget = reason === "max_budget"
+
 	return (
 		<div className="gate-prompt">
-			<h3>Agent reached turn limit</h3>
+			<h3>{isBudget ? "Budget limit reached" : "Turn limit reached"}</h3>
 			<p style={{ color: "var(--text-muted)", marginBottom: 12 }}>
-				The agent needs more turns to finish. Continue?
+				{isBudget
+					? "The agent hit the spending cap. Continue with additional budget?"
+					: "The agent needs more turns to finish. Continue?"}
 			</p>
 			<div className="actions">
 				<button className="primary" onClick={() => handleDecision(true)} disabled={submitting}>
@@ -161,7 +173,7 @@ export function GatePrompt({ sessionId, entry, entryIndex, onResolved }: GatePro
 		case "plan_ready":
 			return <PlanGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
 		case "continue_needed":
-			return <ContinueGate sessionId={sessionId} onResolved={resolve} />
+			return <ContinueGate sessionId={sessionId} reason={entry.event.reason} onResolved={resolve} />
 		default:
 			return null
 	}
