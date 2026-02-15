@@ -6,20 +6,19 @@ Follow-up plan for adding sandbox execution and cloud deployment to `electric-ag
 
 ## Context
 
-Today the coder agent runs on the local OS with `permissionMode: "bypassPermissions"` — full filesystem and shell access in the user's working directory. This works for local development but blocks two capabilities:
+Today the coder agent runs on the local OS with `permissionMode: "bypassPermissions"` — full filesystem and shell access in the user's working directory. This works for local development but blocks hosted generation — running the agent remotely so the user doesn't need Node/Docker locally.
 
-1. **Hosted generation** — run agent remotely so the user doesn't need Node/Docker locally
-2. **Direct deploy** — push the generated app to cloud hosting in one step
+The Agent SDK provides `SandboxSettings` for local OS-level sandboxing (Linux bubblewrap / macOS seatbelt). For hosted execution, the CLI runs inside a **Sprite** (Anthropic's cloud sandbox). The web UI creates the Sprite, the CLI runs inside it, and progress streams back to the browser via **Durable Streams**.
 
-The Agent SDK provides `SandboxSettings` for local OS-level sandboxing (Linux bubblewrap / macOS seatbelt) and documents several cloud sandbox providers for hosted execution. We layer on top of both.
+When running locally, files are already on disk — no packaging needed. When running in a Sprite, `extractFiles()` on the sandbox handle is the only way to get files out.
 
-When running locally, files are already on disk — no packaging needed. When running in a cloud sandbox, packaging is inherent: `extractFiles()` on the sandbox handle is the only way to get files out.
+Note: the CLI runs in CI only for testing. Running it from CI is not a use case.
 
 ---
 
 ## Phase 1: Sandbox Abstraction Layer
 
-**Goal:** The coder agent runs in an isolated sandbox. Local OS sandbox is the default; cloud sandbox is opt-in. Cloud sandboxes include file extraction (packaging) as part of the handle.
+**Goal:** The coder agent runs in an isolated sandbox. Local OS sandbox is the default; Sprites are used when invoked from the web UI.
 
 ### 1.1 — Sandbox interface
 
@@ -27,31 +26,20 @@ When running locally, files are already on disk — no packaging needed. When ru
 // src/sandbox/types.ts
 interface SandboxProvider {
   name: string
-  /** Prepare the sandbox environment (clone template, install deps) */
   setup(projectDir: string): Promise<SandboxHandle>
-  /** Tear down the sandbox */
   teardown(handle: SandboxHandle): Promise<void>
 }
 
 interface SandboxHandle {
-  /** Working directory inside the sandbox */
   cwd: string
-  /** SDK sandbox settings to pass to query() */
   sandboxSettings: SandboxSettings
-  /** Environment variables to inject */
   env: Record<string, string>
   /**
-   * Extract files from the sandbox.
-   * Local: no-op (files are already on disk).
-   * Cloud: tar.gz the project dir (minus node_modules, _agent, .env, .git)
-   *        and download to destDir.
+   * Local: returns projectDir (files already on disk).
+   * Sprite: tar.gz the project (minus node_modules, _agent, .env, .git),
+   *         download to destDir.
    */
   extractFiles(destDir: string): Promise<string>
-  /**
-   * Upload extracted archive to object storage, return signed URL.
-   * Only available on cloud sandboxes. Local throws.
-   */
-  hostDownload?(): Promise<{ url: string; expiresAt: Date }>
 }
 ```
 
@@ -69,15 +57,32 @@ export const localSandbox: SandboxProvider = {
       sandboxSettings: {
         enabled: true,
         autoAllowBashIfSandboxed: true,
-        network: {
-          allowLocalBinding: true,       // dev server needs ports
-        },
-        excludedCommands: ["docker"],     // docker compose needs host access
+        network: { allowLocalBinding: true },
+        excludedCommands: ["docker"],
       },
       env: process.env as Record<string, string>,
-      async extractFiles() {
-        // local — files are already on disk
-        return projectDir
+      async extractFiles() { return projectDir },
+    }
+  },
+  async teardown() {},
+}
+```
+
+### 1.3 — Sprite sandbox (hosted)
+
+When the web UI creates a Sprite, the CLI runs inside it. The Sprite IS the sandbox — no OS-level sandboxing needed inside.
+
+```typescript
+// src/sandbox/sprite.ts
+export const spriteSandbox: SandboxProvider = {
+  name: "sprite",
+  async setup(projectDir) {
+    return {
+      cwd: projectDir,
+      sandboxSettings: { enabled: false },
+      env: process.env as Record<string, string>,
+      async extractFiles(destDir) {
+        // tar.gz project, exclude node_modules/_agent/.env/.git
       },
     }
   },
@@ -85,73 +90,171 @@ export const localSandbox: SandboxProvider = {
 }
 ```
 
-### 1.3 — Cloud sandbox (Fly Machines first)
-
-| Provider | Fit | Notes |
-|----------|-----|-------|
-| **Fly Machines** | Best for long-running generation (5+ min) | Ephemeral VMs, fast boot, good disk I/O |
-| **E2B** | Good for short tasks | 10-min timeout on free tier |
-| **Modal Sandbox** | Best for burst compute | GPU support if needed later |
-| **Cloudflare Sandboxes** | Lightweight | Better for hosting than generation |
-
-Start with **Fly Machines** — no execution time limits, ephemeral session pattern.
-
-```typescript
-// src/sandbox/fly.ts (sketch)
-export const flySandbox: SandboxProvider = {
-  name: "fly",
-  async setup(projectDir) {
-    // 1. Create Fly Machine from base image (Node 22 + Docker)
-    // 2. Upload project scaffold via Fly Machine API
-    // 3. sandboxSettings.enabled = false (container IS the sandbox)
-    return {
-      cwd: "/app",
-      sandboxSettings: { enabled: false },
-      env: { /* remote DB URLs, etc. */ },
-      async extractFiles(destDir) {
-        // tar.gz project in machine, download via Fly API
-        // excludes: node_modules/, _agent/, .env, .git/
-      },
-      async hostDownload() {
-        // upload tar.gz to Tigris/R2, return signed URL (24h expiry)
-      },
-    }
-  },
-  async teardown(handle) {
-    // Destroy the Fly Machine
-  },
-}
-```
-
-### 1.4 — Wire into CLI
+### 1.4 — CLI flags
 
 ```
 electric-agent new "a todo app"                      # local sandbox (default)
-electric-agent new "a todo app" --sandbox fly         # Fly Machine sandbox
 electric-agent new "a todo app" --sandbox local       # explicit local
 electric-agent new "a todo app" --sandbox none        # no sandbox (current behavior)
 ```
 
+When running inside a Sprite, the CLI detects it automatically (environment marker) — no flag needed.
+
 ### 1.5 — Tasks
 
 - [ ] Define `SandboxProvider` and `SandboxHandle` interfaces in `src/sandbox/types.ts`
-- [ ] Implement `localSandbox` provider in `src/sandbox/local.ts`
-- [ ] Implement `flySandbox` provider in `src/sandbox/fly.ts`
-- [ ] Add `--sandbox` flag to CLI commands (`new`, `iterate`)
-- [ ] Create `src/sandbox/index.ts` registry that resolves provider by name
-- [ ] Update `runCoder()` and `runPlanner()` to accept a `SandboxHandle`
-- [ ] Add sandbox configuration to `_agent/session.md` tracking
+- [ ] Implement `localSandbox` in `src/sandbox/local.ts`
+- [ ] Implement `spriteSandbox` in `src/sandbox/sprite.ts`
+- [ ] Auto-detect Sprite environment (env var or filesystem marker)
+- [ ] Add `--sandbox` flag to CLI (`new`, `iterate`)
+- [ ] Create `src/sandbox/index.ts` registry
+- [ ] Update `runCoder()` and `runPlanner()` to accept `SandboxHandle`
 - [ ] Test: local sandbox blocks writes outside project directory
-- [ ] Test: Fly sandbox creates/destroys machine, extractFiles returns tar.gz
-- [ ] Document: sandbox options in README
+- [ ] Test: Sprite sandbox extractFiles produces tar.gz
 
 ---
 
-## Phase 2: Direct Cloud Deployment
+## Phase 2: Durable Streams Integration
 
-**Goal:** `electric-agent deploy` pushes the generated app to cloud hosting. The app is live at a URL.
+**Goal:** The CLI streams progress to the web UI over Durable Streams while running inside a Sprite.
 
-### 2.1 — Target architecture
+### 2.1 — How it works
+
+```
+Sprite                              Durable Streams Server           Browser
+│                                   │                                │
+│ electric-agent new "todo app"     │                                │
+│   ├── [plan] generating...  ────> │  stream.write(event)           │
+│   ├── [task] schema...      ────> │  ──────────────────────> SSE ──> UI
+│   ├── [build] pass          ────> │                                │
+│   └── [done]                ────> │                                │
+│                                   │                                │
+│ extractFiles() ──── tar.gz ─────> │  (or direct download)          │
+```
+
+The CLI already has a `ProgressReporter` that transforms agent messages into prefixed output (`[plan]`, `[task]`, `[build]`). We add a Durable Streams transport alongside the terminal transport.
+
+### 2.2 — CLI configuration
+
+```bash
+# Environment variables (set by the web UI when creating the Sprite)
+DURABLE_STREAMS_URL=https://streams.example.com
+DURABLE_STREAMS_AUTH=Bearer <token>
+DURABLE_STREAMS_ID=session-abc123
+```
+
+When these env vars are present, the reporter writes events to the Durable Stream in addition to stdout. When absent, stdout only (normal CLI behavior).
+
+### 2.3 — Event schema
+
+```typescript
+type ProgressEvent =
+  | { type: "plan"; content: string }
+  | { type: "task"; phase: number; task: string; status: "start" | "done" }
+  | { type: "build"; status: "pass" | "fail"; errors?: string[] }
+  | { type: "file"; path: string; action: "create" | "edit" }
+  | { type: "done"; downloadUrl?: string }
+  | { type: "error"; message: string }
+```
+
+### 2.4 — Tasks
+
+- [ ] Add Durable Streams client to `src/progress/durable-stream.ts`
+- [ ] Read `DURABLE_STREAMS_URL`, `DURABLE_STREAMS_AUTH`, `DURABLE_STREAMS_ID` from env
+- [ ] Update `ProgressReporter` to write to Durable Stream when env vars are present
+- [ ] Define `ProgressEvent` schema
+- [ ] Test: events appear on Durable Stream when env vars set
+- [ ] Test: CLI works normally (stdout only) when env vars are absent
+
+---
+
+## Phase 3: Web UI + Sprites
+
+**Goal:** Users visit a website, describe an app, watch generation progress, and download the result.
+
+### 3.1 — Architecture
+
+```
+Browser ──> Cloudflare Pages (web UI)
+                │
+                ├── Pages Function: POST /api/create
+                │   └── Sprites API: create Sprite
+                │   └── Run: electric-agent new "..." inside Sprite
+                │   └── Pass env: DURABLE_STREAMS_URL, DURABLE_STREAMS_AUTH,
+                │                 DURABLE_STREAMS_ID, ANTHROPIC_API_KEY
+                │
+                ├── Client-side: EventSource(DURABLE_STREAMS_URL/session-id)
+                │   └── Read progress events from Durable Stream, render UI
+                │
+                └── Pages Function: GET /api/download/:id
+                    └── Sprites API: extract files from Sprite → tar.gz
+```
+
+No custom API server. The web UI talks to:
+- **Sprites API** (via Pages Functions) — create Sprite, extract files
+- **Durable Streams** (directly from browser) — read progress events
+
+### 3.2 — Web UI project structure
+
+```
+web/
+├── package.json
+├── wrangler.toml
+├── src/
+│   ├── routes/
+│   │   ├── index.tsx              # Landing page + generation form
+│   │   └── session.$id.tsx        # Progress view + download
+│   ├── api/                       # Cloudflare Pages Functions
+│   │   ├── create.ts              # POST: create Sprite, start CLI
+│   │   └── download.$id.ts        # GET: extract files from Sprite
+│   └── components/
+│       ├── GenerationForm.tsx     # App description input
+│       ├── ProgressStream.tsx     # Durable Streams consumer
+│       └── PreviewFrame.tsx       # (future) iframe to Sprite dev server
+```
+
+### 3.3 — Pages Functions (server-side, keeps secrets safe)
+
+```typescript
+// web/src/api/create.ts
+export async function onRequestPost({ request, env }) {
+  const { description } = await request.json()
+  const streamId = crypto.randomUUID()
+
+  // Create Sprite via Sprites API
+  const sprite = await createSprite({
+    apiKey: env.ANTHROPIC_API_KEY,
+    command: `electric-agent new "${description}"`,
+    env: {
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      DURABLE_STREAMS_URL: env.DURABLE_STREAMS_URL,
+      DURABLE_STREAMS_AUTH: env.DURABLE_STREAMS_AUTH,
+      DURABLE_STREAMS_ID: streamId,
+    },
+  })
+
+  return Response.json({ sessionId: streamId, spriteId: sprite.id })
+}
+```
+
+### 3.4 — Tasks
+
+- [ ] Scaffold `web/` with TanStack Start on Cloudflare Pages
+- [ ] Implement Pages Function: `POST /api/create` — create Sprite, start CLI
+- [ ] Implement Pages Function: `GET /api/download/:id` — extract files from Sprite
+- [ ] Implement landing page with generation form
+- [ ] Implement progress view (Durable Streams EventSource consumer)
+- [ ] Implement download button (extract from Sprite → tar.gz)
+- [ ] Rate limiting, auth, abuse prevention
+- [ ] Cost tracking per session
+
+---
+
+## Phase 4: Direct Cloud Deployment (Future)
+
+**Goal:** After generation, deploy the app directly to cloud hosting from the Sprite.
+
+### 4.1 — Target architecture
 
 ```
 Cloudflare Pages (free)                 Fly.io Machine (~$2-5/mo)
@@ -160,169 +263,46 @@ Cloudflare Pages (free)                 Fly.io Machine (~$2-5/mo)
 └── Client-side Electric sync           └── Caddy reverse proxy
 ```
 
-### 2.2 — Deploy command
+### 4.2 — Deploy from Sprite
 
-```bash
-electric-agent deploy                    # deploy to default (Cloudflare + Fly)
+The Sprite already has the generated app. Run `electric-agent deploy` inside it:
+
+```
+electric-agent deploy                    # deploy to Cloudflare + Fly
 electric-agent deploy --provider fly     # Fly only (monolith)
-electric-agent deploy --provider cf      # Cloudflare Pages only (static/SSR)
-electric-agent deploy --preview          # deploy as preview (e.g., PR preview)
+electric-agent deploy --preview          # PR preview
 ```
 
-### 2.3 — Deployment flow
-
-```
-electric-agent deploy
-│
-├── 1. Build production bundle
-│   └── pnpm build (TanStack Start → server + client bundles)
-│
-├── 2. Deploy database + Electric (Fly)
-│   ├── Create Fly app (if first deploy)
-│   ├── Provision Fly Postgres (or use existing)
-│   ├── Deploy Electric as Fly Machine
-│   ├── Run drizzle-kit migrate against remote DB
-│   └── Return ELECTRIC_URL + DATABASE_URL
-│
-├── 3. Deploy web app (Cloudflare Pages)
-│   ├── Build with remote env vars (ELECTRIC_URL, DATABASE_URL)
-│   ├── wrangler pages deploy ./dist/
-│   └── Return app URL
-│
-└── 4. Output
-    ├── App URL: https://my-todo-app.pages.dev
-    ├── API URL: https://my-todo-app-api.fly.dev
-    ├── Electric: https://my-todo-app-api.fly.dev/electric
-    └── Database: postgres://... (Fly Postgres)
-```
-
-### 2.4 — Tasks
+### 4.3 — Tasks
 
 - [ ] Implement `src/deploy/types.ts` — deploy provider interface
-- [ ] Implement `src/deploy/fly.ts` — Fly Machines deploy (Postgres + Electric + API)
-- [ ] Implement `src/deploy/cloudflare.ts` — Cloudflare Pages deploy (SSR + static)
-- [ ] Implement `src/deploy/index.ts` — orchestrates full deploy (Fly + CF)
-- [ ] Add `electric-agent deploy` CLI command in `src/cli/deploy.ts`
-- [ ] Add `--provider`, `--preview` flags
-- [ ] Generate `.github/workflows/preview.yml` into deployed apps
-- [ ] Handle secrets management (Fly API token, Cloudflare API token)
-- [ ] Configure TanStack Start for edge deployment on Cloudflare Pages
-- [ ] Test: full deploy to Fly + Cloudflare produces live, working app
-- [ ] Test: preview deploy creates isolated instance
-- [ ] Test: teardown removes all cloud resources
-
----
-
-## Phase 3: Hosted Generation Service (Web UI)
-
-**Goal:** Users visit a website, describe an app, and get a running preview — no local setup required.
-
-### 3.1 — Architecture
-
-```
-Browser                    API Server (Fly)              Sandbox (Fly Machine)
-│                          │                             │
-│  "a todo app"  ────────> │  POST /api/sessions         │
-│                          │  ├── Create Fly Machine ───>│ Boot + scaffold
-│                          │  └── Return session ID      │
-│                          │                             │
-│  SSE stream    <──────── │  GET /api/progress/:id      │
-│  [plan] ...              │  ├── Proxy SSE from ───────>│ Planner + Coder
-│  [task] ...              │  │   sandbox                │ agents running
-│  [build] pass            │  │                          │
-│                          │                             │
-│  Preview iframe <──────  │  GET /api/preview/:id/* ──> │ :5173 (dev server)
-│                          │                             │
-│  Download      <──────── │  GET /api/download/:id      │ extractFiles()
-│  Deploy button ────────> │  POST /api/deploy/:id       │ → Phase 2 flow
-```
-
-### 3.2 — Web UI stack
-
-| Component | Technology | Hosting |
-|-----------|-----------|---------|
-| Web UI | TanStack Start | Cloudflare Pages (free) |
-| API server | Hono | Fly.io Machine |
-| Generation sandbox | Agent SDK + CLI | Fly.io Machine (per-session, ephemeral) |
-| Object storage | Tigris (Fly-native) | Fly.io |
-
-### 3.3 — Web UI project structure
-
-```
-web/
-├── package.json
-├── wrangler.toml              # Cloudflare Pages config
-├── src/
-│   ├── routes/
-│   │   ├── index.tsx          # Landing page + generation form
-│   │   ├── session.$id.tsx    # Progress view + preview iframe
-│   │   └── api/
-│   │       ├── sessions.ts    # POST: create session → Fly Machine
-│   │       ├── progress.$id.ts # GET: SSE proxy from sandbox
-│   │       ├── preview.$id.ts # GET: reverse proxy sandbox dev server
-│   │       └── download.$id.ts # GET: signed download URL
-│   └── components/
-│       ├── GenerationForm.tsx
-│       ├── ProgressStream.tsx # SSE consumer, renders agent output
-│       └── PreviewFrame.tsx   # iframe pointing at sandbox dev server
-```
-
-### 3.4 — API server structure
-
-```
-api/
-├── package.json
-├── fly.toml                   # Fly.io deployment config
-├── Dockerfile
-├── src/
-│   ├── index.ts               # Hono app entry
-│   ├── routes/
-│   │   ├── sessions.ts        # Create/list/get sessions
-│   │   ├── progress.ts        # SSE proxy
-│   │   ├── preview.ts         # Reverse proxy to sandbox
-│   │   └── download.ts        # Signed URL generation
-│   ├── sandbox/
-│   │   └── manager.ts         # Fly Machine lifecycle (create/destroy)
-│   └── storage/
-│       └── tigris.ts          # Object storage for downloads
-```
-
-### 3.5 — Tasks
-
-- [ ] Scaffold `web/` directory (TanStack Start on Cloudflare Pages)
-- [ ] Scaffold `api/` directory (Hono on Fly.io)
-- [ ] Implement API: `POST /api/sessions` — create Fly Machine, start agent
-- [ ] Implement API: `GET /api/progress/:id` — SSE proxy from sandbox
-- [ ] Implement API: `GET /api/preview/:id/*` — reverse proxy sandbox dev server
-- [ ] Implement API: `GET /api/download/:id` — extract files, upload, return signed URL
-- [ ] Implement API: `POST /api/deploy/:id` — trigger Phase 2 deploy flow
-- [ ] Implement Web UI: landing page with generation form
-- [ ] Implement Web UI: progress stream view (SSE consumer)
-- [ ] Implement Web UI: preview iframe
-- [ ] Implement Web UI: download + deploy buttons
-- [ ] Add `.github/workflows/deploy-web.yml` for CI/CD
-- [ ] Rate limiting, auth, abuse prevention
-- [ ] Cost tracking per session (Agent SDK `maxBudgetUsd` + sandbox compute)
+- [ ] Implement `src/deploy/fly.ts` — Fly deploy (Postgres + Electric)
+- [ ] Implement `src/deploy/cloudflare.ts` — Cloudflare Pages deploy
+- [ ] Add `electric-agent deploy` CLI command
+- [ ] Add deploy button to web UI (calls deploy inside Sprite)
 
 ---
 
 ## Implementation Order
 
 ```
-Phase 1 (Sandbox)     ──── Foundation. Includes file extraction for cloud.
+Phase 1 (Sandbox)             ──── Foundation. Local sandbox + Sprite detection.
     │
-    ├── Phase 2 (Deploy)     ──── High value. Makes generated apps production-ready.
+    ├── Phase 2 (Durable Streams) ── CLI → web UI communication channel.
     │
-    └── Phase 3 (Web UI)     ──── Full product. Requires Phase 1 + 2.
+    ├── Phase 3 (Web UI)          ── Sprites + Durable Streams + CF Pages.
+    │
+    └── Phase 4 (Deploy)          ── Push generated app to cloud hosting.
 ```
 
 ### Estimated scope
 
 | Phase | New files | Complexity | Dependencies |
 |-------|-----------|------------|--------------|
-| 1 — Sandbox | ~5 | Medium | Agent SDK sandbox API, Fly Machines API |
-| 2 — Deploy | ~5 | High | Fly CLI, Wrangler CLI, TanStack Start edge config |
-| 3 — Web UI | ~15 | High | Hono, TanStack Start, SSE, Fly Machines API, Tigris |
+| 1 — Sandbox | ~4 | Medium | Agent SDK sandbox settings |
+| 2 — Durable Streams | ~2 | Low | Durable Streams client |
+| 3 — Web UI | ~8 | Medium | Sprites API, Cloudflare Pages Functions |
+| 4 — Deploy | ~5 | High | Fly CLI, Wrangler CLI |
 
 ---
 
@@ -331,19 +311,18 @@ Phase 1 (Sandbox)     ──── Foundation. Includes file extraction for clou
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Default sandbox | Local OS (bubblewrap/seatbelt) | Zero config, works offline, Agent SDK native |
-| Packaging | Part of sandbox handle, not a separate feature | Local = files on disk. Cloud = extractFiles() is only way out |
-| First cloud provider | Fly Machines | No execution time limits, good disk I/O, cheapest for persistent DB |
-| Web hosting | Cloudflare Pages | Free tier, global CDN, per-PR previews included |
-| API/DB hosting | Fly.io | Postgres + Electric need persistent server; Fly is cheapest |
-| Architecture | Split (CF Pages + Fly) | $2/mo vs $12/mo for 5 active PRs |
-| Object storage | Tigris (Fly-native) | No egress fees from Fly, S3-compatible API |
-| API framework | Hono | Lightweight, works on Fly + CF Workers, good TypeScript support |
+| Hosted execution | Sprites (Anthropic) | Purpose-built for Agent SDK, managed lifecycle |
+| CLI ↔ web UI comms | Durable Streams | Persistent, resumable, auth via custom header |
+| Web hosting | Cloudflare Pages | Free, global CDN, Pages Functions for server-side secrets |
+| No custom API server | Pages Functions + Sprites API | Sprites handle execution; no intermediary needed |
+| Packaging | Part of sandbox handle | Local = on disk. Sprite = extractFiles() is only way out |
+| CI | Testing only | CLI is not run from CI — CI just builds + tests the tool itself |
 
 ---
 
 ## Open Questions
 
-1. **Auth for hosted service** — API keys? GitHub OAuth? Anonymous with rate limits?
-2. **Cost model for hosted generation** — Free tier with limits? Pay per generation?
-3. **Multi-region** — Start single-region (iad) or multi from day one?
-4. **Electric Cloud** — Use Electric's managed service instead of self-hosting on Fly?
+1. **Auth for web UI** — API keys? GitHub OAuth? Anonymous with rate limits?
+2. **Cost model** — Free tier with limits? Pay per generation?
+3. **Sprite image** — Pre-built with CLI + deps? Or install on boot?
+4. **Electric Cloud** — Use Electric's managed service instead of self-hosting?
