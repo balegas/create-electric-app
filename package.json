@@ -7,11 +7,15 @@
     "electric-agent": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:web",
+    "build:server": "tsc",
+    "build:web": "vite build --config src/web/client/vite.config.ts",
     "dev": "tsc --watch",
+    "dev:web": "vite --config src/web/client/vite.config.ts",
     "check": "biome check src/",
     "check:fix": "biome check --write src/",
     "start": "node dist/index.js",
+    "serve": "node dist/index.js serve",
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "engines": {
@@ -19,13 +23,23 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "@durable-streams/client": "^0.2.1",
+    "@durable-streams/server": "^0.2.1",
+    "@hono/node-server": "^1.19.9",
     "commander": "^13.1.0",
+    "hono": "^4.11.9",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.4",
     "@types/node": "^22.15.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "tsx": "^4.19.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vite": "^7.3.1"
   }
 }

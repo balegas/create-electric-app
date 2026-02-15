@@ -72,6 +72,18 @@ The agent follows a multi-phase pipeline to go from a text description to a runn
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+### Web UI
+
+The web UI provides a browser-based alternative to the CLI with real-time streaming, collapsible tool execution logs, and persistent session history.
+
+```bash
+electric-agent serve               # Start at http://127.0.0.1:4400
+electric-agent serve --open        # Start and open browser
+electric-agent serve -p 8080       # Custom port
+```
+
+The web UI uses [durable-streams](https://github.com/durable-streams/durable-streams) to persist and stream all events over SSE. Each session gets its own stream, so you can close the browser and reconnect without losing context. Tool executions are collapsible — click to expand the full input/output.
+
 ### Iteration Mode
 
 After the initial build, use `electric-agent iterate` for conversational changes:
@@ -190,6 +202,10 @@ electric-agent new <description>          # Create a new app
 electric-agent new <desc> --name my-app   # Custom project name
 electric-agent new <desc> --no-approve    # Skip plan approval
 electric-agent iterate                    # Conversational iteration on existing app
+electric-agent serve                      # Start web UI (http://127.0.0.1:4400)
+electric-agent serve --open               # Start web UI and open browser
+electric-agent serve -p 8080              # Custom port
+electric-agent serve --streams-port 5000  # Custom durable-streams port
 electric-agent up                         # Start Docker + migrations + dev server
 electric-agent down                       # Stop all services
 electric-agent status                     # Show project progress
@@ -200,19 +216,43 @@ electric-agent --debug <command>          # Enable debug logging
 
 ```bash
 npm install                   # Install dependencies
-npm run build                 # Compile TypeScript → dist/
+npm run build                 # Compile TypeScript + Vite client → dist/
+npm run build:server          # Compile TypeScript only
+npm run build:web             # Build Vite client only
 npm run check                 # Biome lint + format check
 npm run check:fix             # Auto-fix Biome issues
 npx tsc --noEmit              # Type-check without emitting
-npm run dev                   # Watch mode
+npm run dev                   # TypeScript watch mode
+npm run dev:web               # Vite dev server with HMR (port 4401)
 ```
+
+### Dev Environment
+
+To work on the web UI with hot-reload:
+
+```bash
+./dev.sh
+```
+
+This starts three processes in parallel:
+1. `tsc --watch` — recompiles server-side TypeScript on change
+2. `node dist/index.js serve` — runs the backend API + durable-streams server (port 4400)
+3. `vite dev` — React client with HMR (port 4401), proxies `/api` to the backend
+
+Open http://127.0.0.1:4401 for development (Vite with hot-reload).
+Open http://127.0.0.1:4400 for production-like mode (static build served by Hono).
 
 ### Source Structure
 
 ```
 src/
 ├── index.ts                  # CLI entry point (commander)
-├── cli/                      # Command implementations (new, iterate, up, down, status)
+├── cli/                      # Command implementations (new, iterate, serve, up, down, status)
+├── engine/                   # Shared orchestration (used by CLI + web)
+│   ├── events.ts             # EngineEvent union type — single source of truth
+│   ├── orchestrator.ts       # runNew() + runIterate() with callback-driven I/O
+│   ├── message-parser.ts     # SDK message → EngineEvent[] conversion
+│   └── cli-adapter.ts        # OrchestratorCallbacks using readline (CLI mode)
 ├── agents/
 │   ├── planner.ts            # Planner agent (Opus) — generates PLAN.md
 │   ├── coder.ts              # Coder agent (Sonnet) — executes plan tasks
@@ -225,7 +265,21 @@ src/
 ├── hooks/                    # Agent SDK guardrail hooks (6 hooks)
 ├── scaffold/                 # KPB clone + template overlay + dep merge
 ├── working-memory/           # Session state + error log persistence
-└── progress/                 # CLI output + build result reporting
+├── progress/                 # CLI output + build result reporting
+└── web/                      # Web UI server + client
+    ├── server.ts             # Hono API server (REST + static files)
+    ├── infra.ts              # Durable streams server lifecycle
+    ├── gate.ts               # Promise-based gate management for user decisions
+    ├── sessions.ts           # Session index (JSON file)
+    └── client/               # React SPA (built with Vite)
+        ├── index.html
+        ├── vite.config.ts
+        └── src/
+            ├── main.tsx
+            ├── App.tsx
+            ├── hooks/useSession.ts
+            ├── components/
+            └── lib/
 
 template/                     # Files overlaid onto scaffold
 ├── docker-compose.yml        # Postgres + Electric + Caddy
@@ -250,3 +304,6 @@ template/                     # Files overlaid onto scaffold
 - [Drizzle ORM](https://orm.drizzle.team/) — type-safe Postgres schema and queries
 - [KPB](https://github.com/KyleAMathews/kpb) — base project template
 - [Claude Agent SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) — agentic code generation
+- [Durable Streams](https://github.com/durable-streams/durable-streams) — persistent event streaming for the web UI
+- [Hono](https://hono.dev/) — lightweight HTTP server for the web API
+- [Vite](https://vite.dev/) + [React](https://react.dev/) — web UI client

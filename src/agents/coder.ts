@@ -16,6 +16,8 @@ export interface CoderResult {
 	success: boolean
 	errors: string[]
 	stopReason: StopReason
+	/** SDK session ID — pass to resumeSessionId to continue with full conversation context */
+	sessionId?: string
 }
 
 /**
@@ -25,6 +27,8 @@ export async function runCoder(
 	projectDir: string,
 	task?: string,
 	reporter?: ProgressReporter,
+	onMessage?: (msg: Record<string, unknown>) => void,
+	resumeSessionId?: string,
 ): Promise<CoderResult> {
 	const r = reporter ?? createProgressReporter()
 	const coderPrompt = buildCoderPrompt(projectDir)
@@ -32,6 +36,7 @@ export async function runCoder(
 	const errors: string[] = []
 	let success = true
 	let stopReason: StopReason = "complete"
+	let sessionId: string | undefined
 
 	const prompt =
 		task ||
@@ -54,42 +59,47 @@ export async function runCoder(
 		}
 	}
 
+	const queryOptions: Record<string, unknown> = {
+		model: "claude-sonnet-4-5-20250929",
+		systemPrompt: coderPrompt,
+		maxThinkingTokens: 8192,
+		allowedTools: [
+			"Read",
+			"Write",
+			"Edit",
+			"Glob",
+			"Grep",
+			"Bash",
+			"mcp__electric-agent-tools__build",
+			"mcp__electric-agent-tools__read_playbook",
+			"mcp__electric-agent-tools__list_playbooks",
+		],
+		mcpServers: { "electric-agent-tools": mcpServer },
+		hooks: guardrailHooks,
+		cwd: projectDir,
+		maxTurns: 60,
+		maxBudgetUsd: 5.0,
+		permissionMode: "bypassPermissions",
+		allowDangerouslySkipPermissions: true,
+	}
+
+	// Resume previous conversation if session ID is provided
+	if (resumeSessionId) {
+		queryOptions.resume = resumeSessionId
+	}
+
 	try {
 		for await (const message of query({
 			prompt: generateMessages(),
-			options: {
-				model: "claude-sonnet-4-5-20250929",
-				systemPrompt: coderPrompt,
-				maxThinkingTokens: 8192,
-				allowedTools: [
-					"Read",
-					"Write",
-					"Edit",
-					"Glob",
-					"Grep",
-					"Bash",
-					"mcp__electric-agent-tools__build",
-					"mcp__electric-agent-tools__read_playbook",
-					"mcp__electric-agent-tools__list_playbooks",
-				],
-				mcpServers: { "electric-agent-tools": mcpServer },
-				hooks: guardrailHooks,
-				cwd: projectDir,
-				maxTurns: 60,
-				maxBudgetUsd: 5.0,
-				permissionMode: "bypassPermissions",
-				allowDangerouslySkipPermissions: true,
-			},
+			options: queryOptions,
 		})) {
 			processAgentMessage(message, r)
+			onMessage?.(message)
 
-			// Check for build failures in tool results
-			if (message.type === "assistant" && message.message?.content) {
-				for (const block of message.message.content) {
-					if ("name" in block && (block.name as string)?.includes("build")) {
-						// Build tool was called — check result in next message
-					}
-				}
+			// Capture session ID for potential resume
+			const msgSessionId = (message as Record<string, unknown>).session_id as string | undefined
+			if (msgSessionId) {
+				sessionId = msgSessionId
 			}
 
 			// Handle result messages
@@ -102,8 +112,7 @@ export async function runCoder(
 					// Not a hard failure — work can be continued
 				} else if (sub.includes("max_budget")) {
 					stopReason = "max_budget"
-					success = false
-					errors.push("Budget limit reached")
+					// Not a hard failure — user can increase budget and continue
 				} else {
 					stopReason = "error"
 					success = false
@@ -135,5 +144,5 @@ export async function runCoder(
 		})
 	}
 
-	return { success, errors, stopReason }
+	return { success, errors, stopReason, sessionId }
 }

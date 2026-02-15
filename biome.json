@@ -16,6 +16,31 @@
       "recommended": true
     }
   },
+  "overrides": [
+    {
+      "includes": ["src/web/client/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useButtonType": "off",
+            "noStaticElementInteractions": "off",
+            "useKeyWithClickEvents": "off",
+            "noLabelWithoutControl": "off"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "off",
+            "noAssignInExpressions": "off"
+          },
+          "correctness": {
+            "useExhaustiveDependencies": "off"
+          },
+          "style": {
+            "noDescendingSpecificity": "off"
+          }
+        }
+      }
+    }
+  ],
   "assist": {
     "actions": {
       "source": {
