@@ -1,0 +1,15 @@
+# Cloudflare Pages configuration for the electric-agent web UI.
+# Deploy: wrangler pages deploy ./dist --project-name electric-agent
+#
+# Required env vars (set via Cloudflare dashboard or wrangler):
+#   API_URL  - URL of the Fly.io API server (e.g., https://electric-agent-api.fly.dev)
+#
+# Cloudflare Pages gives free per-PR preview URLs automatically
+# when connected to a GitHub repo.
+
+name = "electric-agent"
+compatibility_date = "2025-12-01"
+pages_build_output_dir = "./dist"
+
+[vars]
+API_URL = "https://electric-agent-api.fly.dev"

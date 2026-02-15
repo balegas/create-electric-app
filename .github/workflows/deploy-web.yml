@@ -1,0 +1,78 @@
+name: Deploy Web UI + API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "api/**"
+      - ".github/workflows/deploy-web.yml"
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: "What to deploy"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - web
+          - api
+
+jobs:
+  deploy-api:
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.deploy_target == 'both' ||
+      github.event.inputs.deploy_target == 'api'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy API to Fly.io
+        run: flyctl deploy --config fly.toml --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  deploy-web:
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.deploy_target == 'both' ||
+      github.event.inputs.deploy_target == 'web'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          API_URL: ${{ vars.API_URL }}
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy ./dist --project-name electric-agent
+          workingDirectory: web

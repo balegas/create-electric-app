@@ -236,6 +236,111 @@ template/                     # Files overlaid onto scaffold
 └── src/lib/                  # electric-proxy.ts
 ```
 
+## Deployment (Hosted Generation Service)
+
+The hosted service lets users generate apps via a web UI without local setup. It runs as two components:
+
+- **Web UI** — TanStack Start on Cloudflare Pages (free)
+- **API server** — Hono on Fly.io (manages sandbox machines, SSE streaming, downloads)
+
+### Architecture
+
+```
+Browser ──> Cloudflare Pages (web UI)
+                │
+                ▼
+            Fly.io API server
+                │
+                ├── POST /api/sessions     → create Fly Machine sandbox
+                ├── GET  /api/progress/:id → SSE proxy from sandbox
+                ├── GET  /api/download/:id → signed download URL
+                └── POST /api/deploy/:id   → deploy generated app
+                │
+                ▼
+            Fly Machine (per-session, ephemeral)
+                └── Agent SDK + electric-agent CLI
+```
+
+### Prerequisites
+
+1. [Fly.io account](https://fly.io) with `flyctl` installed
+2. [Cloudflare account](https://dash.cloudflare.com) with `wrangler` installed
+3. [Tigris object storage](https://fly.io/docs/tigris/) bucket (for download hosting)
+
+### Initial setup
+
+```bash
+# 1. Create the Fly app
+cd api
+fly apps create electric-agent-api
+fly secrets set ANTHROPIC_API_KEY=sk-ant-...
+fly secrets set FLY_API_TOKEN=$(fly tokens create deploy)
+fly secrets set TIGRIS_ACCESS_KEY=...
+fly secrets set TIGRIS_SECRET_KEY=...
+
+# 2. Deploy the API server
+fly deploy --config fly.toml
+
+# 3. Connect the web UI to Cloudflare Pages
+cd ../web
+npm install
+npx wrangler pages project create electric-agent
+npm run deploy
+```
+
+### Environment Variables
+
+#### GitHub Actions Secrets
+
+| Secret | Where | Description |
+|--------|-------|-------------|
+| `FLY_API_TOKEN` | GitHub → Settings → Secrets | Fly.io deploy token (`fly tokens create deploy`) |
+| `CLOUDFLARE_API_TOKEN` | GitHub → Settings → Secrets | Cloudflare API token with Pages edit permission |
+
+#### GitHub Actions Variables
+
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `CLOUDFLARE_ACCOUNT_ID` | GitHub → Settings → Variables | Your Cloudflare account ID (dashboard URL) |
+| `API_URL` | GitHub → Settings → Variables | `https://electric-agent-api.fly.dev` |
+
+#### Fly.io Secrets (API server)
+
+Set via `fly secrets set` in the `api/` directory:
+
+| Secret | Description |
+|--------|-------------|
+| `ANTHROPIC_API_KEY` | Claude API key for running the planner + coder agents |
+| `FLY_API_TOKEN` | Fly Machines API token (to create per-session sandbox machines) |
+| `TIGRIS_ACCESS_KEY` | Tigris S3-compatible access key (for hosting download archives) |
+| `TIGRIS_SECRET_KEY` | Tigris S3-compatible secret key |
+
+#### Cloudflare Pages Environment Variables
+
+Set via Cloudflare dashboard → Pages → electric-agent → Settings → Environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `API_URL` | URL of the Fly API server (e.g., `https://electric-agent-api.fly.dev`) |
+
+### Deployment workflows
+
+| Workflow | Trigger | What it deploys |
+|----------|---------|-----------------|
+| `ci.yml` | Push to main, PRs | Build + lint + test (CLI tool) |
+| `deploy-web.yml` | Push to main (web/ or api/ changes) | API to Fly.io + Web UI to Cloudflare Pages |
+
+Cloudflare Pages also auto-deploys per-PR preview URLs when connected to a GitHub repo — no extra config needed for the web UI.
+
+### Estimated costs
+
+| Component | Cost |
+|-----------|------|
+| Cloudflare Pages (web UI) | Free (unlimited sites, 500 builds/mo) |
+| Fly.io API server | ~$2/mo (shared-cpu-1x, 512MB, auto-suspend) |
+| Fly.io sandbox machines | ~$0.05/hr per active generation session |
+| Tigris storage | Free tier covers initial usage |
+
 ## Prerequisites
 
 - Node.js >= 20
