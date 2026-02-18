@@ -26,7 +26,7 @@ export type EngineEvent =
 	| { type: "session_complete"; success: boolean; ts: string }
 
 export type ConsoleEntry =
-	| { kind: "log"; level: LogLevel; message: string }
+	| { kind: "log"; level: LogLevel; message: string; ts: string }
 	| { kind: "user_message"; message: string }
 	| {
 			kind: "tool"
@@ -34,8 +34,9 @@ export type ConsoleEntry =
 			toolUseId: string
 			input: Record<string, unknown>
 			output: string | null
+			ts: string
 	  }
-	| { kind: "text"; text: string }
+	| { kind: "text"; text: string; ts: string }
 	| {
 			kind: "gate"
 			event: Extract<
@@ -43,4 +44,5 @@ export type ConsoleEntry =
 				{ type: "clarification_needed" | "plan_ready" | "continue_needed" }
 			>
 			resolved: boolean
+			ts: string
 	  }

@@ -15,7 +15,10 @@ export function useSession(sessionId: string | null) {
 		setEntries((prev) => {
 			switch (event.type) {
 				case "log":
-					return [...prev, { kind: "log" as const, level: event.level, message: event.message }]
+					return [
+						...prev,
+						{ kind: "log" as const, level: event.level, message: event.message, ts: event.ts },
+					]
 
 				case "user_message":
 					return [...prev, { kind: "user_message" as const, message: event.message }]
@@ -29,6 +32,7 @@ export function useSession(sessionId: string | null) {
 							toolUseId: event.toolUseId,
 							input: event.input,
 							output: null,
+							ts: event.ts,
 						},
 					]
 
@@ -46,16 +50,12 @@ export function useSession(sessionId: string | null) {
 				}
 
 				case "assistant_text":
-					// Collapse consecutive text entries
-					if (event.text.length > 10) {
-						return [...prev, { kind: "text" as const, text: event.text }]
-					}
-					return prev
+					return [...prev, { kind: "text" as const, text: event.text, ts: event.ts }]
 
 				case "clarification_needed":
 				case "plan_ready":
 				case "continue_needed":
-					return [...prev, { kind: "gate" as const, event, resolved: false }]
+					return [...prev, { kind: "gate" as const, event, resolved: false, ts: event.ts }]
 
 				case "session_complete":
 					return prev

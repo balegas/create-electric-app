@@ -21,6 +21,7 @@
 	--red: #f85149;
 	--purple: #bc8cff;
 	--blue: #79c0ff;
+	--orange: #f0883e;
 
 	--font-mono: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
 	--font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
@@ -76,6 +77,9 @@ body,
 }
 
 .console-entry {
+	display: flex;
+	align-items: baseline;
+	gap: 0;
 	padding: 2px 0;
 	font-family: var(--font-mono);
 	font-size: 13px;
@@ -110,6 +114,16 @@ body,
 }
 .console-entry .prefix.debug {
 	color: var(--text-subtle);
+}
+
+/* Duration badge */
+.duration {
+	margin-left: auto;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--text-subtle);
+	white-space: nowrap;
+	flex-shrink: 0;
 }
 
 /* Tool execution (collapsible) */
@@ -340,12 +354,77 @@ body,
 	color: var(--text-subtle);
 }
 
-/* Assistant text */
+/* Assistant text (short, inline) */
 .assistant-text {
+	display: flex;
+	align-items: baseline;
 	padding: 4px 0;
 	font-family: var(--font-mono);
 	font-size: 13px;
 	color: var(--text-muted);
+}
+
+/* Assistant text (long, collapsible) */
+.assistant-text-collapsible {
+	margin: 4px 0;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.assistant-text-collapsible summary {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	cursor: pointer;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--text-muted);
+	user-select: none;
+	list-style: none;
+}
+
+.assistant-text-collapsible summary::-webkit-details-marker {
+	display: none;
+}
+
+.assistant-text-collapsible summary:hover {
+	background: var(--bg-hover);
+}
+
+.assistant-text-collapsible summary .arrow {
+	font-size: 10px;
+	transition: transform 0.15s;
+	color: var(--text-subtle);
+	flex-shrink: 0;
+}
+
+.assistant-text-collapsible[open] summary .arrow {
+	transform: rotate(90deg);
+}
+
+.assistant-text-collapsible summary .assistant-text-preview {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.assistant-text-body {
+	padding: 12px;
+	border-top: 1px solid var(--border);
+	background: var(--bg);
+}
+
+.assistant-text-body pre {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 600px;
+	overflow-y: auto;
 }
 
 /* Empty state */

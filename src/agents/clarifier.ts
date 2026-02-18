@@ -127,7 +127,7 @@ If confidence < 70, ask 2-5 specific questions that would help clarify the app r
 	for await (const message of query({
 		prompt: generateMessages(),
 		options: {
-			model: "claude-sonnet-4-5-20250929",
+			model: "claude-sonnet-4-6",
 			systemPrompt:
 				"You are a requirements analyst. Evaluate app descriptions and identify ambiguities. Always respond with valid JSON only.",
 			maxTurns: 1,

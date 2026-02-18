@@ -60,7 +60,7 @@ export async function runCoder(
 	}
 
 	const queryOptions: Record<string, unknown> = {
-		model: "claude-sonnet-4-5-20250929",
+		model: "claude-sonnet-4-6",
 		systemPrompt: coderPrompt,
 		maxThinkingTokens: 8192,
 		allowedTools: [
