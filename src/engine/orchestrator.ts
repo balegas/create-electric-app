@@ -86,12 +86,19 @@ export async function runNew(opts: {
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
 	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
 
-	// Step 0: Evaluate confidence and clarify if needed
+	// Step 0: Evaluate confidence, clarify if needed, and infer project name
+	// Run evaluation and name inference in parallel to save time
 	let description = opts.description
+	let inferredName = opts.projectName || ""
 	emit({ type: "log", level: "plan", message: "Analyzing your description...", ts: ts() })
 
 	try {
-		const evaluation = await evaluateDescription(opts.description)
+		// Run evaluation and name inference concurrently — both use the original description
+		const [evaluation, earlyName] = await Promise.all([
+			evaluateDescription(opts.description),
+			inferredName || inferProjectName(opts.description),
+		])
+		if (!inferredName) inferredName = earlyName
 
 		if (evaluation.confidence < 70) {
 			emit({
@@ -130,9 +137,9 @@ export async function runNew(opts: {
 		}
 	} catch {
 		emit({ type: "log", level: "plan", message: "Skipping clarification step", ts: ts() })
+		if (!inferredName) inferredName = await inferProjectName(description)
 	}
 
-	const inferredName = opts.projectName || (await inferProjectName(description))
 	const baseDir = opts.baseDir || process.cwd()
 	const { projectName, projectDir } = resolveProjectDir(baseDir, inferredName)
 
@@ -336,20 +343,13 @@ ${userRequest}
 
 Instructions:
 1. Read PLAN.md and the current codebase to understand the existing app
-2. Read relevant playbooks before coding (use list_playbooks, then read what you need):
-   - UI changes → read "live-queries" playbook (covers useLiveQuery + SSR rules)
-   - Schema changes → read "schemas" and "electric-quickstart"
-   - Collection/mutation changes → read "collections" and "mutations"
-3. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
-4. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
-5. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
-6. Mark tasks as done in PLAN.md after completing them
-7. Run the build tool to verify everything compiles
-
-CRITICAL reminders:
-- Components using useLiveQuery MUST NOT be rendered directly in __root.tsx — wrap with ClientOnly
-- Leaf routes using useLiveQuery need ssr: false
-- Mutation routes must use parseDates(await request.json())
+2. Read "electric-app-guardrails" playbook FIRST for critical integration rules
+3. Use list_playbooks to discover relevant skills, then read only what you need for this change
+4. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
+5. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
+6. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
+7. Mark tasks as done in PLAN.md after completing them
+8. Run the build tool ONCE after all changes are complete — not after each file
 
 Do NOT just write a plan — implement the changes directly.`
 

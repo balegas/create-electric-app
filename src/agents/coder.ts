@@ -71,6 +71,7 @@ export async function runCoder(
 			"Glob",
 			"Grep",
 			"Bash",
+			"WebSearch",
 			"mcp__electric-agent-tools__build",
 			"mcp__electric-agent-tools__read_playbook",
 			"mcp__electric-agent-tools__list_playbooks",

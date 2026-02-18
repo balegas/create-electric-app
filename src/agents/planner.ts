@@ -39,7 +39,7 @@ Steps (exactly 3 tool calls, then output):
 3. read_playbook("tanstack-db")
 4. Output the PLAN.md with complete Drizzle pgTable() definitions for ALL entities
 
-Do NOT read any other playbooks. Do NOT explore the filesystem. The coder agent reads specific playbooks (collections, mutations, etc.) as it works on each phase.`,
+The plan must include read_playbook instructions in each phase so the coder reads the right playbook before coding that phase (see system prompt for format).`,
 			},
 		}
 	}
@@ -49,6 +49,7 @@ Do NOT read any other playbooks. Do NOT explore the filesystem. The coder agent 
 		systemPrompt: plannerPrompt,
 		maxThinkingTokens: 10000,
 		allowedTools: [
+			"WebSearch",
 			"mcp__electric-agent-tools__read_playbook",
 			"mcp__electric-agent-tools__list_playbooks",
 		],
