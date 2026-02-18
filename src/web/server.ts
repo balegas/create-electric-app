@@ -165,9 +165,17 @@ export function createApp(config: ServerConfig) {
 			projectName,
 			baseDir,
 			callbacks,
+			abortController: controller,
 		})
-			.then(() => {
-				updateSessionInfo(config.dataDir, sessionId, { status: "complete" })
+			.then((result) => {
+				if (result.sessionId) {
+					updateSessionInfo(config.dataDir, sessionId, {
+						status: "complete",
+						lastCoderSessionId: result.sessionId,
+					})
+				} else {
+					updateSessionInfo(config.dataDir, sessionId, { status: "complete" })
+				}
 			})
 			.catch((err: unknown) => {
 				const msg = err instanceof Error ? err.message : "Unknown error"
@@ -197,6 +205,14 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "request is required" }, 400)
 		}
 
+		// Abort any active run for this session before starting a new one
+		const existingController = activeRuns.get(sessionId)
+		if (existingController) {
+			existingController.abort()
+			activeRuns.delete(sessionId)
+			rejectAllGates(sessionId)
+		}
+
 		// Re-use the existing stream (append to same log)
 		const { callbacks } = createWebCallbacks(sessionId, config.streamsPort)
 
@@ -215,9 +231,14 @@ export function createApp(config: ServerConfig) {
 			projectDir: session.projectDir,
 			userRequest: body.request,
 			callbacks,
+			abortController: controller,
+			resumeSessionId: session.lastCoderSessionId,
 		})
-			.then(() => {
-				updateSessionInfo(config.dataDir, sessionId, { status: "complete" })
+			.then((result) => {
+				updateSessionInfo(config.dataDir, sessionId, {
+					status: "complete",
+					lastCoderSessionId: result.sessionId,
+				})
 			})
 			.catch((err: unknown) => {
 				const msg = err instanceof Error ? err.message : "Unknown error"

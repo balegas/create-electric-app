@@ -9,6 +9,8 @@ export interface SessionInfo {
 	createdAt: string
 	lastActiveAt: string
 	status: "running" | "complete" | "error" | "cancelled"
+	/** SDK session ID from the last coder run — used to resume conversation context across iterations */
+	lastCoderSessionId?: string
 }
 
 interface SessionIndex {

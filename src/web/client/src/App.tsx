@@ -52,7 +52,11 @@ export function App() {
 		async (request: string) => {
 			if (!activeSessionId) return
 			try {
+				// Sending a new iteration while running will auto-abort the current run server-side
 				await sendIterate(activeSessionId, request)
+				// Refresh session list to pick up status change
+				const data = await listSessions()
+				setSessions(data.sessions)
 			} catch (err) {
 				console.error("Failed to send iteration:", err)
 			}
@@ -196,8 +200,12 @@ export function App() {
 
 			<PromptInput
 				onSubmit={handleIterate}
-				placeholder={isRunning ? "Agent is working..." : "Describe changes you want to make..."}
-				disabled={isRunning}
+				placeholder={
+					isRunning
+						? "Send a message to start a new iteration (aborts current run)..."
+						: "Describe changes you want to make..."
+				}
+				disabled={false}
 			/>
 		</div>
 	)

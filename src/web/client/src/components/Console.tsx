@@ -59,7 +59,11 @@ export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
 						return <ConsoleUserMessage key={`user-${i}`} entry={entry} />
 					case "tool":
 						return (
-							<ToolExecution key={entry.toolUseId || `tool-${i}`} entry={entry} duration={duration} />
+							<ToolExecution
+								key={entry.toolUseId || `tool-${i}`}
+								entry={entry}
+								duration={duration}
+							/>
 						)
 					case "text":
 						return <ConsoleTextEntry key={`text-${i}`} entry={entry} duration={duration} />

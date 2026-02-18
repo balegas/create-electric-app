@@ -80,7 +80,8 @@ export async function runNew(opts: {
 	debug?: boolean
 	autoApprove?: boolean
 	callbacks: OrchestratorCallbacks
-}): Promise<void> {
+	abortController?: AbortController
+}): Promise<{ sessionId?: string }> {
 	const { callbacks } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
 	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
@@ -178,13 +179,19 @@ export async function runNew(opts: {
 			errors: ["Playbook validation failed"],
 			ts: ts(),
 		})
-		return
+		return {}
 	}
 
 	// Step 2: Plan
 	emit({ type: "log", level: "plan", message: "Running planner agent...", ts: ts() })
 	const messageForwarder = createMessageForwarder(callbacks, reporter)
-	let plan = await runPlanner(description, projectDir, reporter, messageForwarder)
+	let plan = await runPlanner(
+		description,
+		projectDir,
+		reporter,
+		messageForwarder,
+		opts.abortController,
+	)
 
 	// Step 3: Approve
 	if (!opts.autoApprove) {
@@ -204,6 +211,7 @@ export async function runNew(opts: {
 				projectDir,
 				reporter,
 				messageForwarder,
+				opts.abortController,
 			)
 			emit({ type: "plan_ready", plan, ts: ts() })
 			decision = await callbacks.onPlanReady(plan)
@@ -216,7 +224,7 @@ export async function runNew(opts: {
 				success: false,
 				ts: ts(),
 			})
-			return
+			return {}
 		}
 	}
 
@@ -235,7 +243,14 @@ export async function runNew(opts: {
 
 	// Step 5: Run coder (with continuation on max turns / max budget)
 	emit({ type: "log", level: "task", message: "Running coder agent...", ts: ts() })
-	let result = await runCoder(projectDir, undefined, reporter, messageForwarder)
+	let result = await runCoder(
+		projectDir,
+		undefined,
+		reporter,
+		messageForwarder,
+		undefined,
+		opts.abortController,
+	)
 
 	while (result.stopReason === "max_turns" || result.stopReason === "max_budget") {
 		emit({
@@ -252,7 +267,7 @@ export async function runNew(opts: {
 				ts: ts(),
 			})
 			emit({ type: "session_complete", success: true, ts: ts() })
-			return
+			return { sessionId: result.sessionId }
 		}
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
 		result = await runCoder(
@@ -261,6 +276,7 @@ export async function runNew(opts: {
 			reporter,
 			messageForwarder,
 			result.sessionId,
+			opts.abortController,
 		)
 	}
 
@@ -295,6 +311,7 @@ export async function runNew(opts: {
 		ts: ts(),
 	})
 	emit({ type: "session_complete", success: result.success, ts: ts() })
+	return { sessionId: result.sessionId }
 }
 
 /**
@@ -305,7 +322,9 @@ export async function runIterate(opts: {
 	userRequest: string
 	debug?: boolean
 	callbacks: OrchestratorCallbacks
-}): Promise<{ success: boolean; errors: string[] }> {
+	abortController?: AbortController
+	resumeSessionId?: string
+}): Promise<{ success: boolean; errors: string[]; sessionId?: string }> {
 	const { callbacks, projectDir, userRequest } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
 	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
@@ -335,7 +354,14 @@ CRITICAL reminders:
 Do NOT just write a plan — implement the changes directly.`
 
 	emit({ type: "log", level: "task", message: "Running coder with your request...", ts: ts() })
-	let result = await runCoder(projectDir, iterationPrompt, reporter, messageForwarder)
+	let result = await runCoder(
+		projectDir,
+		iterationPrompt,
+		reporter,
+		messageForwarder,
+		opts.resumeSessionId,
+		opts.abortController,
+	)
 
 	while (result.stopReason === "max_turns" || result.stopReason === "max_budget") {
 		emit({ type: "continue_needed", reason: result.stopReason, ts: ts() })
@@ -347,7 +373,7 @@ Do NOT just write a plan — implement the changes directly.`
 				message: "Paused. You can continue this work in the next iteration.",
 				ts: ts(),
 			})
-			return { success: true, errors: [] }
+			return { success: true, errors: [], sessionId: result.sessionId }
 		}
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
 		result = await runCoder(
@@ -356,6 +382,7 @@ Do NOT just write a plan — implement the changes directly.`
 			reporter,
 			messageForwarder,
 			result.sessionId,
+			opts.abortController,
 		)
 	}
 
@@ -370,7 +397,7 @@ Do NOT just write a plan — implement the changes directly.`
 		})
 	}
 
-	return { success: result.success, errors: result.errors }
+	return { success: result.success, errors: result.errors, sessionId: result.sessionId }
 }
 
 /**

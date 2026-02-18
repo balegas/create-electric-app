@@ -69,9 +69,7 @@ export function ConsoleTextEntry({
 		<details className="assistant-text-collapsible">
 			<summary>
 				<span className="arrow">&#9654;</span>
-				<span className="assistant-text-preview">
-					{entry.text.slice(0, 120)}...
-				</span>
+				<span className="assistant-text-preview">{entry.text.slice(0, 120)}...</span>
 				<Duration value={duration} />
 			</summary>
 			<div className="assistant-text-body">
