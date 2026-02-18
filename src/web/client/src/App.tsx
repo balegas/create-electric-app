@@ -9,6 +9,47 @@ import {
 	type SessionInfo,
 	sendIterate,
 } from "./lib/api"
+import type { ConsoleEntry } from "./lib/event-types"
+
+function serializeEntries(entries: ConsoleEntry[]): string {
+	const lines: string[] = []
+	for (const entry of entries) {
+		switch (entry.kind) {
+			case "user_message":
+				lines.push(`## User\n\n${entry.message}\n`)
+				break
+			case "text":
+				lines.push(`## Assistant\n\n${entry.text}\n`)
+				break
+			case "log":
+				lines.push(`[${entry.level}] ${entry.message}`)
+				break
+			case "tool": {
+				lines.push(`### Tool: ${entry.toolName}`)
+				lines.push("**Input:**")
+				lines.push("```json")
+				lines.push(JSON.stringify(entry.input, null, 2))
+				lines.push("```")
+				if (entry.output != null) {
+					lines.push("**Output:**")
+					lines.push("```")
+					lines.push(entry.output)
+					lines.push("```")
+				}
+				lines.push("")
+				break
+			}
+			case "gate":
+				if (entry.event.type === "plan_ready") {
+					lines.push(`## Plan\n\n${entry.event.plan}\n`)
+				} else if (entry.event.type === "clarification_needed") {
+					lines.push(`## Clarification Needed\n\n${entry.event.questions.join("\n")}\n`)
+				}
+				break
+		}
+	}
+	return lines.join("\n")
+}
 
 export function App() {
 	const [sessions, setSessions] = useState<SessionInfo[]>([])
@@ -74,6 +115,15 @@ export function App() {
 			console.error("Failed to cancel:", err)
 		}
 	}, [activeSessionId])
+
+	const [copied, setCopied] = useState(false)
+	const handleCopyHistory = useCallback(() => {
+		const text = serializeEntries(entries)
+		navigator.clipboard.writeText(text).then(() => {
+			setCopied(true)
+			setTimeout(() => setCopied(false), 2000)
+		})
+	}, [entries])
 
 	// No active session — show creation UI
 	if (!activeSessionId) {
@@ -183,6 +233,17 @@ export function App() {
 					{isComplete && <span style={{ color: "var(--text-subtle)" }}>Complete</span>}
 					{!isLive && !isComplete && <span style={{ color: "var(--yellow)" }}>Connecting...</span>}
 				</div>
+				<span
+					onClick={handleCopyHistory}
+					style={{
+						color: copied ? "var(--green)" : "var(--text-subtle)",
+						cursor: "pointer",
+						fontSize: 13,
+						marginLeft: 8,
+					}}
+				>
+					{copied ? "Copied!" : "Copy log"}
+				</span>
 				<span
 					onClick={() => setActiveSessionId(null)}
 					style={{
