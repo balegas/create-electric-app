@@ -1,5 +1,7 @@
+import crypto from "node:crypto"
+import fs from "node:fs"
 import path from "node:path"
-import { evaluateDescription } from "../agents/clarifier.js"
+import { evaluateDescription, inferProjectName } from "../agents/clarifier.js"
 import { runCoder } from "../agents/coder.js"
 import { runPlanner } from "../agents/planner.js"
 import { createProgressReporter, type ProgressReporter } from "../progress/reporter.js"
@@ -20,14 +22,20 @@ export interface OrchestratorCallbacks {
 	onContinueNeeded: () => Promise<boolean>
 }
 
-function toKebabCase(str: string): string {
-	return str
-		.toLowerCase()
-		.replace(/[^a-z0-9\s-]/g, "")
-		.replace(/\s+/g, "-")
-		.replace(/-+/g, "-")
-		.replace(/^-|-$/g, "")
-		.slice(0, 50)
+/**
+ * Check if the target directory already exists. If so, append a random 4-char hex suffix.
+ */
+export function resolveProjectDir(
+	baseDir: string,
+	name: string,
+): { projectName: string; projectDir: string } {
+	const candidate = path.resolve(baseDir, name)
+	if (!fs.existsSync(candidate)) {
+		return { projectName: name, projectDir: candidate }
+	}
+	const suffix = crypto.randomBytes(2).toString("hex")
+	const uniqueName = `${name}-${suffix}`
+	return { projectName: uniqueName, projectDir: path.resolve(baseDir, uniqueName) }
 }
 
 function buildEnhancedDescription(
@@ -123,9 +131,9 @@ export async function runNew(opts: {
 		emit({ type: "log", level: "plan", message: "Skipping clarification step", ts: ts() })
 	}
 
-	const projectName = opts.projectName || toKebabCase(opts.description.split("\n")[0])
+	const inferredName = opts.projectName || (await inferProjectName(description))
 	const baseDir = opts.baseDir || process.cwd()
-	const projectDir = path.resolve(baseDir, projectName)
+	const { projectName, projectDir } = resolveProjectDir(baseDir, inferredName)
 
 	emit({ type: "log", level: "plan", message: `Creating project: ${projectName}`, ts: ts() })
 	emit({ type: "log", level: "plan", message: `Description: ${description}`, ts: ts() })

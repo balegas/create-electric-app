@@ -76,18 +76,11 @@ export function useSession(sessionId: string | null) {
 	useEffect(() => {
 		if (!sessionId) return
 
-		// Reset state
+		// Reset state — always replay from the beginning so we get the full history
 		setEntries([])
 		setIsLive(false)
 		setIsComplete(false)
-
-		// Restore offset from localStorage
-		const savedOffset = localStorage.getItem(`offset:${sessionId}`)
-		if (savedOffset) {
-			offsetRef.current = savedOffset
-		} else {
-			offsetRef.current = "-1"
-		}
+		offsetRef.current = "-1"
 
 		let cancelled = false
 
@@ -113,7 +106,6 @@ export function useSession(sessionId: string | null) {
 						processEvent(item)
 					}
 					offsetRef.current = batch.offset
-					localStorage.setItem(`offset:${sessionId}`, batch.offset)
 				})
 			} catch {
 				// Stream may not exist yet, retry after a delay

@@ -1,5 +1,67 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 
+function toKebabCase(str: string): string {
+	return str
+		.toLowerCase()
+		.replace(/[^a-z0-9\s-]/g, "")
+		.replace(/\s+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "")
+		.slice(0, 40)
+}
+
+/**
+ * Infer a short, meaningful kebab-case project name from a description using an LLM.
+ * Falls back to "electric-app" if the call fails or returns garbage.
+ */
+export async function inferProjectName(description: string): Promise<string> {
+	let responseText = ""
+
+	async function* generateMessages(): AsyncGenerator<SDKUserMessage> {
+		yield {
+			type: "user" as const,
+			session_id: "",
+			parent_tool_use_id: null,
+			message: {
+				role: "user" as const,
+				content: `Given this app description, suggest a short project name (2-3 words, kebab-case, no prefix). Respond with only the name.\n\nDescription:\n"""\n${description}\n"""`,
+			},
+		}
+	}
+
+	try {
+		for await (const message of query({
+			prompt: generateMessages(),
+			options: {
+				model: "claude-haiku-4-5-20251001",
+				systemPrompt:
+					"You are a naming assistant. Given an app description, respond with a single short kebab-case project name (2-3 words). No explanation, no quotes, just the name.",
+				maxTurns: 1,
+				allowedTools: [],
+				permissionMode: "bypassPermissions",
+				allowDangerouslySkipPermissions: true,
+			},
+		})) {
+			if (message.type === "assistant" && message.message?.content) {
+				for (const block of message.message.content) {
+					if ("text" in block && block.text) {
+						responseText = block.text as string
+					}
+				}
+			}
+		}
+
+		// Sanitize: extract first line, kebab-case it, validate
+		const candidate = toKebabCase(responseText.trim().split("\n")[0])
+		if (candidate.length >= 2 && /^[a-z]/.test(candidate)) {
+			return candidate
+		}
+		return "electric-app"
+	} catch {
+		return "electric-app"
+	}
+}
+
 export interface ClarificationResult {
 	confidence: number
 	summary: string
