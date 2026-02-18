@@ -235,18 +235,20 @@ export async function runNew(opts: {
 		}
 	}
 
-	// Step 4: Write plan and initialize session
-	const fs = await import("node:fs/promises")
-	await fs.writeFile(path.join(projectDir, "PLAN.md"), plan, "utf-8")
-	await updateSession(projectDir, {
-		appName: projectName,
-		currentPhase: "generation",
-		currentTask: "Starting code generation",
-		buildStatus: "pending",
-		totalBuilds: 0,
-		totalErrors: 0,
-		escalations: 0,
-	})
+	// Step 4: Write plan and initialize session (parallel — independent operations)
+	const fsPromises = await import("node:fs/promises")
+	await Promise.all([
+		fsPromises.writeFile(path.join(projectDir, "PLAN.md"), plan, "utf-8"),
+		updateSession(projectDir, {
+			appName: projectName,
+			currentPhase: "generation",
+			currentTask: "Starting code generation",
+			buildStatus: "pending",
+			totalBuilds: 0,
+			totalErrors: 0,
+			escalations: 0,
+		}),
+	])
 
 	// Step 5: Run coder (with continuation on max turns / max budget)
 	emit({ type: "log", level: "task", message: "Running coder agent...", ts: ts() })

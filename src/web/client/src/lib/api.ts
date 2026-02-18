@@ -59,3 +59,9 @@ export function cancelSession(sessionId: string) {
 		method: "POST",
 	})
 }
+
+export function deleteSession(sessionId: string) {
+	return request<{ ok: boolean }>(`/sessions/${sessionId}`, {
+		method: "DELETE",
+	})
+}

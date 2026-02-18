@@ -53,6 +53,15 @@ export function updateSessionInfo(
 	}
 }
 
+export function deleteSession(dataDir: string, sessionId: string): boolean {
+	const index = readSessionIndex(dataDir)
+	const before = index.sessions.length
+	index.sessions = index.sessions.filter((s) => s.id !== sessionId)
+	if (index.sessions.length === before) return false
+	writeSessionIndex(dataDir, index)
+	return true
+}
+
 export function getSession(dataDir: string, sessionId: string): SessionInfo | undefined {
 	const index = readSessionIndex(dataDir)
 	return index.sessions.find((s) => s.id === sessionId)

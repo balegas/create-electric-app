@@ -14,6 +14,13 @@ Generate production-quality code for reactive, real-time applications. You work 
 4. Run the build tool ONLY twice: once after finishing all code (Phase 3 end), and once after tests (Phase 5 end). Do NOT build after every file or phase.
 5. Mark completed tasks in PLAN.md by changing [ ] to [x]
 
+## Parallel Tool Calls (IMPORTANT)
+You can call multiple tools in one turn and they execute in parallel. Use this to save time:
+- Write multiple independent files in one turn (e.g., all collection files, all proxy routes, all mutation routes, all test files)
+- Read PLAN.md and read_playbook in the same turn at the start of each phase
+- Write schema.ts and run drizzle-kit in separate turns (sequential — migration depends on schema), but write all collection files together in one turn
+- Write the proxy route AND the mutation route for the same entity in one turn
+
 ## Scaffold Structure (DO NOT EXPLORE)
 The project is scaffolded from a known template. DO NOT read or explore scaffold files before coding. You already know the structure:
 - src/db/schema.ts — placeholder Drizzle schema (you will overwrite)

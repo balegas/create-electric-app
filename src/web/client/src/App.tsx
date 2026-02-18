@@ -5,6 +5,7 @@ import { useSession } from "./hooks/useSession"
 import {
 	cancelSession,
 	createSession,
+	deleteSession,
 	listSessions,
 	type SessionInfo,
 	sendIterate,
@@ -116,6 +117,17 @@ export function App() {
 		}
 	}, [activeSessionId])
 
+	const handleDeleteSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
+		e.stopPropagation()
+		try {
+			await deleteSession(sessionId)
+			const data = await listSessions()
+			setSessions(data.sessions)
+		} catch (err) {
+			console.error("Failed to delete session:", err)
+		}
+	}, [])
+
 	const [copied, setCopied] = useState(false)
 	const handleCopyHistory = useCallback(() => {
 		const text = serializeEntries(entries)
@@ -173,24 +185,42 @@ export function App() {
 											{s.description.length > 60 ? "..." : ""}
 										</span>
 									</div>
-									<span
-										style={{
-											fontSize: 11,
-											padding: "2px 8px",
-											borderRadius: 10,
-											background:
-												s.status === "complete"
-													? "var(--green)"
-													: s.status === "running"
-														? "var(--cyan)"
-														: s.status === "error"
-															? "var(--red)"
-															: "var(--text-subtle)",
-											color: "var(--bg)",
-										}}
-									>
-										{s.status}
-									</span>
+									<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+										<span
+											style={{
+												fontSize: 11,
+												padding: "2px 8px",
+												borderRadius: 10,
+												background:
+													s.status === "complete"
+														? "var(--green)"
+														: s.status === "running"
+															? "var(--cyan)"
+															: s.status === "error"
+																? "var(--red)"
+																: "var(--text-subtle)",
+												color: "var(--bg)",
+											}}
+										>
+											{s.status}
+										</span>
+										<span
+											onClick={(e) => handleDeleteSession(e, s.id)}
+											style={{
+												fontSize: 13,
+												color: "var(--text-subtle)",
+												cursor: "pointer",
+												padding: "2px 4px",
+												borderRadius: 4,
+												lineHeight: 1,
+											}}
+											onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
+											onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-subtle)")}
+											title="Delete session"
+										>
+											✕
+										</span>
+									</div>
 								</div>
 							))}
 					</div>

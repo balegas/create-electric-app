@@ -19,6 +19,7 @@ import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { getStreamServerUrl } from "./infra.js"
 import {
 	addSession,
+	deleteSession,
 	getSession,
 	readSessionIndex,
 	type SessionInfo,
@@ -303,6 +304,21 @@ export function createApp(config: ServerConfig) {
 		}
 		rejectAllGates(sessionId)
 		updateSessionInfo(config.dataDir, sessionId, { status: "cancelled" })
+		return c.json({ ok: true })
+	})
+
+	// Delete a session
+	app.delete("/api/sessions/:id", (c) => {
+		const sessionId = c.req.param("id")
+		// Abort if still running
+		const controller = activeRuns.get(sessionId)
+		if (controller) {
+			controller.abort()
+			activeRuns.delete(sessionId)
+		}
+		rejectAllGates(sessionId)
+		const deleted = deleteSession(config.dataDir, sessionId)
+		if (!deleted) return c.json({ error: "Session not found" }, 404)
 		return c.json({ ok: true })
 	})
 
