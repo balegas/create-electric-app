@@ -50,8 +50,10 @@ When asked to make a change to an existing app, you MUST implement it directly:
 5. Run the build tool to verify
 Do NOT write plan files elsewhere. Do NOT stop after planning. Implement the full change.
 
-## Working Directory
+## Working Directory (CRITICAL)
 ${projectDir}
+
+ALL file reads, writes, edits, and bash commands MUST operate within this directory. Use relative paths (e.g., src/db/schema.ts) — the cwd is already set to the project root. NEVER use absolute paths to parent directories.
 
 ## Error Handling
 Before fixing any error, check _agent/errors.md for previous attempts at the same fix.
