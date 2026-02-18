@@ -1,5 +1,7 @@
+import crypto from "node:crypto"
+import fs from "node:fs"
 import path from "node:path"
-import { evaluateDescription } from "../agents/clarifier.js"
+import { evaluateDescription, inferProjectName } from "../agents/clarifier.js"
 import { runCoder } from "../agents/coder.js"
 import { runPlanner } from "../agents/planner.js"
 import { createProgressReporter, type ProgressReporter } from "../progress/reporter.js"
@@ -20,14 +22,20 @@ export interface OrchestratorCallbacks {
 	onContinueNeeded: () => Promise<boolean>
 }
 
-function toKebabCase(str: string): string {
-	return str
-		.toLowerCase()
-		.replace(/[^a-z0-9\s-]/g, "")
-		.replace(/\s+/g, "-")
-		.replace(/-+/g, "-")
-		.replace(/^-|-$/g, "")
-		.slice(0, 50)
+/**
+ * Check if the target directory already exists. If so, append a random 4-char hex suffix.
+ */
+export function resolveProjectDir(
+	baseDir: string,
+	name: string,
+): { projectName: string; projectDir: string } {
+	const candidate = path.resolve(baseDir, name)
+	if (!fs.existsSync(candidate)) {
+		return { projectName: name, projectDir: candidate }
+	}
+	const suffix = crypto.randomBytes(2).toString("hex")
+	const uniqueName = `${name}-${suffix}`
+	return { projectName: uniqueName, projectDir: path.resolve(baseDir, uniqueName) }
 }
 
 function buildEnhancedDescription(
@@ -72,17 +80,25 @@ export async function runNew(opts: {
 	debug?: boolean
 	autoApprove?: boolean
 	callbacks: OrchestratorCallbacks
-}): Promise<void> {
+	abortController?: AbortController
+}): Promise<{ sessionId?: string }> {
 	const { callbacks } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
 	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
 
-	// Step 0: Evaluate confidence and clarify if needed
+	// Step 0: Evaluate confidence, clarify if needed, and infer project name
+	// Run evaluation and name inference in parallel to save time
 	let description = opts.description
+	let inferredName = opts.projectName || ""
 	emit({ type: "log", level: "plan", message: "Analyzing your description...", ts: ts() })
 
 	try {
-		const evaluation = await evaluateDescription(opts.description)
+		// Run evaluation and name inference concurrently — both use the original description
+		const [evaluation, earlyName] = await Promise.all([
+			evaluateDescription(opts.description),
+			inferredName || inferProjectName(opts.description),
+		])
+		if (!inferredName) inferredName = earlyName
 
 		if (evaluation.confidence < 70) {
 			emit({
@@ -121,11 +137,11 @@ export async function runNew(opts: {
 		}
 	} catch {
 		emit({ type: "log", level: "plan", message: "Skipping clarification step", ts: ts() })
+		if (!inferredName) inferredName = await inferProjectName(description)
 	}
 
-	const projectName = opts.projectName || toKebabCase(opts.description.split("\n")[0])
 	const baseDir = opts.baseDir || process.cwd()
-	const projectDir = path.resolve(baseDir, projectName)
+	const { projectName, projectDir } = resolveProjectDir(baseDir, inferredName)
 
 	emit({ type: "log", level: "plan", message: `Creating project: ${projectName}`, ts: ts() })
 	emit({ type: "log", level: "plan", message: `Description: ${description}`, ts: ts() })
@@ -170,13 +186,19 @@ export async function runNew(opts: {
 			errors: ["Playbook validation failed"],
 			ts: ts(),
 		})
-		return
+		return {}
 	}
 
 	// Step 2: Plan
 	emit({ type: "log", level: "plan", message: "Running planner agent...", ts: ts() })
 	const messageForwarder = createMessageForwarder(callbacks, reporter)
-	let plan = await runPlanner(description, projectDir, reporter, messageForwarder)
+	let plan = await runPlanner(
+		description,
+		projectDir,
+		reporter,
+		messageForwarder,
+		opts.abortController,
+	)
 
 	// Step 3: Approve
 	if (!opts.autoApprove) {
@@ -196,6 +218,7 @@ export async function runNew(opts: {
 				projectDir,
 				reporter,
 				messageForwarder,
+				opts.abortController,
 			)
 			emit({ type: "plan_ready", plan, ts: ts() })
 			decision = await callbacks.onPlanReady(plan)
@@ -208,26 +231,35 @@ export async function runNew(opts: {
 				success: false,
 				ts: ts(),
 			})
-			return
+			return {}
 		}
 	}
 
-	// Step 4: Write plan and initialize session
-	const fs = await import("node:fs/promises")
-	await fs.writeFile(path.join(projectDir, "PLAN.md"), plan, "utf-8")
-	await updateSession(projectDir, {
-		appName: projectName,
-		currentPhase: "generation",
-		currentTask: "Starting code generation",
-		buildStatus: "pending",
-		totalBuilds: 0,
-		totalErrors: 0,
-		escalations: 0,
-	})
+	// Step 4: Write plan and initialize session (parallel — independent operations)
+	const fsPromises = await import("node:fs/promises")
+	await Promise.all([
+		fsPromises.writeFile(path.join(projectDir, "PLAN.md"), plan, "utf-8"),
+		updateSession(projectDir, {
+			appName: projectName,
+			currentPhase: "generation",
+			currentTask: "Starting code generation",
+			buildStatus: "pending",
+			totalBuilds: 0,
+			totalErrors: 0,
+			escalations: 0,
+		}),
+	])
 
 	// Step 5: Run coder (with continuation on max turns / max budget)
 	emit({ type: "log", level: "task", message: "Running coder agent...", ts: ts() })
-	let result = await runCoder(projectDir, undefined, reporter, messageForwarder)
+	let result = await runCoder(
+		projectDir,
+		undefined,
+		reporter,
+		messageForwarder,
+		undefined,
+		opts.abortController,
+	)
 
 	while (result.stopReason === "max_turns" || result.stopReason === "max_budget") {
 		emit({
@@ -244,7 +276,7 @@ export async function runNew(opts: {
 				ts: ts(),
 			})
 			emit({ type: "session_complete", success: true, ts: ts() })
-			return
+			return { sessionId: result.sessionId }
 		}
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
 		result = await runCoder(
@@ -253,6 +285,7 @@ export async function runNew(opts: {
 			reporter,
 			messageForwarder,
 			result.sessionId,
+			opts.abortController,
 		)
 	}
 
@@ -287,6 +320,7 @@ export async function runNew(opts: {
 		ts: ts(),
 	})
 	emit({ type: "session_complete", success: result.success, ts: ts() })
+	return { sessionId: result.sessionId }
 }
 
 /**
@@ -297,7 +331,9 @@ export async function runIterate(opts: {
 	userRequest: string
 	debug?: boolean
 	callbacks: OrchestratorCallbacks
-}): Promise<{ success: boolean; errors: string[] }> {
+	abortController?: AbortController
+	resumeSessionId?: string
+}): Promise<{ success: boolean; errors: string[]; sessionId?: string }> {
 	const { callbacks, projectDir, userRequest } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
 	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
@@ -309,25 +345,25 @@ ${userRequest}
 
 Instructions:
 1. Read PLAN.md and the current codebase to understand the existing app
-2. Read relevant playbooks before coding (use list_playbooks, then read what you need):
-   - UI changes → read "live-queries" playbook (covers useLiveQuery + SSR rules)
-   - Schema changes → read "schemas" and "electric-quickstart"
-   - Collection/mutation changes → read "collections" and "mutations"
-3. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
-4. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
-5. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
-6. Mark tasks as done in PLAN.md after completing them
-7. Run the build tool to verify everything compiles
-
-CRITICAL reminders:
-- Components using useLiveQuery MUST NOT be rendered directly in __root.tsx — wrap with ClientOnly
-- Leaf routes using useLiveQuery need ssr: false
-- Mutation routes must use parseDates(await request.json())
+2. Read "electric-app-guardrails" playbook FIRST for critical integration rules
+3. Use list_playbooks to discover relevant skills, then read only what you need for this change
+4. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
+5. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
+6. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
+7. Mark tasks as done in PLAN.md after completing them
+8. Run the build tool ONCE after all changes are complete — not after each file
 
 Do NOT just write a plan — implement the changes directly.`
 
 	emit({ type: "log", level: "task", message: "Running coder with your request...", ts: ts() })
-	let result = await runCoder(projectDir, iterationPrompt, reporter, messageForwarder)
+	let result = await runCoder(
+		projectDir,
+		iterationPrompt,
+		reporter,
+		messageForwarder,
+		opts.resumeSessionId,
+		opts.abortController,
+	)
 
 	while (result.stopReason === "max_turns" || result.stopReason === "max_budget") {
 		emit({ type: "continue_needed", reason: result.stopReason, ts: ts() })
@@ -339,7 +375,7 @@ Do NOT just write a plan — implement the changes directly.`
 				message: "Paused. You can continue this work in the next iteration.",
 				ts: ts(),
 			})
-			return { success: true, errors: [] }
+			return { success: true, errors: [], sessionId: result.sessionId }
 		}
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
 		result = await runCoder(
@@ -348,6 +384,7 @@ Do NOT just write a plan — implement the changes directly.`
 			reporter,
 			messageForwarder,
 			result.sessionId,
+			opts.abortController,
 		)
 	}
 
@@ -362,7 +399,7 @@ Do NOT just write a plan — implement the changes directly.`
 		})
 	}
 
-	return { success: result.success, errors: result.errors }
+	return { success: result.success, errors: result.errors, sessionId: result.sessionId }
 }
 
 /**

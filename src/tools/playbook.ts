@@ -1,7 +1,51 @@
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { tool } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
+
+/**
+ * Parse YAML frontmatter from a SKILL.md file.
+ * Extracts name, description, and triggers without a YAML library.
+ */
+function parseFrontmatter(content: string): {
+	description?: string
+	triggers?: string[]
+} {
+	const match = content.match(/^---\n([\s\S]*?)\n---/)
+	if (!match) return {}
+
+	const yaml = match[1]
+	const result: { description?: string; triggers?: string[] } = {}
+
+	// Extract description (handles both single-line and multi-line block scalar)
+	const descMatch = yaml.match(
+		/description:\s*\|?\s*\n([\s\S]*?)(?=\n\w|\n---|\ntriggers:|\nmetadata:)/s,
+	)
+	if (descMatch) {
+		result.description = descMatch[1]
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.join(" ")
+	} else {
+		const inlineDesc = yaml.match(/description:\s*(.+)/)
+		if (inlineDesc) {
+			result.description = inlineDesc[1].trim()
+		}
+	}
+
+	// Extract triggers (YAML list)
+	const triggersMatch = yaml.match(/triggers:\s*\n((?:\s+-\s+.+\n?)*)/)
+	if (triggersMatch) {
+		result.triggers = triggersMatch[1]
+			.split("\n")
+			.map((line) => line.replace(/^\s*-\s*/, "").trim())
+			.filter(Boolean)
+	}
+
+	return result
+}
 
 const PLAYBOOK_PACKAGES = [
 	{ pkg: "@electric-sql/playbook", prefix: "electric" },
@@ -10,9 +54,25 @@ const PLAYBOOK_PACKAGES = [
 ]
 
 /**
+ * Resolve the bundled playbook directory that ships with electric-agent.
+ * Contains project-specific patterns not covered by external playbook packages.
+ */
+function getBundledPlaybookDir(): string {
+	// Try compiled path first, then source path
+	const compiled = path.resolve(__dirname, "../../playbooks")
+	if (fs.existsSync(compiled)) return compiled
+	const source = path.resolve(__dirname, "../playbooks")
+	if (fs.existsSync(source)) return source
+	return compiled // fallback
+}
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+/**
  * Find a skill directory by name. Supports:
  * - Direct match: skills/<name>/SKILL.md
  * - Nested match: skills/<parent>/<name>/SKILL.md (e.g., tanstack-db/collections)
+ * - Bundled skills: playbooks/<name>/SKILL.md (shipped with electric-agent)
  */
 function findPlaybookSkillDir(skillName: string, projectDir: string): string | null {
 	for (const { pkg } of PLAYBOOK_PACKAGES) {
@@ -31,6 +91,11 @@ function findPlaybookSkillDir(skillName: string, projectDir: string): string | n
 			}
 		}
 	}
+
+	// Check bundled playbooks
+	const bundledDir = getBundledPlaybookDir()
+	const bundled = path.join(bundledDir, skillName)
+	if (fs.existsSync(path.join(bundled, "SKILL.md"))) return bundled
 
 	return null
 }
@@ -137,7 +202,7 @@ export function createPlaybookTools(projectDir: string) {
 
 	const listPlaybooksTool = tool(
 		"list_playbooks",
-		"List all available playbook skills across all installed playbook packages",
+		"List all available playbook skills with descriptions and triggers. Router skills (no parent) contain routing tables — read them first to discover which sub-skill you need.",
 		{},
 		async () => {
 			const skills: Array<{
@@ -145,6 +210,8 @@ export function createPlaybookTools(projectDir: string) {
 				pkg: string
 				parent?: string
 				hasReferences: boolean
+				description?: string
+				triggers?: string[]
 			}> = []
 
 			for (const { pkg } of PLAYBOOK_PACKAGES) {
@@ -158,11 +225,14 @@ export function createPlaybookTools(projectDir: string) {
 							const skillFile = path.join(entryDir, "SKILL.md")
 							if (fs.existsSync(skillFile)) {
 								const refsDir = path.join(entryDir, "references")
+								const frontmatter = parseFrontmatter(fs.readFileSync(skillFile, "utf-8"))
 								skills.push({
 									name: entry.name,
 									pkg,
 									parent,
 									hasReferences: fs.existsSync(refsDir),
+									description: frontmatter.description,
+									triggers: frontmatter.triggers,
 								})
 							}
 							// Always recurse to find nested skills
@@ -174,11 +244,36 @@ export function createPlaybookTools(projectDir: string) {
 				scanDir(skillsDir)
 			}
 
+			// Scan bundled playbooks (shipped with electric-agent)
+			const bundledDir = getBundledPlaybookDir()
+			if (fs.existsSync(bundledDir)) {
+				for (const entry of fs.readdirSync(bundledDir, { withFileTypes: true })) {
+					if (entry.isDirectory()) {
+						const entryDir = path.join(bundledDir, entry.name)
+						const skillFile = path.join(entryDir, "SKILL.md")
+						if (fs.existsSync(skillFile)) {
+							const refsDir = path.join(entryDir, "references")
+							const frontmatter = parseFrontmatter(fs.readFileSync(skillFile, "utf-8"))
+							skills.push({
+								name: entry.name,
+								pkg: "electric-agent (built-in)",
+								hasReferences: fs.existsSync(refsDir),
+								description: frontmatter.description,
+								triggers: frontmatter.triggers,
+							})
+						}
+					}
+				}
+			}
+
 			const output = skills
 				.map((s) => {
 					const indent = s.parent ? "  " : ""
 					const refs = s.hasReferences ? " [has references]" : ""
-					return `${indent}- ${s.name} (from ${s.pkg})${refs}`
+					const desc = s.description ? ` — ${s.description}` : ""
+					const triggers =
+						s.triggers && s.triggers.length > 0 ? ` (triggers: ${s.triggers.join(", ")})` : ""
+					return `${indent}- ${s.name}${desc}${triggers}${refs}`
 				})
 				.join("\n")
 

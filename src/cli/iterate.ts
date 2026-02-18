@@ -39,6 +39,8 @@ export async function iterateCommand(opts?: { debug?: boolean }): Promise<void> 
 
 	console.log('\nEnter your changes (type "exit" to quit):\n')
 
+	let lastSessionId: string | undefined
+
 	while (true) {
 		const userInput = await prompt("iterate> ")
 
@@ -56,7 +58,13 @@ export async function iterateCommand(opts?: { debug?: boolean }): Promise<void> 
 			userRequest: userInput,
 			debug: opts?.debug,
 			callbacks,
+			resumeSessionId: lastSessionId,
 		})
+
+		// Persist session ID so the next iteration has full conversation context
+		if (result.sessionId) {
+			lastSessionId = result.sessionId
+		}
 
 		if (!result.success) {
 			// Errors already logged by the orchestrator

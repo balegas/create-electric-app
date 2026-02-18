@@ -1,4 +1,5 @@
 import type { ConsoleEntry } from "../lib/event-types"
+import { Duration } from "./ConsoleEntry"
 
 type ToolEntry = Extract<ConsoleEntry, { kind: "tool" }>
 
@@ -32,7 +33,7 @@ function formatInput(input: Record<string, unknown>): string {
 		.join("\n")
 }
 
-export function ToolExecution({ entry }: { entry: ToolEntry }) {
+export function ToolExecution({ entry, duration }: { entry: ToolEntry; duration: string | null }) {
 	const isLoading = entry.output === null
 
 	return (
@@ -42,6 +43,7 @@ export function ToolExecution({ entry }: { entry: ToolEntry }) {
 				<span className="tool-name">{entry.toolName}</span>
 				<span className="tool-summary">{getToolSummary(entry)}</span>
 				{isLoading && <span className="spinner" />}
+				<Duration value={duration} />
 			</summary>
 			<div className="tool-body">
 				<div className="section-label">Input</div>

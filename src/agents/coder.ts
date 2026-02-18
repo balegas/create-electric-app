@@ -29,6 +29,7 @@ export async function runCoder(
 	reporter?: ProgressReporter,
 	onMessage?: (msg: Record<string, unknown>) => void,
 	resumeSessionId?: string,
+	abortController?: AbortController,
 ): Promise<CoderResult> {
 	const r = reporter ?? createProgressReporter()
 	const coderPrompt = buildCoderPrompt(projectDir)
@@ -60,7 +61,7 @@ export async function runCoder(
 	}
 
 	const queryOptions: Record<string, unknown> = {
-		model: "claude-sonnet-4-5-20250929",
+		model: "claude-sonnet-4-6",
 		systemPrompt: coderPrompt,
 		maxThinkingTokens: 8192,
 		allowedTools: [
@@ -70,6 +71,7 @@ export async function runCoder(
 			"Glob",
 			"Grep",
 			"Bash",
+			"WebSearch",
 			"mcp__electric-agent-tools__build",
 			"mcp__electric-agent-tools__read_playbook",
 			"mcp__electric-agent-tools__list_playbooks",
@@ -86,6 +88,11 @@ export async function runCoder(
 	// Resume previous conversation if session ID is provided
 	if (resumeSessionId) {
 		queryOptions.resume = resumeSessionId
+	}
+
+	// Wire abort controller so cancellation stops the SDK agent
+	if (abortController) {
+		queryOptions.abortController = abortController
 	}
 
 	try {

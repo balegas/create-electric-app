@@ -1,3 +1,18 @@
+---
+name: electric-app-guardrails
+description: Project-specific guardrails for drizzle-zod integration, parseDates, ClientOnly, testing patterns, and hallucination guard. Read this FIRST before coding.
+triggers:
+  - zod-schemas
+  - drizzle-zod
+  - parseDates
+  - ClientOnly
+  - testing
+  - smoke test
+  - hallucination
+  - lucide
+  - icons
+---
+
 # Project-Specific Guardrails
 
 Patterns NOT covered by external playbooks. Read playbooks for collections, live-queries, mutations, schemas, and Electric quickstart patterns.

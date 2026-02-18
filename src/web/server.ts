@@ -6,13 +6,20 @@ import { serve } from "@hono/node-server"
 import { serveStatic } from "@hono/node-server/serve-static"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
+import { inferProjectName } from "../agents/clarifier.js"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
-import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
+import {
+	type OrchestratorCallbacks,
+	resolveProjectDir,
+	runIterate,
+	runNew,
+} from "../engine/orchestrator.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { getStreamServerUrl } from "./infra.js"
 import {
 	addSession,
+	deleteSession,
 	getSession,
 	readSessionIndex,
 	type SessionInfo,
@@ -113,15 +120,9 @@ export function createApp(config: ServerConfig) {
 		}
 
 		const sessionId = crypto.randomUUID()
-		const projectName =
-			body.name ||
-			body.description
-				.toLowerCase()
-				.replace(/[^a-z0-9\s-]/g, "")
-				.replace(/\s+/g, "-")
-				.slice(0, 50)
+		const inferredName = body.name || (await inferProjectName(body.description))
 		const baseDir = body.baseDir || process.cwd()
-		const projectDir = path.resolve(baseDir, projectName)
+		const { projectName, projectDir } = resolveProjectDir(baseDir, inferredName)
 
 		// Create the durable stream
 		const url = streamUrl(config.streamsPort, sessionId)
@@ -165,9 +166,17 @@ export function createApp(config: ServerConfig) {
 			projectName,
 			baseDir,
 			callbacks,
+			abortController: controller,
 		})
-			.then(() => {
-				updateSessionInfo(config.dataDir, sessionId, { status: "complete" })
+			.then((result) => {
+				if (result.sessionId) {
+					updateSessionInfo(config.dataDir, sessionId, {
+						status: "complete",
+						lastCoderSessionId: result.sessionId,
+					})
+				} else {
+					updateSessionInfo(config.dataDir, sessionId, { status: "complete" })
+				}
 			})
 			.catch((err: unknown) => {
 				const msg = err instanceof Error ? err.message : "Unknown error"
@@ -197,6 +206,14 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "request is required" }, 400)
 		}
 
+		// Abort any active run for this session before starting a new one
+		const existingController = activeRuns.get(sessionId)
+		if (existingController) {
+			existingController.abort()
+			activeRuns.delete(sessionId)
+			rejectAllGates(sessionId)
+		}
+
 		// Re-use the existing stream (append to same log)
 		const { callbacks } = createWebCallbacks(sessionId, config.streamsPort)
 
@@ -215,9 +232,14 @@ export function createApp(config: ServerConfig) {
 			projectDir: session.projectDir,
 			userRequest: body.request,
 			callbacks,
+			abortController: controller,
+			resumeSessionId: session.lastCoderSessionId,
 		})
-			.then(() => {
-				updateSessionInfo(config.dataDir, sessionId, { status: "complete" })
+			.then((result) => {
+				updateSessionInfo(config.dataDir, sessionId, {
+					status: "complete",
+					lastCoderSessionId: result.sessionId,
+				})
 			})
 			.catch((err: unknown) => {
 				const msg = err instanceof Error ? err.message : "Unknown error"
@@ -282,6 +304,21 @@ export function createApp(config: ServerConfig) {
 		}
 		rejectAllGates(sessionId)
 		updateSessionInfo(config.dataDir, sessionId, { status: "cancelled" })
+		return c.json({ ok: true })
+	})
+
+	// Delete a session
+	app.delete("/api/sessions/:id", (c) => {
+		const sessionId = c.req.param("id")
+		// Abort if still running
+		const controller = activeRuns.get(sessionId)
+		if (controller) {
+			controller.abort()
+			activeRuns.delete(sessionId)
+		}
+		rejectAllGates(sessionId)
+		const deleted = deleteSession(config.dataDir, sessionId)
+		if (!deleted) return c.json({ error: "Session not found" }, 404)
 		return c.json({ ok: true })
 	})
 

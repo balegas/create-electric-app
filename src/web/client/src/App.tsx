@@ -5,10 +5,52 @@ import { useSession } from "./hooks/useSession"
 import {
 	cancelSession,
 	createSession,
+	deleteSession,
 	listSessions,
 	type SessionInfo,
 	sendIterate,
 } from "./lib/api"
+import type { ConsoleEntry } from "./lib/event-types"
+
+function serializeEntries(entries: ConsoleEntry[]): string {
+	const lines: string[] = []
+	for (const entry of entries) {
+		switch (entry.kind) {
+			case "user_message":
+				lines.push(`## User\n\n${entry.message}\n`)
+				break
+			case "text":
+				lines.push(`## Assistant\n\n${entry.text}\n`)
+				break
+			case "log":
+				lines.push(`[${entry.level}] ${entry.message}`)
+				break
+			case "tool": {
+				lines.push(`### Tool: ${entry.toolName}`)
+				lines.push("**Input:**")
+				lines.push("```json")
+				lines.push(JSON.stringify(entry.input, null, 2))
+				lines.push("```")
+				if (entry.output != null) {
+					lines.push("**Output:**")
+					lines.push("```")
+					lines.push(entry.output)
+					lines.push("```")
+				}
+				lines.push("")
+				break
+			}
+			case "gate":
+				if (entry.event.type === "plan_ready") {
+					lines.push(`## Plan\n\n${entry.event.plan}\n`)
+				} else if (entry.event.type === "clarification_needed") {
+					lines.push(`## Clarification Needed\n\n${entry.event.questions.join("\n")}\n`)
+				}
+				break
+		}
+	}
+	return lines.join("\n")
+}
 
 export function App() {
 	const [sessions, setSessions] = useState<SessionInfo[]>([])
@@ -52,7 +94,11 @@ export function App() {
 		async (request: string) => {
 			if (!activeSessionId) return
 			try {
+				// Sending a new iteration while running will auto-abort the current run server-side
 				await sendIterate(activeSessionId, request)
+				// Refresh session list to pick up status change
+				const data = await listSessions()
+				setSessions(data.sessions)
 			} catch (err) {
 				console.error("Failed to send iteration:", err)
 			}
@@ -70,6 +116,26 @@ export function App() {
 			console.error("Failed to cancel:", err)
 		}
 	}, [activeSessionId])
+
+	const handleDeleteSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
+		e.stopPropagation()
+		try {
+			await deleteSession(sessionId)
+			const data = await listSessions()
+			setSessions(data.sessions)
+		} catch (err) {
+			console.error("Failed to delete session:", err)
+		}
+	}, [])
+
+	const [copied, setCopied] = useState(false)
+	const handleCopyHistory = useCallback(() => {
+		const text = serializeEntries(entries)
+		navigator.clipboard.writeText(text).then(() => {
+			setCopied(true)
+			setTimeout(() => setCopied(false), 2000)
+		})
+	}, [entries])
 
 	// No active session — show creation UI
 	if (!activeSessionId) {
@@ -119,24 +185,42 @@ export function App() {
 											{s.description.length > 60 ? "..." : ""}
 										</span>
 									</div>
-									<span
-										style={{
-											fontSize: 11,
-											padding: "2px 8px",
-											borderRadius: 10,
-											background:
-												s.status === "complete"
-													? "var(--green)"
-													: s.status === "running"
-														? "var(--cyan)"
-														: s.status === "error"
-															? "var(--red)"
-															: "var(--text-subtle)",
-											color: "var(--bg)",
-										}}
-									>
-										{s.status}
-									</span>
+									<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+										<span
+											style={{
+												fontSize: 11,
+												padding: "2px 8px",
+												borderRadius: 10,
+												background:
+													s.status === "complete"
+														? "var(--green)"
+														: s.status === "running"
+															? "var(--cyan)"
+															: s.status === "error"
+																? "var(--red)"
+																: "var(--text-subtle)",
+												color: "var(--bg)",
+											}}
+										>
+											{s.status}
+										</span>
+										<span
+											onClick={(e) => handleDeleteSession(e, s.id)}
+											style={{
+												fontSize: 13,
+												color: "var(--text-subtle)",
+												cursor: "pointer",
+												padding: "2px 4px",
+												borderRadius: 4,
+												lineHeight: 1,
+											}}
+											onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
+											onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-subtle)")}
+											title="Delete session"
+										>
+											✕
+										</span>
+									</div>
 								</div>
 							))}
 					</div>
@@ -180,6 +264,17 @@ export function App() {
 					{!isLive && !isComplete && <span style={{ color: "var(--yellow)" }}>Connecting...</span>}
 				</div>
 				<span
+					onClick={handleCopyHistory}
+					style={{
+						color: copied ? "var(--green)" : "var(--text-subtle)",
+						cursor: "pointer",
+						fontSize: 13,
+						marginLeft: 8,
+					}}
+				>
+					{copied ? "Copied!" : "Copy log"}
+				</span>
+				<span
 					onClick={() => setActiveSessionId(null)}
 					style={{
 						color: "var(--text-subtle)",
@@ -196,8 +291,12 @@ export function App() {
 
 			<PromptInput
 				onSubmit={handleIterate}
-				placeholder={isRunning ? "Agent is working..." : "Describe changes you want to make..."}
-				disabled={isRunning}
+				placeholder={
+					isRunning
+						? "Send a message to start a new iteration (aborts current run)..."
+						: "Describe changes you want to make..."
+				}
+				disabled={false}
 			/>
 		</div>
 	)

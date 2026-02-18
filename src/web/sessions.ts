@@ -9,6 +9,8 @@ export interface SessionInfo {
 	createdAt: string
 	lastActiveAt: string
 	status: "running" | "complete" | "error" | "cancelled"
+	/** SDK session ID from the last coder run — used to resume conversation context across iterations */
+	lastCoderSessionId?: string
 }
 
 interface SessionIndex {
@@ -49,6 +51,15 @@ export function updateSessionInfo(
 		Object.assign(session, update, { lastActiveAt: new Date().toISOString() })
 		writeSessionIndex(dataDir, index)
 	}
+}
+
+export function deleteSession(dataDir: string, sessionId: string): boolean {
+	const index = readSessionIndex(dataDir)
+	const before = index.sessions.length
+	index.sessions = index.sessions.filter((s) => s.id !== sessionId)
+	if (index.sessions.length === before) return false
+	writeSessionIndex(dataDir, index)
+	return true
 }
 
 export function getSession(dataDir: string, sessionId: string): SessionInfo | undefined {

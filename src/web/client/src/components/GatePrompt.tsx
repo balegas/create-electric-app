@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { respondToGate } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
+import { Duration } from "./ConsoleEntry"
 
 type GateEntry = Extract<ConsoleEntry, { kind: "gate" }>
 
@@ -148,7 +149,13 @@ function ContinueGate({
 	)
 }
 
-export function GatePrompt({ sessionId, entry, entryIndex, onResolved }: GatePromptProps) {
+export function GatePrompt({
+	sessionId,
+	entry,
+	entryIndex,
+	onResolved,
+	duration,
+}: GatePromptProps & { duration: string | null }) {
 	if (entry.resolved) {
 		// Show collapsed resolved state
 		const label =
@@ -161,6 +168,7 @@ export function GatePrompt({ sessionId, entry, entryIndex, onResolved }: GatePro
 			<div className="console-entry">
 				<span className="prefix done">[gate]</span>
 				<span style={{ color: "var(--text-subtle)" }}>{label}</span>
+				<Duration value={duration} />
 			</div>
 		)
 	}

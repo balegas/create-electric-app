@@ -16,6 +16,7 @@ export async function runPlanner(
 	projectDir: string,
 	reporter?: ProgressReporter,
 	onMessage?: (msg: Record<string, unknown>) => void,
+	abortController?: AbortController,
 ): Promise<string> {
 	const r = reporter ?? createProgressReporter()
 	const plannerPrompt = buildPlannerPrompt()
@@ -38,28 +39,35 @@ Steps (exactly 3 tool calls, then output):
 3. read_playbook("tanstack-db")
 4. Output the PLAN.md with complete Drizzle pgTable() definitions for ALL entities
 
-Do NOT read any other playbooks. Do NOT explore the filesystem. The coder agent reads specific playbooks (collections, mutations, etc.) as it works on each phase.`,
+The plan must include read_playbook instructions in each phase so the coder reads the right playbook before coding that phase (see system prompt for format).`,
 			},
 		}
 	}
 
+	const queryOptions: Record<string, unknown> = {
+		model: "claude-opus-4-6",
+		systemPrompt: plannerPrompt,
+		maxThinkingTokens: 10000,
+		allowedTools: [
+			"WebSearch",
+			"mcp__electric-agent-tools__read_playbook",
+			"mcp__electric-agent-tools__list_playbooks",
+		],
+		mcpServers: { "electric-agent-tools": mcpServer },
+		hooks: plannerHooks,
+		cwd: projectDir,
+		maxTurns: 10,
+		permissionMode: "bypassPermissions",
+		allowDangerouslySkipPermissions: true,
+	}
+
+	if (abortController) {
+		queryOptions.abortController = abortController
+	}
+
 	for await (const message of query({
 		prompt: generateMessages(),
-		options: {
-			model: "claude-opus-4-6",
-			systemPrompt: plannerPrompt,
-			maxThinkingTokens: 10000,
-			allowedTools: [
-				"mcp__electric-agent-tools__read_playbook",
-				"mcp__electric-agent-tools__list_playbooks",
-			],
-			mcpServers: { "electric-agent-tools": mcpServer },
-			hooks: plannerHooks,
-			cwd: projectDir,
-			maxTurns: 10,
-			permissionMode: "bypassPermissions",
-			allowDangerouslySkipPermissions: true,
-		},
+		options: queryOptions,
 	})) {
 		processAgentMessage(message, r)
 		onMessage?.(message)

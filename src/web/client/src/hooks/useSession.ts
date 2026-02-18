@@ -15,7 +15,10 @@ export function useSession(sessionId: string | null) {
 		setEntries((prev) => {
 			switch (event.type) {
 				case "log":
-					return [...prev, { kind: "log" as const, level: event.level, message: event.message }]
+					return [
+						...prev,
+						{ kind: "log" as const, level: event.level, message: event.message, ts: event.ts },
+					]
 
 				case "user_message":
 					return [...prev, { kind: "user_message" as const, message: event.message }]
@@ -29,6 +32,7 @@ export function useSession(sessionId: string | null) {
 							toolUseId: event.toolUseId,
 							input: event.input,
 							output: null,
+							ts: event.ts,
 						},
 					]
 
@@ -46,16 +50,12 @@ export function useSession(sessionId: string | null) {
 				}
 
 				case "assistant_text":
-					// Collapse consecutive text entries
-					if (event.text.length > 10) {
-						return [...prev, { kind: "text" as const, text: event.text }]
-					}
-					return prev
+					return [...prev, { kind: "text" as const, text: event.text, ts: event.ts }]
 
 				case "clarification_needed":
 				case "plan_ready":
 				case "continue_needed":
-					return [...prev, { kind: "gate" as const, event, resolved: false }]
+					return [...prev, { kind: "gate" as const, event, resolved: false, ts: event.ts }]
 
 				case "session_complete":
 					return prev
@@ -76,18 +76,11 @@ export function useSession(sessionId: string | null) {
 	useEffect(() => {
 		if (!sessionId) return
 
-		// Reset state
+		// Reset state — always replay from the beginning so we get the full history
 		setEntries([])
 		setIsLive(false)
 		setIsComplete(false)
-
-		// Restore offset from localStorage
-		const savedOffset = localStorage.getItem(`offset:${sessionId}`)
-		if (savedOffset) {
-			offsetRef.current = savedOffset
-		} else {
-			offsetRef.current = "-1"
-		}
+		offsetRef.current = "-1"
 
 		let cancelled = false
 
@@ -113,7 +106,6 @@ export function useSession(sessionId: string | null) {
 						processEvent(item)
 					}
 					offsetRef.current = batch.offset
-					localStorage.setItem(`offset:${sessionId}`, batch.offset)
 				})
 			} catch {
 				// Stream may not exist yet, retry after a delay
