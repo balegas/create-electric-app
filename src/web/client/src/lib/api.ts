@@ -65,3 +65,14 @@ export function deleteSession(sessionId: string) {
 		method: "DELETE",
 	})
 }
+
+export function getSettings() {
+	return request<{ hasApiKey: boolean }>("/settings")
+}
+
+export function updateSettings(settings: { anthropicApiKey: string }) {
+	return request<{ ok: boolean }>("/settings", {
+		method: "PUT",
+		body: settings,
+	})
+}

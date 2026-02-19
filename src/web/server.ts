@@ -1,5 +1,7 @@
+import { execFileSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
+import { homedir } from "node:os"
 import path from "node:path"
 import { DurableStream } from "@durable-streams/client"
 import { serve } from "@hono/node-server"
@@ -34,6 +36,19 @@ interface ServerConfig {
 
 // Active orchestrator abort controllers
 const activeRuns = new Map<string, AbortController>()
+
+/** Check if the Claude CLI is installed and authenticated (OAuth) */
+function hasClaudeCliAuth(): boolean {
+	try {
+		const configDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(homedir(), ".claude")
+		if (!fs.existsSync(configDir)) return false
+		// The CLI is available if its executable exists and returns a version
+		execFileSync("claude", ["--version"], { stdio: "ignore", timeout: 3000 })
+		return true
+	} catch {
+		return false
+	}
+}
 
 function streamUrl(streamsPort: number, sessionId: string): string {
 	return `${getStreamServerUrl(streamsPort)}/session/${sessionId}`
@@ -93,6 +108,20 @@ export function createApp(config: ServerConfig) {
 	app.use("*", cors({ origin: "*" }))
 
 	// --- API Routes ---
+
+	// Settings
+	app.get("/api/settings", (c) => {
+		const hasApiKey = !!process.env.ANTHROPIC_API_KEY || hasClaudeCliAuth()
+		return c.json({ hasApiKey })
+	})
+
+	app.put("/api/settings", async (c) => {
+		const body = (await c.req.json()) as { anthropicApiKey?: string }
+		if (body.anthropicApiKey) {
+			process.env.ANTHROPIC_API_KEY = body.anthropicApiKey
+		}
+		return c.json({ ok: true })
+	})
 
 	// List all sessions
 	app.get("/api/sessions", (c) => {

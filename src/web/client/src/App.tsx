@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { Console } from "./components/Console"
 import { PromptInput } from "./components/PromptInput"
+import { Settings } from "./components/Settings"
 import { useSession } from "./hooks/useSession"
 import {
 	cancelSession,
 	createSession,
 	deleteSession,
+	getSettings,
 	listSessions,
 	type SessionInfo,
 	sendIterate,
@@ -57,13 +59,21 @@ export function App() {
 	const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
 	const [activeSession, setActiveSession] = useState<SessionInfo | null>(null)
 	const [loading, setLoading] = useState(false)
+	const [hasApiKey, setHasApiKey] = useState<boolean | null>(null)
+	const [showSettings, setShowSettings] = useState(false)
 
-	const { entries, isLive, isComplete, markGateResolved } = useSession(activeSessionId)
+	const { entries, isLive, isComplete, totalCost, markGateResolved } = useSession(activeSessionId)
 
-	// Load sessions on mount
+	// Load sessions and settings on mount
 	useEffect(() => {
 		listSessions()
 			.then((data) => setSessions(data.sessions))
+			.catch(() => {})
+		getSettings()
+			.then((data) => {
+				setHasApiKey(data.hasApiKey)
+				if (!data.hasApiKey) setShowSettings(true)
+			})
 			.catch(() => {})
 	}, [])
 
@@ -128,6 +138,12 @@ export function App() {
 		}
 	}, [])
 
+	const refreshSettings = useCallback(() => {
+		getSettings()
+			.then((data) => setHasApiKey(data.hasApiKey))
+			.catch(() => {})
+	}, [])
+
 	const [copied, setCopied] = useState(false)
 	const handleCopyHistory = useCallback(() => {
 		const text = serializeEntries(entries)
@@ -143,7 +159,22 @@ export function App() {
 			<div className="app">
 				<div className="header">
 					<h1>Electric Agent</h1>
+					<div className="status">
+						<span
+							onClick={() => setShowSettings((v) => !v)}
+							style={{
+								cursor: "pointer",
+								color: showSettings ? "var(--brand-1)" : "var(--text-subtle)",
+							}}
+						>
+							Settings
+						</span>
+					</div>
 				</div>
+
+				{showSettings && hasApiKey !== null && (
+					<Settings hasApiKey={hasApiKey} onKeySaved={refreshSettings} />
+				)}
 
 				{sessions.length > 0 && (
 					<div style={{ padding: "16px 0", borderBottom: "1px solid var(--border)" }}>
@@ -233,8 +264,12 @@ export function App() {
 
 				<PromptInput
 					onSubmit={handleNewProject}
-					placeholder="Describe the application you want to build..."
-					disabled={loading}
+					placeholder={
+						hasApiKey === false
+							? "Set an API key in Settings to get started..."
+							: "Describe the application you want to build..."
+					}
+					disabled={loading || hasApiKey === false}
 				/>
 			</div>
 		)
@@ -251,18 +286,15 @@ export function App() {
 					{activeSession?.projectName}
 				</span>
 				<div className="status">
-					{isRunning && (
-						<>
-							<span style={{ color: "var(--green)" }}>Live</span>
-							{" | "}
-							<span onClick={handleCancel} style={{ color: "var(--red)", cursor: "pointer" }}>
-								Cancel
-							</span>
-						</>
-					)}
+					{isRunning && <span style={{ color: "var(--green)" }}>Live</span>}
 					{isComplete && <span style={{ color: "var(--text-subtle)" }}>Complete</span>}
 					{!isLive && !isComplete && <span style={{ color: "var(--yellow)" }}>Connecting...</span>}
 				</div>
+				{totalCost > 0 && (
+					<span style={{ color: "var(--text-subtle)", fontSize: 12, marginLeft: 8 }}>
+						${totalCost.toFixed(4)}
+					</span>
+				)}
 				<span
 					onClick={handleCopyHistory}
 					style={{
@@ -273,6 +305,17 @@ export function App() {
 					}}
 				>
 					{copied ? "Copied!" : "Copy log"}
+				</span>
+				<span
+					onClick={() => setShowSettings((v) => !v)}
+					style={{
+						color: showSettings ? "var(--brand-1)" : "var(--text-subtle)",
+						cursor: "pointer",
+						fontSize: 13,
+						marginLeft: 8,
+					}}
+				>
+					Settings
 				</span>
 				<span
 					onClick={() => setActiveSessionId(null)}
@@ -287,6 +330,10 @@ export function App() {
 				</span>
 			</div>
 
+			{showSettings && hasApiKey !== null && (
+				<Settings hasApiKey={hasApiKey} onKeySaved={refreshSettings} />
+			)}
+
 			<Console sessionId={activeSessionId} entries={entries} onGateResolved={markGateResolved} />
 
 			<PromptInput
@@ -297,6 +344,8 @@ export function App() {
 						: "Describe changes you want to make..."
 				}
 				disabled={false}
+				isRunning={isRunning}
+				onCancel={handleCancel}
 			/>
 		</div>
 	)
