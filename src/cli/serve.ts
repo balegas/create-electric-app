@@ -6,16 +6,18 @@ export async function serveCommand(opts: {
 	streamsPort?: number
 	dataDir?: string
 	open?: boolean
+	sandbox?: boolean
 }): Promise<void> {
 	const port = opts.port ?? 4400
 	const streamsPort = opts.streamsPort ?? 4437
 	const dataDir = opts.dataDir ?? ".electric-agent"
+	const sandbox = opts.sandbox ?? false
 
 	// Start durable streams server
 	await startStreamServer({ port: streamsPort, dataDir })
 
 	// Start web API + static file server
-	await startWebServer({ port, streamsPort, dataDir })
+	await startWebServer({ port, streamsPort, dataDir, sandbox })
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
 
@@ -32,15 +34,21 @@ export async function serveCommand(opts: {
 		exec(cmd)
 	}
 
-	// Keep process alive
-	process.on("SIGINT", async () => {
+	// Graceful shutdown — force exit on second Ctrl+C
+	let shuttingDown = false
+	const shutdown = async () => {
+		if (shuttingDown) {
+			process.exit(1)
+		}
+		shuttingDown = true
 		console.log("\nShutting down...")
-		await stopStreamServer()
+		try {
+			await stopStreamServer()
+		} catch {
+			// Best-effort cleanup
+		}
 		process.exit(0)
-	})
-
-	process.on("SIGTERM", async () => {
-		await stopStreamServer()
-		process.exit(0)
-	})
+	}
+	process.on("SIGINT", shutdown)
+	process.on("SIGTERM", shutdown)
 }

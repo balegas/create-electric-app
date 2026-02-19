@@ -11,6 +11,10 @@ export interface SessionInfo {
 	status: "running" | "complete" | "error" | "cancelled"
 	/** SDK session ID from the last coder run — used to resume conversation context across iterations */
 	lastCoderSessionId?: string
+	/** Docker container ID when running in sandbox mode */
+	containerId?: string
+	/** Host port mapped to the container's dev server */
+	appPort?: number
 }
 
 interface SessionIndex {

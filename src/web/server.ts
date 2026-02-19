@@ -17,6 +17,14 @@ import {
 	runIterate,
 	runNew,
 } from "../engine/orchestrator.js"
+import { bridgeContainerToStream } from "./container-bridge.js"
+import {
+	createContainer,
+	destroyContainer,
+	getContainer,
+	sendCommand,
+	sendGateResponse,
+} from "./docker.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { getStreamServerUrl } from "./infra.js"
 import {
@@ -32,6 +40,7 @@ interface ServerConfig {
 	port: number
 	streamsPort: number
 	dataDir: string
+	sandbox: boolean
 }
 
 // Active orchestrator abort controllers
@@ -176,7 +185,45 @@ export function createApp(config: ServerConfig) {
 		}
 		addSession(config.dataDir, session)
 
-		// Start orchestrator in the background
+		if (config.sandbox) {
+			// Sandbox mode: spawn a Docker container
+			try {
+				const handle = await createContainer(sessionId)
+				updateSessionInfo(config.dataDir, sessionId, {
+					containerId: handle.containerId,
+					appPort: handle.port,
+				})
+
+				// Write user prompt to the stream so it shows in the UI
+				const promptStream = new DurableStream({ url, contentType: "application/json" })
+				await promptStream.append(
+					JSON.stringify({ type: "user_message", message: body.description, ts: ts() }),
+				)
+
+				// Bridge container stdout → durable stream
+				bridgeContainerToStream(sessionId, handle.process, url, (success) => {
+					updateSessionInfo(config.dataDir, sessionId, {
+						status: success ? "complete" : "error",
+					})
+				})
+
+				// Send the initial config to the container
+				sendCommand(handle, {
+					command: "new",
+					description: body.description,
+					projectName,
+					baseDir: "/home/agent/workspace",
+				})
+
+				return c.json({ sessionId, streamUrl: url, appPort: handle.port }, 201)
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : "Failed to create container"
+				updateSessionInfo(config.dataDir, sessionId, { status: "error" })
+				return c.json({ error: msg }, 500)
+			}
+		}
+
+		// Local mode: run orchestrator in-process
 		const controller = new AbortController()
 		activeRuns.set(sessionId, controller)
 
@@ -235,6 +282,51 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "request is required" }, 400)
 		}
 
+		if (config.sandbox) {
+			// Kill existing container if any
+			const existingHandle = getContainer(sessionId)
+			if (existingHandle) {
+				destroyContainer(existingHandle)
+			}
+
+			// Write user prompt to the stream
+			const url = streamUrl(config.streamsPort, sessionId)
+			const promptStream = new DurableStream({ url, contentType: "application/json" })
+			await promptStream.append(
+				JSON.stringify({ type: "user_message", message: body.request, ts: ts() }),
+			)
+
+			updateSessionInfo(config.dataDir, sessionId, { status: "running" })
+
+			try {
+				const handle = await createContainer(sessionId)
+				updateSessionInfo(config.dataDir, sessionId, {
+					containerId: handle.containerId,
+					appPort: handle.port,
+				})
+
+				bridgeContainerToStream(sessionId, handle.process, url, (success) => {
+					updateSessionInfo(config.dataDir, sessionId, {
+						status: success ? "complete" : "error",
+					})
+				})
+
+				sendCommand(handle, {
+					command: "iterate",
+					projectDir: session.projectDir,
+					request: body.request,
+					resumeSessionId: session.lastCoderSessionId,
+				})
+
+				return c.json({ ok: true })
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : "Failed to create container"
+				updateSessionInfo(config.dataDir, sessionId, { status: "error" })
+				return c.json({ error: msg }, 500)
+			}
+		}
+
+		// Local mode
 		// Abort any active run for this session before starting a new one
 		const existingController = activeRuns.get(sessionId)
 		if (existingController) {
@@ -297,6 +389,19 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "gate is required" }, 400)
 		}
 
+		// Sandbox mode: forward gate response to container stdin
+		if (config.sandbox) {
+			const handle = getContainer(sessionId)
+			if (!handle) {
+				return c.json({ error: "No active container found" }, 404)
+			}
+			// Strip the "gate" key and pass the rest as the value payload
+			const { gate: _, ...value } = body
+			sendGateResponse(handle, gate, value as Record<string, unknown>)
+			return c.json({ ok: true })
+		}
+
+		// Local mode: resolve in-process gate
 		let value: unknown
 		switch (gate) {
 			case "clarification":
@@ -326,6 +431,14 @@ export function createApp(config: ServerConfig) {
 	// Cancel a running session
 	app.post("/api/sessions/:id/cancel", (c) => {
 		const sessionId = c.req.param("id")
+
+		// Sandbox mode: destroy the container
+		if (config.sandbox) {
+			const handle = getContainer(sessionId)
+			if (handle) destroyContainer(handle)
+		}
+
+		// Local mode: abort in-process run
 		const controller = activeRuns.get(sessionId)
 		if (controller) {
 			controller.abort()
@@ -339,7 +452,14 @@ export function createApp(config: ServerConfig) {
 	// Delete a session
 	app.delete("/api/sessions/:id", (c) => {
 		const sessionId = c.req.param("id")
-		// Abort if still running
+
+		// Sandbox mode: destroy the container
+		if (config.sandbox) {
+			const handle = getContainer(sessionId)
+			if (handle) destroyContainer(handle)
+		}
+
+		// Local mode: abort if still running
 		const controller = activeRuns.get(sessionId)
 		if (controller) {
 			controller.abort()
@@ -379,11 +499,13 @@ export async function startWebServer(opts: {
 	port?: number
 	streamsPort?: number
 	dataDir?: string
+	sandbox?: boolean
 }): Promise<void> {
 	const config: ServerConfig = {
 		port: opts.port ?? 4400,
 		streamsPort: opts.streamsPort ?? 4437,
 		dataDir: opts.dataDir ?? path.resolve(process.cwd(), ".electric-agent"),
+		sandbox: opts.sandbox ?? false,
 	}
 
 	fs.mkdirSync(config.dataDir, { recursive: true })

@@ -52,6 +52,11 @@ function buildEnhancedDescription(
 			}
 		}
 	}
+	// Extra free-text answer beyond the numbered questions
+	const extra = answers[questions.length]
+	if (extra) {
+		enhanced += `\n\nExtra context from the user:\n${extra}`
+	}
 	return enhanced
 }
 
@@ -80,7 +85,7 @@ export async function runNew(opts: {
 	autoApprove?: boolean
 	callbacks: OrchestratorCallbacks
 	abortController?: AbortController
-}): Promise<{ sessionId?: string }> {
+}): Promise<{ sessionId?: string; projectDir?: string }> {
 	const { callbacks } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
 	const reporter = createReporterFromCallbacks(callbacks, opts.verbose)
@@ -185,7 +190,7 @@ export async function runNew(opts: {
 			errors: ["Playbook validation failed"],
 			ts: ts(),
 		})
-		return {}
+		return { projectDir }
 	}
 
 	// Step 2: Plan
@@ -230,7 +235,7 @@ export async function runNew(opts: {
 				success: false,
 				ts: ts(),
 			})
-			return {}
+			return { projectDir }
 		}
 	}
 
@@ -275,7 +280,7 @@ export async function runNew(opts: {
 				ts: ts(),
 			})
 			emit({ type: "session_complete", success: true, ts: ts() })
-			return { sessionId: result.sessionId }
+			return { sessionId: result.sessionId, projectDir }
 		}
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
 		result = await runCoder(
@@ -319,7 +324,7 @@ export async function runNew(opts: {
 		ts: ts(),
 	})
 	emit({ type: "session_complete", success: result.success, ts: ts() })
-	return { sessionId: result.sessionId }
+	return { sessionId: result.sessionId, projectDir }
 }
 
 /**

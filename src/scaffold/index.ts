@@ -211,6 +211,21 @@ function patchViteConfig(projectDir: string): void {
 		content = content.replace(/port:\s*5174,?/, "port: 5174,\n\t\thost: true,")
 	}
 
+	// Add proxy for Electric shape API — works with both Caddy (external) and
+	// sandbox (no Caddy, Electric on localhost:3000) setups
+	if (!content.includes("proxy:")) {
+		const proxyBlock = [
+			"\t\tproxy: {",
+			"\t\t\t'/v1/shape': {",
+			"\t\t\t\ttarget: process.env.ELECTRIC_URL || 'http://localhost:3000',",
+			"\t\t\t\tchangeOrigin: true,",
+			"\t\t\t},",
+			"\t\t},",
+		].join("\n")
+		// Insert proxy after the host: true line
+		content = content.replace(/(host:\s*true,?)/, `$1\n${proxyBlock}`)
+	}
+
 	fs.writeFileSync(vitePath, content, "utf-8")
 }
 
