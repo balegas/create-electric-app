@@ -1,4 +1,4 @@
-export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "debug"
+export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "verbose"
 
 export type EngineEvent =
 	| { type: "log"; level: LogLevel; message: string; ts: string }
@@ -37,6 +37,7 @@ export type ConsoleEntry =
 			ts: string
 	  }
 	| { kind: "text"; text: string; ts: string }
+	| { kind: "thinking"; text: string; ts: string }
 	| {
 			kind: "gate"
 			event: Extract<

@@ -36,42 +36,42 @@ export async function scaffold(
 		fs.mkdirSync(projectDir, { recursive: true })
 	}
 	try {
-		reporter?.log("debug", "Cloning KPB template via gitpick...")
+		reporter?.log("verbose", "Cloning KPB template via gitpick...")
 		execSync(`npx gitpick KyleAMathews/kpb ${projectDir} -o`, {
 			stdio: "pipe",
 			timeout: 120_000,
 		})
-		reporter?.log("debug", "KPB template cloned")
+		reporter?.log("verbose", "KPB template cloned")
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : "gitpick failed"
 		throw new Error(`Failed to clone KPB template: ${msg}`)
 	}
 
 	// Step 2: Copy template overlay files
-	reporter?.log("debug", "Copying template overlay files...")
+	reporter?.log("verbose", "Copying template overlay files...")
 	copyTemplateFiles(templateDir, projectDir)
-	reporter?.log("debug", "Template overlay complete")
+	reporter?.log("verbose", "Template overlay complete")
 
 	// Step 3: Merge dependencies and rename project
-	reporter?.log("debug", "Merging dependencies into package.json...")
+	reporter?.log("verbose", "Merging dependencies into package.json...")
 	mergeDependencies(projectDir, opts?.projectName)
 
 	// Step 4: Delete stale lockfile (we changed deps, lockfile is now invalid)
 	const lockPath = path.join(projectDir, "pnpm-lock.yaml")
 	if (fs.existsSync(lockPath)) {
 		fs.unlinkSync(lockPath)
-		reporter?.log("debug", "Removed stale pnpm-lock.yaml")
+		reporter?.log("verbose", "Removed stale pnpm-lock.yaml")
 	}
 
 	// Step 5: Patch vite.config.ts
-	reporter?.log("debug", "Patching vite.config.ts...")
+	reporter?.log("verbose", "Patching vite.config.ts...")
 	patchViteConfig(projectDir)
 
 	// Step 6: Patch root route for shellComponent
 	patchRootRoute(projectDir)
 
 	// Step 6b: Fix public-dir CSS imports that break Rollup production builds
-	reporter?.log("debug", "Patching public CSS imports...")
+	reporter?.log("verbose", "Patching public CSS imports...")
 	patchPublicCssImports(projectDir)
 
 	// Step 7: Copy .env.example -> .env
@@ -79,7 +79,7 @@ export async function scaffold(
 	const envFile = path.join(projectDir, ".env")
 	if (fs.existsSync(envExample) && !fs.existsSync(envFile)) {
 		fs.copyFileSync(envExample, envFile)
-		reporter?.log("debug", "Copied .env.example to .env")
+		reporter?.log("verbose", "Copied .env.example to .env")
 	}
 
 	// Step 8: Create _agent/ working memory directory
@@ -87,7 +87,7 @@ export async function scaffold(
 	fs.mkdirSync(agentDir, { recursive: true })
 	fs.writeFileSync(path.join(agentDir, "errors.md"), "# Error Log\n\n", "utf-8")
 	fs.writeFileSync(path.join(agentDir, "session.md"), "# Session State\n\n", "utf-8")
-	reporter?.log("debug", "Created _agent/ working memory directory")
+	reporter?.log("verbose", "Created _agent/ working memory directory")
 
 	// Step 9: Patch .gitignore
 	patchGitignore(projectDir)
@@ -99,18 +99,18 @@ export async function scaffold(
 		try {
 			const installer = detectPackageManager(projectDir)
 			const ignoreWs = installer === "pnpm" ? " --ignore-workspace" : ""
-			reporter?.log("debug", `Running ${installer} install...`)
+			reporter?.log("verbose", `Running ${installer} install...`)
 			execSync(`${installer} install${ignoreWs}`, {
 				cwd: projectDir,
 				stdio: "pipe",
 				timeout: 180_000,
 			})
-			reporter?.log("debug", "Dependencies installed successfully")
+			reporter?.log("verbose", "Dependencies installed successfully")
 		} catch (e: unknown) {
 			const stdout = (e as Record<string, Buffer | string>)?.stdout?.toString() || ""
 			const stderr = (e as Record<string, Buffer | string>)?.stderr?.toString() || ""
 			const combined = `${stdout}\n${stderr}`.trim()
-			if (reporter?.debugMode) {
+			if (reporter?.verboseMode) {
 				errors.push(`Package install failed:\n${combined}`)
 			} else {
 				errors.push(`Package install failed: ${combined.slice(0, 500)}`)

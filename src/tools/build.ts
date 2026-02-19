@@ -72,8 +72,8 @@ export function createBuildTool(projectDir: string, reporter?: ProgressReporter)
 			}
 			const output = outputParts.join("\n")
 
-			if (reporter?.debugMode) {
-				reporter.log("debug", `[build output]\n${output}`)
+			if (reporter?.verboseMode) {
+				reporter.log("verbose", `[build output]\n${output}`)
 			}
 
 			return {

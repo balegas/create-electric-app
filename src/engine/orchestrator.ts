@@ -60,10 +60,9 @@ function buildEnhancedDescription(
  */
 function createMessageForwarder(
 	callbacks: OrchestratorCallbacks,
-	reporter: ProgressReporter,
 ): (msg: Record<string, unknown>) => void {
 	return (msg) => {
-		const events = sdkMessageToEvents(msg, reporter.debugMode)
+		const events = sdkMessageToEvents(msg)
 		for (const event of events) {
 			callbacks.onEvent(event)
 		}
@@ -77,14 +76,14 @@ export async function runNew(opts: {
 	description: string
 	projectName?: string
 	baseDir?: string
-	debug?: boolean
+	verbose?: boolean
 	autoApprove?: boolean
 	callbacks: OrchestratorCallbacks
 	abortController?: AbortController
 }): Promise<{ sessionId?: string }> {
 	const { callbacks } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
-	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
+	const reporter = createReporterFromCallbacks(callbacks, opts.verbose)
 
 	// Step 0: Evaluate confidence, clarify if needed, and infer project name
 	// Run evaluation and name inference in parallel to save time
@@ -191,7 +190,7 @@ export async function runNew(opts: {
 
 	// Step 2: Plan
 	emit({ type: "log", level: "plan", message: "Running planner agent...", ts: ts() })
-	const messageForwarder = createMessageForwarder(callbacks, reporter)
+	const messageForwarder = createMessageForwarder(callbacks)
 	let plan = await runPlanner(
 		description,
 		projectDir,
@@ -329,15 +328,15 @@ export async function runNew(opts: {
 export async function runIterate(opts: {
 	projectDir: string
 	userRequest: string
-	debug?: boolean
+	verbose?: boolean
 	callbacks: OrchestratorCallbacks
 	abortController?: AbortController
 	resumeSessionId?: string
 }): Promise<{ success: boolean; errors: string[]; sessionId?: string }> {
 	const { callbacks, projectDir, userRequest } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
-	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
-	const messageForwarder = createMessageForwarder(callbacks, reporter)
+	const reporter = createReporterFromCallbacks(callbacks, opts.verbose)
+	const messageForwarder = createMessageForwarder(callbacks)
 
 	const iterationPrompt = `The user wants the following change to the existing app:
 
@@ -408,7 +407,7 @@ Do NOT just write a plan — implement the changes directly.`
  */
 function createReporterFromCallbacks(
 	_callbacks: OrchestratorCallbacks,
-	debug?: boolean,
+	verbose?: boolean,
 ): ProgressReporter {
-	return createProgressReporter({ debug })
+	return createProgressReporter({ verbose })
 }

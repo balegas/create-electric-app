@@ -1,4 +1,4 @@
-export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "debug"
+export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "verbose"
 
 /**
  * Events emitted by the engine orchestrator.

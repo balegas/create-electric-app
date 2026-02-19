@@ -24,9 +24,9 @@ async function waitForHealth(url: string, maxAttempts = 30): Promise<boolean> {
 	return false
 }
 
-export async function upCommand(opts?: { debug?: boolean }): Promise<void> {
+export async function upCommand(opts?: { verbose?: boolean }): Promise<void> {
 	const projectDir = process.cwd()
-	const reporter = createProgressReporter({ debug: opts?.debug })
+	const reporter = createProgressReporter({ verbose: opts?.verbose })
 
 	if (!fs.existsSync(path.join(projectDir, "docker-compose.yml"))) {
 		reporter.log("error", "No docker-compose.yml found in current directory")

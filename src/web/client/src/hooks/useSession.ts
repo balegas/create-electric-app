@@ -52,6 +52,9 @@ export function useSession(sessionId: string | null) {
 				case "assistant_text":
 					return [...prev, { kind: "text" as const, text: event.text, ts: event.ts }]
 
+				case "assistant_thinking":
+					return [...prev, { kind: "thinking" as const, text: event.text, ts: event.ts }]
+
 				case "clarification_needed":
 				case "plan_ready":
 				case "continue_needed":

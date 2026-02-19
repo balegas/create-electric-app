@@ -6,7 +6,7 @@ import { runIterate } from "../engine/orchestrator.js"
 import { validatePlaybooks } from "../tools/playbook.js"
 import { readSession } from "../working-memory/session.js"
 
-export async function iterateCommand(opts?: { debug?: boolean }): Promise<void> {
+export async function iterateCommand(opts?: { verbose?: boolean }): Promise<void> {
 	const projectDir = process.cwd()
 
 	// Verify we're in a project directory
@@ -52,11 +52,11 @@ export async function iterateCommand(opts?: { debug?: boolean }): Promise<void> 
 
 		if (!userInput) continue
 
-		const callbacks = createCliCallbacks({ debug: opts?.debug })
+		const callbacks = createCliCallbacks({ verbose: opts?.verbose })
 		const result = await runIterate({
 			projectDir,
 			userRequest: userInput,
-			debug: opts?.debug,
+			verbose: opts?.verbose,
 			callbacks,
 			resumeSessionId: lastSessionId,
 		})

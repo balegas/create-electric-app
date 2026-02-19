@@ -16,7 +16,7 @@ program
 		"Turn natural-language app descriptions into running reactive Electric SQL + TanStack DB applications",
 	)
 	.version("0.1.0")
-	.option("--debug", "Enable debug logging")
+	.option("--verbose", "Enable verbose logging")
 
 program
 	.command("new")
@@ -24,40 +24,40 @@ program
 	.option("-n, --name <name>", "Project name (derived from description if not provided)")
 	.option("--no-approve", "Skip plan approval prompt and start building immediately")
 	.action(async (opts: { name?: string; approve?: boolean }) => {
-		const debug = program.opts().debug ?? false
-		await newCommand({ ...opts, debug })
+		const verbose = program.opts().verbose ?? false
+		await newCommand({ ...opts, verbose })
 	})
 
 program
 	.command("iterate")
 	.description("Enter conversational iteration mode for an existing project")
 	.action(async () => {
-		const debug = program.opts().debug ?? false
-		await iterateCommand({ debug })
+		const verbose = program.opts().verbose ?? false
+		await iterateCommand({ verbose })
 	})
 
 program
 	.command("status")
 	.description("Show the current project status and progress")
 	.action(async () => {
-		const debug = program.opts().debug ?? false
-		await statusCommand({ debug })
+		const verbose = program.opts().verbose ?? false
+		await statusCommand({ verbose })
 	})
 
 program
 	.command("up")
 	.description("Start Docker services, run migrations, and launch the dev server")
 	.action(async () => {
-		const debug = program.opts().debug ?? false
-		await upCommand({ debug })
+		const verbose = program.opts().verbose ?? false
+		await upCommand({ verbose })
 	})
 
 program
 	.command("down")
 	.description("Stop Docker services and dev server")
 	.action(async () => {
-		const debug = program.opts().debug ?? false
-		await downCommand({ debug })
+		const verbose = program.opts().verbose ?? false
+		await downCommand({ verbose })
 	})
 
 program

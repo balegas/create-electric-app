@@ -35,7 +35,7 @@ async function promptDescription(): Promise<string> {
 export async function newCommand(opts: {
 	name?: string
 	approve?: boolean
-	debug?: boolean
+	verbose?: boolean
 }): Promise<void> {
 	const description = await promptDescription()
 	if (!description.trim()) {
@@ -46,8 +46,8 @@ export async function newCommand(opts: {
 	await runNew({
 		description,
 		projectName: opts.name,
-		debug: opts.debug,
+		verbose: opts.verbose,
 		autoApprove: opts.approve === false,
-		callbacks: createCliCallbacks({ debug: opts.debug }),
+		callbacks: createCliCallbacks({ verbose: opts.verbose }),
 	})
 }

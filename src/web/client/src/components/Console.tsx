@@ -1,6 +1,11 @@
 import { useEffect, useRef } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
-import { ConsoleLogEntry, ConsoleTextEntry, ConsoleUserMessage } from "./ConsoleEntry"
+import {
+	ConsoleLogEntry,
+	ConsoleTextEntry,
+	ConsoleThinkingEntry,
+	ConsoleUserMessage,
+} from "./ConsoleEntry"
 import { GatePrompt } from "./GatePrompt"
 import { ToolExecution } from "./ToolExecution"
 
@@ -67,6 +72,8 @@ export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
 						)
 					case "text":
 						return <ConsoleTextEntry key={`text-${i}`} entry={entry} duration={duration} />
+					case "thinking":
+						return <ConsoleThinkingEntry key={`thinking-${i}`} entry={entry} duration={duration} />
 					case "gate":
 						return (
 							<GatePrompt

@@ -8,7 +8,7 @@ const LEVEL_LABELS: Record<string, string> = {
 	fix: "[fix]",
 	done: "[done]",
 	error: "[error]",
-	debug: "[debug]",
+	verbose: "[verbose]",
 }
 
 export function Duration({ value }: { value: string | null }) {
@@ -44,6 +44,28 @@ export function ConsoleUserMessage({
 			</span>
 			<span>{entry.message}</span>
 		</div>
+	)
+}
+
+export function ConsoleThinkingEntry({
+	entry,
+	duration,
+}: {
+	entry: Extract<ConsoleEntryType, { kind: "thinking" }>
+	duration: string | null
+}) {
+	return (
+		<details className="thinking-collapsible">
+			<summary>
+				<span className="arrow">&#9654;</span>
+				<span className="thinking-label">Thinking</span>
+				<span className="thinking-preview">{entry.text.slice(0, 100)}...</span>
+				<Duration value={duration} />
+			</summary>
+			<div className="thinking-body">
+				<pre>{entry.text}</pre>
+			</div>
+		</details>
 	)
 }
 

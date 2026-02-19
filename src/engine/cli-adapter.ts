@@ -11,17 +11,17 @@ const PREFIXES: Record<LogLevel, string> = {
 	fix: "\x1b[33m[fix]\x1b[0m",
 	done: "\x1b[32m[done]\x1b[0m",
 	error: "\x1b[31m[error]\x1b[0m",
-	debug: "\x1b[2m[debug]\x1b[0m",
+	verbose: "\x1b[2m[verbose]\x1b[0m",
 }
 
 /**
  * Map an EngineEvent to CLI console output.
  * Reproduces the exact same output the CLI had before the refactoring.
  */
-function cliEventHandler(event: EngineEvent, debugMode: boolean): void {
+function cliEventHandler(event: EngineEvent, verboseMode: boolean): void {
 	switch (event.type) {
 		case "log": {
-			if (event.level === "debug" && !debugMode) return
+			if (event.level === "verbose" && !verboseMode) return
 			console.log(`${PREFIXES[event.level]} ${event.message}`)
 			break
 		}
@@ -44,8 +44,8 @@ function cliEventHandler(event: EngineEvent, debugMode: boolean): void {
 			break
 		}
 		case "tool_result": {
-			if (debugMode) {
-				console.log(`\x1b[2m[debug]\x1b[0m [tool_result] ${event.output.slice(0, 1000)}`)
+			if (verboseMode) {
+				console.log(`\x1b[2m[verbose]\x1b[0m [tool_result] ${event.output.slice(0, 1000)}`)
 			}
 			// Surface build results
 			if (event.output.includes("=== pnpm run build ===")) {
@@ -72,16 +72,16 @@ function cliEventHandler(event: EngineEvent, debugMode: boolean): void {
 			break
 		}
 		case "assistant_text": {
-			if (debugMode) {
-				console.log(`\x1b[2m[debug]\x1b[0m ${event.text}`)
+			if (verboseMode) {
+				console.log(`\x1b[2m[verbose]\x1b[0m ${event.text}`)
 			} else if (event.text.length > 10) {
 				console.log(`${PREFIXES.task} ${event.text.slice(0, 200)}`)
 			}
 			break
 		}
 		case "assistant_thinking": {
-			if (debugMode) {
-				console.log(`\x1b[2m[debug]\x1b[0m [thinking] ${event.text.slice(0, 500)}`)
+			if (verboseMode) {
+				console.log(`\x1b[2m[verbose]\x1b[0m [thinking] ${event.text.slice(0, 500)}`)
 			}
 			break
 		}
@@ -99,12 +99,12 @@ function cliEventHandler(event: EngineEvent, debugMode: boolean): void {
  * Create OrchestratorCallbacks that use readline for CLI I/O.
  * This preserves the exact CLI behavior from before the refactoring.
  */
-export function createCliCallbacks(opts?: { debug?: boolean }): OrchestratorCallbacks {
-	const debugMode = opts?.debug ?? false
+export function createCliCallbacks(opts?: { verbose?: boolean }): OrchestratorCallbacks {
+	const verboseMode = opts?.verbose ?? false
 
 	return {
 		onEvent(event) {
-			cliEventHandler(event, debugMode)
+			cliEventHandler(event, verboseMode)
 		},
 
 		async onClarificationNeeded(questions, summary) {
@@ -185,6 +185,6 @@ export function createCliCallbacks(opts?: { debug?: boolean }): OrchestratorCall
  * Create a ProgressReporter backed by CLI callbacks.
  * Used by components that still need a ProgressReporter interface (e.g., scaffold).
  */
-export function createCliReporter(opts?: { debug?: boolean }): ProgressReporter {
+export function createCliReporter(opts?: { verbose?: boolean }): ProgressReporter {
 	return createProgressReporter(opts)
 }
