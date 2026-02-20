@@ -84,6 +84,52 @@ electric-agent serve -p 8080       # Custom port
 
 The web UI uses [durable-streams](https://github.com/durable-streams/durable-streams) to persist and stream all events over SSE. Each session gets its own stream, so you can close the browser and reconnect without losing context. Tool executions are collapsible — click to expand the full input/output.
 
+### Sandbox Mode (Docker)
+
+Run sessions inside isolated Docker containers instead of on the host machine. Each session spawns a container from the `electric-agent-sandbox` image — all scaffold, planning, coding, and builds happen inside the container. The generated app's dev server is port-mapped to the host, and a "Preview App" link appears in the web UI.
+
+See [Running with Sandbox Mode](#running-with-sandbox-mode) in the Development section for setup instructions.
+
+### Headless Mode
+
+Run the agent via an NDJSON protocol on stdin/stdout — useful for CI/CD, Docker, or programmatic usage:
+
+```bash
+electric-agent headless
+```
+
+The first line on stdin must be a JSON config object:
+
+```json
+{"command":"new","description":"a todo app","projectName":"my-todo"}
+```
+
+Or for iteration on an existing project:
+
+```json
+{"command":"iterate","projectDir":"/path/to/project","request":"add dark mode"}
+```
+
+Events stream as JSON lines on stdout (same `EngineEvent` types as the web UI). When the agent needs user input (plan approval, clarification), it emits a gate event and blocks until you send a response on stdin:
+
+```json
+{"gate":"approval","decision":"approve"}
+{"gate":"clarification","answers":["answer1","answer2"]}
+{"gate":"revision","feedback":"change the schema"}
+{"gate":"continue","proceed":true}
+```
+
+**Example with Docker:**
+
+```bash
+docker run -i --rm \
+  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  electric-agent-sandbox \
+  electric-agent headless
+```
+
+Then paste the config JSON and interact with gates as needed.
+
 ### Iteration Mode
 
 After the initial build, use `electric-agent iterate` for conversational changes:
@@ -202,7 +248,9 @@ electric-agent new <description>          # Create a new app
 electric-agent new <desc> --name my-app   # Custom project name
 electric-agent new <desc> --no-approve    # Skip plan approval
 electric-agent iterate                    # Conversational iteration on existing app
+electric-agent headless                   # NDJSON stdin/stdout mode (for Docker/CI)
 electric-agent serve                      # Start web UI (http://127.0.0.1:4400)
+electric-agent serve --sandbox            # Start web UI with Docker sandboxing
 electric-agent serve --open               # Start web UI and open browser
 electric-agent serve -p 8080              # Custom port
 electric-agent serve --streams-port 5000  # Custom durable-streams port
@@ -222,24 +270,54 @@ npm run build:web             # Build Vite client only
 npm run check                 # Biome lint + format check
 npm run check:fix             # Auto-fix Biome issues
 npx tsc --noEmit              # Type-check without emitting
-npm run dev                   # TypeScript watch mode
-npm run dev:web               # Vite dev server with HMR (port 4401)
 ```
 
-### Dev Environment
+### Running the Web UI
 
-To work on the web UI with hot-reload:
+Build and start the server:
 
 ```bash
-./dev.sh
+npm run build
+npm run serve                 # http://127.0.0.1:4400
 ```
 
-This starts three processes in parallel:
-1. `tsc --watch` — recompiles server-side TypeScript on change
-2. `node dist/index.js serve` — runs the backend API + durable-streams server (port 4400)
-3. `vite dev` — React client with HMR (port 4401), proxies `/api` to the backend
+### Running with Sandbox Mode
 
-Open http://127.0.0.1:4401 for development (Vite with hot-reload).
+Sandbox mode runs each session inside an isolated Docker container instead of on the host machine.
+
+1. **Build the sandbox image** (one-time, rebuild after code changes):
+
+   ```bash
+   npm run build:sandbox         # Builds electric-agent-sandbox Docker image
+   ```
+
+2. **Start the server in sandbox mode:**
+
+   ```bash
+   npm run serve:sandbox         # http://127.0.0.1:4400
+   ```
+
+   Or equivalently: `npm run serve -- --sandbox`
+
+**Authentication** — the sandbox container needs access to the Claude API. Auth is resolved in this order:
+
+1. **`ANTHROPIC_API_KEY`** env var — set it before starting, or enter it in the web UI Settings panel
+2. **`CLAUDE_CODE_OAUTH_TOKEN`** env var — if you have an OAuth token directly
+3. **macOS Keychain** (automatic) — if you've run `claude login` on macOS, the OAuth token is extracted from the Keychain automatically
+
+On Linux, option 3 is not available — use an API key.
+
+### Working on the Web UI
+
+For development with hot-reload, run these in separate terminals:
+
+```bash
+npm run dev                   # Terminal 1: tsc --watch (recompiles server on change)
+npm run serve                 # Terminal 2: backend API + durable-streams (port 4400)
+npm run dev:web               # Terminal 3: Vite dev server with HMR (port 4401)
+```
+
+Open http://127.0.0.1:4401 for development (Vite with hot-reload, proxies `/api` to the backend).
 Open http://127.0.0.1:4400 for production-like mode (static build served by Hono).
 
 ### Source Structure
@@ -247,12 +325,13 @@ Open http://127.0.0.1:4400 for production-like mode (static build served by Hono
 ```
 src/
 ├── index.ts                  # CLI entry point (commander)
-├── cli/                      # Command implementations (new, iterate, serve, up, down, status)
-├── engine/                   # Shared orchestration (used by CLI + web)
+├── cli/                      # Command implementations (new, iterate, serve, headless, up, down, status)
+├── engine/                   # Shared orchestration (used by CLI + web + headless)
 │   ├── events.ts             # EngineEvent union type — single source of truth
 │   ├── orchestrator.ts       # runNew() + runIterate() with callback-driven I/O
 │   ├── message-parser.ts     # SDK message → EngineEvent[] conversion
-│   └── cli-adapter.ts        # OrchestratorCallbacks using readline (CLI mode)
+│   ├── cli-adapter.ts        # OrchestratorCallbacks using readline (CLI mode)
+│   └── headless-adapter.ts   # OrchestratorCallbacks using NDJSON stdin/stdout
 ├── agents/
 │   ├── planner.ts            # Planner agent (Opus) — generates PLAN.md
 │   ├── coder.ts              # Coder agent (Sonnet) — executes plan tasks
@@ -267,7 +346,9 @@ src/
 ├── working-memory/           # Session state + error log persistence
 ├── progress/                 # CLI output + build result reporting
 └── web/                      # Web UI server + client
-    ├── server.ts             # Hono API server (REST + static files)
+    ├── server.ts             # Hono API server (REST + static files, local + sandbox modes)
+    ├── docker.ts             # Docker container lifecycle for sandbox mode
+    ├── container-bridge.ts   # Container stdout → durable stream bridge
     ├── infra.ts              # Durable streams server lifecycle
     ├── gate.ts               # Promise-based gate management for user decisions
     ├── sessions.ts           # Session index (JSON file)
@@ -293,8 +374,8 @@ template/                     # Files overlaid onto scaffold
 ## Prerequisites
 
 - Node.js >= 20
-- Docker (for generated projects)
-- `ANTHROPIC_API_KEY` environment variable
+- Docker (for generated projects and sandbox mode)
+- `ANTHROPIC_API_KEY` environment variable, or `claude login` on macOS
 
 ## Stack
 
