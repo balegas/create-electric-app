@@ -46,7 +46,18 @@ export const schemaConsistency: HookCallback = async (input, _toolUseID, _opts) 
 			!content.includes("dateOrString")
 		) {
 			warnings.push(
-				"WARNING: createSelectSchema appears to have timestamp columns without z.union([z.date(), z.string()]) overrides. Electric SQL streams dates as ISO strings — without this override, collection.update() will throw SchemaValidationError.",
+				"WARNING: createSelectSchema appears to have timestamp columns without z.union([z.date(), z.string()]).default(() => new Date()) overrides. Electric SQL streams dates as ISO strings — without this override, collection.update() will throw SchemaValidationError.",
+			)
+		}
+
+		// Check for z.union([z.date(), z.string()]) without .default() — causes collection.insert() to fail
+		if (
+			content.includes("z.union") &&
+			(content.includes("_at") || content.includes("At")) &&
+			!content.includes(".default(")
+		) {
+			warnings.push(
+				"WARNING: Timestamp overrides use z.union([z.date(), z.string()]) without .default(() => new Date()). Without .default(), collection.insert() will throw SchemaValidationError on created_at/updated_at because the client doesn't provide them (the DB sets defaults server-side). Fix: const dateOrString = z.union([z.date(), z.string()]).default(() => new Date())",
 			)
 		}
 

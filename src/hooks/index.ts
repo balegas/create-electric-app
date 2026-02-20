@@ -1,6 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk"
 import { blockBash } from "./block-bash.js"
 import { dependencyGuard } from "./dependency-guard.js"
+import { guardrailInject } from "./guardrail-inject.js"
 import { importValidation } from "./import-validation.js"
 import { migrationValidation } from "./migration-validation.js"
 import { schemaConsistency } from "./schema-consistency.js"
@@ -10,6 +11,7 @@ import { writeProtection } from "./write-protection.js"
  * Guardrail hooks for the coder agent.
  */
 export const hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {
+	SessionStart: [{ hooks: [guardrailInject] }],
 	PreToolUse: [
 		{ matcher: "Write|Edit", hooks: [writeProtection, importValidation, dependencyGuard] },
 		{ matcher: "Bash", hooks: [migrationValidation] },

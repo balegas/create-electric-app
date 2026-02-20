@@ -6,7 +6,7 @@ Patterns NOT covered by external playbooks. Read playbooks for collections, live
 
 **Import `z` from `"zod/v4"`** (NOT `"zod"`) — drizzle-zod 0.8.x uses Zod v4 internals. The v4 runtime rejects v3-style overrides with "Invalid element: expected a Zod schema".
 
-**Always override timestamp columns** with `z.union([z.date(), z.string()])` — Electric streams dates as ISO strings, but `createSelectSchema` generates `z.date()` which only accepts Date objects. Without this, `collection.update()` throws `SchemaValidationError`.
+**Always override timestamp columns** with `z.union([z.date(), z.string()]).default(() => new Date())` — Electric streams dates as ISO strings, but `createSelectSchema` generates `z.date()` which only accepts Date objects. The `.default()` is critical: it makes timestamps omittable during `collection.insert()` (the DB sets them server-side), while still accepting them when present from Electric sync. Without this, `collection.insert()` throws `SchemaValidationError` on `created_at`/`updated_at`.
 
 **Do NOT use `z.coerce.date()`** — creates ZodEffects that TanStack DB's schema introspection rejects.
 
@@ -16,7 +16,7 @@ import { createSelectSchema, createInsertSchema } from "drizzle-zod"
 import { z } from "zod/v4"
 import { todos } from "./schema"
 
-const dateOrString = z.union([z.date(), z.string()])
+const dateOrString = z.union([z.date(), z.string()]).default(() => new Date())
 
 export const todoSelectSchema = createSelectSchema(todos, {
   created_at: dateOrString,
@@ -27,6 +27,8 @@ export const todoInsertSchema = createInsertSchema(todos, {
   updated_at: dateOrString.optional(),
 })
 ```
+
+**Use `selectSchema` as the collection schema** — it has defaults for timestamps so `collection.insert()` works without them, and validates fully populated rows from Electric sync.
 
 ## parseDates Utility (CRITICAL)
 
@@ -150,7 +152,8 @@ it("survives JSON round-trip", () => {
 | WRONG | RIGHT |
 |-------|-------|
 | `import { z } from "zod"` in zod-schemas | `import { z } from "zod/v4"` |
-| `createSelectSchema(todos)` without date overrides | Override ALL timestamps: `{ created_at: z.union([z.date(), z.string()]) }` |
+| `createSelectSchema(todos)` without date overrides | Override ALL timestamps: `{ created_at: z.union([z.date(), z.string()]).default(() => new Date()) }` |
+| `z.union([z.date(), z.string()])` without `.default()` | Add `.default(() => new Date())` — required for `collection.insert()` to work without timestamps |
 | `z.coerce.date()` for timestamps | `z.union([z.date(), z.string()])` |
 | `import { createInsertSchema } from 'drizzle-orm/zod'` | `from 'drizzle-zod'` |
 | `import { drizzle } from 'drizzle-orm'` | `from 'drizzle-orm/postgres-js'` |
@@ -162,4 +165,4 @@ it("survives JSON round-trip", () => {
 | `import { db } from "@/db"` in smoke tests | Only in integration tests |
 | Testing with `{ text: "foo" }` (partial) | `generateValidRow(schema)` |
 | `const { id, ...rest } = body` then `.set(rest)` in PUT | Destructure out `created_at`, `updated_at` before spreading |
-| `shapeOptions: { url: "/api/todos" }` (relative) | `url: new URL("/api/todos", window.location.origin).toString()` |
+| `shapeOptions: { url: "/api/todos" }` (relative) | `url: new URL("/api/todos", typeof window !== "undefined" ? window.location.origin : "http://localhost:5174").toString()` |

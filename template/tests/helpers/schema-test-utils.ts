@@ -33,13 +33,29 @@ export function generateRowWithout<T extends ZodRawShape>(
 	return row
 }
 
+/**
+ * Resolve the type name from a Zod schema's internal _def.
+ * Handles both Zod v3 (_def.typeName = "ZodString") and
+ * Zod v4 (_def.type = "string") conventions.
+ */
+function resolveTypeName(def: Record<string, unknown>): string | undefined {
+	// Zod v3: _def.typeName is PascalCase like "ZodString"
+	if (typeof def.typeName === "string") return def.typeName
+	// Zod v4: _def.type is lowercase like "string"
+	if (typeof def.type === "string") {
+		const t = def.type as string
+		return `Zod${t.charAt(0).toUpperCase()}${t.slice(1)}`
+	}
+	return undefined
+}
+
 function generateValueForType(key: string, zodType: ZodTypeAny): unknown {
 	// Unwrap optional/nullable/default wrappers to find the inner type
 	const inner = unwrap(zodType)
-	const typeName = inner._def?.typeName as string | undefined
+	const typeName = inner._def ? resolveTypeName(inner._def as Record<string, unknown>) : undefined
 
-	// UUID fields — id or *Id
-	if (key === "id" || key.endsWith("Id")) {
+	// UUID fields — id, *Id (camelCase), or *_id (snake_case)
+	if (key === "id" || key.endsWith("Id") || key.endsWith("_id")) {
 		return crypto.randomUUID()
 	}
 
@@ -78,13 +94,22 @@ function generateValueForType(key: string, zodType: ZodTypeAny): unknown {
 }
 
 function unwrap(zodType: ZodTypeAny): ZodTypeAny {
-	const typeName = zodType._def?.typeName as string | undefined
+	const def = zodType._def as Record<string, unknown> | undefined
+	if (!def) return zodType
+
+	const typeName = resolveTypeName(def)
 	if (
 		typeName === "ZodOptional" ||
 		typeName === "ZodNullable" ||
 		typeName === "ZodDefault"
 	) {
-		return unwrap(zodType._def.innerType)
+		return unwrap(def.innerType as ZodTypeAny)
 	}
+
+	// Zod v4 ZodUnion: unwrap to first option (e.g., z.union([z.date(), z.string()]) → z.date())
+	if (typeName === "ZodUnion" && Array.isArray(def.options)) {
+		return unwrap(def.options[0] as ZodTypeAny)
+	}
+
 	return zodType
 }

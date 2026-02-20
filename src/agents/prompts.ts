@@ -34,6 +34,9 @@ The project is scaffolded from a known template. DO NOT read or explore scaffold
 
 DO NOT use Bash/ls/find to explore the project. DO NOT read files you aren't about to modify. Start writing code.
 
+## File Edit Rule (CRITICAL)
+You MUST Read a file before using Edit or Write on it. The SDK will reject edits to files you haven't read in the current session. When modifying existing files, always Read first, then Edit. For new files, Write directly without reading.
+
 ## Playbook Rules
 - ONLY read playbooks that PLAN.md tells you to read — do not discover or read additional ones
 - NEVER use include_references: true — the SKILL.md content is sufficient
@@ -68,7 +71,7 @@ This is needed because useLiveQuery uses useSyncExternalStore without getServerS
 ## Drizzle Workflow (CRITICAL)
 Always follow this order:
 1. Edit src/db/schema.ts (Drizzle pgTable definitions)
-2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas — ALWAYS import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()]) to handle Electric's ISO string wire format)
+2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas — ALWAYS import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()]).default(() => new Date()) — the .default() is required so collection.insert() works without timestamps)
 3. Create collection files in src/db/collections/ (import from ../zod-schemas)
 4. Create API routes (proxy + mutation)
 5. Create UI components
@@ -122,7 +125,7 @@ export const entityName = pgTable("entity_name", {
 ### Phase 1: Data Model & Migrations
 - [ ] read_playbook("schemas") — Drizzle schema and drizzle-zod patterns
 - [ ] Define all Drizzle table schemas in src/db/schema.ts
-- [ ] Derive Zod schemas in src/db/zod-schemas.ts using createSelectSchema/createInsertSchema — import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()])
+- [ ] Derive Zod schemas in src/db/zod-schemas.ts using createSelectSchema/createInsertSchema — import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()]).default(() => new Date())
 - [ ] Run drizzle-kit generate && drizzle-kit migrate
 
 ### Phase 2: Collections & API Routes
