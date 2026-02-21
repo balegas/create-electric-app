@@ -1,18 +1,13 @@
 /**
  * Minimal test agent for integration testing.
  *
- * Supports two modes:
- *   --stdio:  reads NDJSON from stdin, writes events to stdout
- *   --stream: reads commands from a hosted Durable Stream, writes events back
- *
+ * Reads commands from a hosted Durable Stream, writes events back.
  * The agent echoes back received commands as events (prefixed with "echo_")
  * and emits session_complete when done. This validates the full
  * communication pipeline without running actual Claude agents.
+ *
+ * Required env vars: DS_URL, DS_SERVICE_ID, DS_SECRET, SESSION_ID
  */
-
-import readline from "node:readline"
-
-const mode = process.argv.includes("--stream") ? "stream" : "stdio"
 
 interface Message {
 	source?: string
@@ -26,88 +21,24 @@ function ts(): string {
 	return new Date().toISOString()
 }
 
-// ---------------------------------------------------------------------------
-// Stdio mode
-// ---------------------------------------------------------------------------
+async function main(): Promise<void> {
+	const dsUrl = process.env.DS_URL
+	const dsServiceId = process.env.DS_SERVICE_ID
+	const dsSecret = process.env.DS_SECRET
+	const sessionId = process.env.SESSION_ID
 
-async function runStdio(): Promise<void> {
-	const rl = readline.createInterface({ input: process.stdin, terminal: false })
-	let gotConfig = false
-
-	function emit(event: Record<string, unknown>): void {
-		process.stdout.write(`${JSON.stringify(event)}\n`)
-	}
-
-	rl.on("line", (line) => {
-		const trimmed = line.trim()
-		if (!trimmed) return
-
-		try {
-			const msg = JSON.parse(trimmed) as Message
-
-			if (!gotConfig) {
-				gotConfig = true
-				emit({
-					type: "log",
-					level: "done",
-					message: `Test agent received config: command=${msg.command}`,
-					ts: ts(),
-				})
-				emit({
-					type: "echo_config",
-					...msg,
-					ts: ts(),
-				})
-				emit({ type: "session_complete", success: true, ts: ts() })
-				return
-			}
-
-			// Gate response
-			if (msg.gate) {
-				emit({
-					type: "echo_gate_response",
-					gate: msg.gate,
-					...msg,
-					ts: ts(),
-				})
-				return
-			}
-
-			// Subsequent command
-			if (msg.command) {
-				emit({
-					type: "echo_command",
-					...msg,
-					ts: ts(),
-				})
-				emit({ type: "session_complete", success: true, ts: ts() })
-			}
-		} catch {
-			// Ignore malformed input
-		}
-	})
-
-	rl.on("close", () => {
-		process.exit(0)
-	})
-}
-
-// ---------------------------------------------------------------------------
-// Stream mode
-// ---------------------------------------------------------------------------
-
-async function runStream(): Promise<void> {
-	const streamUrl = process.env.DS_STREAM_URL
-	const secret = process.env.DS_SECRET
-	if (!streamUrl || !secret) {
-		process.stderr.write("Error: DS_STREAM_URL and DS_SECRET required for --stream mode\n")
+	if (!dsUrl || !dsServiceId || !dsSecret || !sessionId) {
+		process.stderr.write(
+			"Error: DS_URL, DS_SERVICE_ID, DS_SECRET, and SESSION_ID are required\n",
+		)
 		process.exit(1)
 	}
 
+	const streamUrl = `${dsUrl}/v1/stream/${dsServiceId}/session/${sessionId}`
+	const headers = { Authorization: `Bearer ${dsSecret}` }
+
 	// Dynamic import to avoid requiring @durable-streams/client at top-level
 	const { DurableStream } = await import("@durable-streams/client")
-
-	const headers = { Authorization: `Bearer ${secret}` }
 
 	const writer = new DurableStream({
 		url: streamUrl,
@@ -178,18 +109,7 @@ async function runStream(): Promise<void> {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
-
-if (mode === "stream") {
-	runStream().catch((err) => {
-		process.stderr.write(`Stream mode failed: ${err}\n`)
-		process.exit(1)
-	})
-} else {
-	runStdio().catch((err) => {
-		process.stderr.write(`Stdio mode failed: ${err}\n`)
-		process.exit(1)
-	})
-}
+main().catch((err) => {
+	process.stderr.write(`Test agent failed: ${err}\n`)
+	process.exit(1)
+})

@@ -1,18 +1,19 @@
 # Minimal test sandbox for integration testing.
-# Runs a Node.js script that:
-#   --stdio mode:  reads NDJSON from stdin, echoes events to stdout
-#   --stream mode: reads from durable stream, writes events back
+# Communicates via hosted Durable Streams (reads commands, writes events back).
+#
+# Required env vars: DS_URL, DS_SERVICE_ID, DS_SECRET, SESSION_ID
 #
 # Build:
 #   docker build -f Dockerfile.test-sandbox -t electric-agent-test-sandbox .
+# Push:
+#   docker tag electric-agent-test-sandbox $DOCKER_HUB_USER/electric-agent-test-sandbox
+#   docker push $DOCKER_HUB_USER/electric-agent-test-sandbox
 
 FROM node:22-slim
 
-RUN npm install -g tsx
+RUN npm install -g tsx @durable-streams/client
 
 WORKDIR /home/agent
 COPY tests/test-sandbox-agent.ts /home/agent/agent.ts
 
-# Default: stdio mode
 ENTRYPOINT ["tsx", "/home/agent/agent.ts"]
-CMD ["--stdio"]

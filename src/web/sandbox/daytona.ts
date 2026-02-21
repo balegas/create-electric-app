@@ -11,7 +11,7 @@ import type {
 // DaytonaSandboxProvider — cloud sandboxes via Daytona
 // ---------------------------------------------------------------------------
 
-const SANDBOX_IMAGE = "electric-agent-sandbox"
+const SANDBOX_IMAGE = process.env.SANDBOX_IMAGE || "electric-agent-sandbox"
 
 export class DaytonaSandboxProvider implements SandboxProvider {
 	readonly runtime = "daytona" as const
