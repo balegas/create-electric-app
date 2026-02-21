@@ -60,6 +60,42 @@ function streamUrl(streamsPort: number, sessionId: string): string {
 	return `${getStreamServerUrl(streamsPort)}/session/${sessionId}`
 }
 
+/**
+ * Detect git operations from natural language prompts.
+ * Returns structured gitOp fields if matched, null otherwise.
+ */
+function detectGitOp(
+	request: string,
+): { gitOp: string; gitMessage?: string; gitPrTitle?: string; gitPrBody?: string } | null {
+	const lower = request.toLowerCase().trim()
+
+	// Commit: "commit", "commit the code", "commit changes", "commit with message ..."
+	if (/^(git\s+)?commit\b/.test(lower) || /^save\s+(my\s+)?(changes|progress|work)\b/.test(lower)) {
+		// Extract commit message after "commit" keyword, or after "message:" / "msg:"
+		const msgMatch = request.match(
+			/(?:commit\s+(?:with\s+(?:message\s+)?)?|message:\s*|msg:\s*)["']?(.+?)["']?\s*$/i,
+		)
+		const message = msgMatch?.[1]?.replace(/^(the\s+)?(code|changes)\s*/i, "").trim()
+		return { gitOp: "commit", gitMessage: message || undefined }
+	}
+
+	// Push: "push", "push to github", "push to remote", "git push"
+	if (/^(git\s+)?push\b/.test(lower)) {
+		return { gitOp: "push" }
+	}
+
+	// Create PR: "create pr", "open pr", "make pr", "create pull request"
+	if (/^(create|open|make)\s+(a\s+)?(pr|pull\s*request)\b/.test(lower)) {
+		// Try to extract title after the PR keyword
+		const titleMatch = request.match(
+			/(?:pr|pull\s*request)\s+(?:(?:titled?|called|named)\s+)?["']?(.+?)["']?\s*$/i,
+		)
+		return { gitOp: "create-pr", gitPrTitle: titleMatch?.[1] || undefined }
+	}
+
+	return null
+}
+
 export function createApp(config: ServerConfig) {
 	const app = new Hono()
 
@@ -350,6 +386,29 @@ export function createApp(config: ServerConfig) {
 					JSON.stringify({ type: "log", level: "error", message: msg, ts: ts() }),
 				)
 			}
+			return c.json({ ok: true })
+		}
+
+		// Intercept git commands (commit, push, create PR)
+		const gitOp = detectGitOp(body.request)
+		if (gitOp) {
+			const url = streamUrl(config.streamsPort, sessionId)
+			const gitStream = new DurableStream({ url, contentType: "application/json" })
+			await gitStream.append(
+				JSON.stringify({ type: "user_message", message: body.request, ts: ts() }),
+			)
+
+			const handle = config.sandbox.get(sessionId)
+			if (!handle || handle.process.killed) {
+				return c.json({ error: "Container is not running" }, 400)
+			}
+
+			config.sandbox.sendCommand(handle, {
+				command: "git",
+				projectDir: session.sandboxProjectDir || handle.projectDir,
+				...gitOp,
+			})
+
 			return c.json({ ok: true })
 		}
 
