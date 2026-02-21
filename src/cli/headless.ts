@@ -76,21 +76,39 @@ export async function headlessCommand(): Promise<void> {
 
 			// Validate gh auth if GH_TOKEN is available
 			if (process.env.GH_TOKEN) {
+				const ghCmd = "gh auth status"
+				const ghToolUseId = `early-gh-${Date.now()}`
+				callbacks.onEvent({
+					type: "tool_start",
+					toolName: "bash",
+					toolUseId: ghToolUseId,
+					input: { command: ghCmd },
+					ts: ts(),
+				})
 				try {
-					const ghOut = execSync("gh auth status 2>&1", {
+					const ghOut = execSync(`${ghCmd} 2>&1`, {
 						cwd: earlyDir,
 						encoding: "utf-8",
 						timeout: 10_000,
 						env: { ...process.env },
 					}).trim()
-					const firstLine = ghOut.split("\n")[0] || ghOut
 					callbacks.onEvent({
-						type: "log",
-						level: "done",
-						message: `GitHub CLI: ${firstLine}`,
+						type: "tool_result",
+						toolUseId: ghToolUseId,
+						output: ghOut || "(ok)",
 						ts: ts(),
 					})
-				} catch {
+				} catch (e) {
+					const stderr =
+						(e as Record<string, string>)?.stderr ||
+						(e as Record<string, string>)?.stdout ||
+						"auth check failed"
+					callbacks.onEvent({
+						type: "tool_result",
+						toolUseId: ghToolUseId,
+						output: `Error: ${stderr}`,
+						ts: ts(),
+					})
 					callbacks.onEvent({
 						type: "log",
 						level: "error",
