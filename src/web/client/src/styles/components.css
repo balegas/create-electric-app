@@ -668,6 +668,7 @@
 	display: flex;
 	justify-content: flex-end;
 	gap: 8px;
+	margin-top: 16px;
 }
 
 .modal-btn {
@@ -727,7 +728,32 @@
 	flex-shrink: 0;
 }
 
-/* Repo picker modal list */
+/* Repo picker modal */
+.repo-picker-filter {
+	margin-top: 12px;
+}
+
+.repo-picker-filter input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 8px 12px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	font-family: var(--font-mono);
+	font-size: 13px;
+}
+
+.repo-picker-filter input:focus {
+	outline: none;
+	border-color: var(--brand-2);
+}
+
+.repo-picker-filter input::placeholder {
+	color: var(--text-subtle);
+}
+
 .repo-picker-list {
 	max-height: 300px;
 	overflow-y: auto;
@@ -763,6 +789,33 @@
 
 .repo-picker-item-date {
 	font-size: 11px;
+	color: var(--text-subtle);
+}
+
+.repo-picker-new-branch {
+	display: flex;
+	gap: 8px;
+	padding: 8px 12px;
+	align-items: center;
+}
+
+.repo-picker-new-branch input {
+	flex: 1;
+	padding: 6px 10px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	font-family: var(--font-mono);
+	font-size: 13px;
+}
+
+.repo-picker-new-branch input:focus {
+	outline: none;
+	border-color: var(--brand-2);
+}
+
+.repo-picker-new-branch input::placeholder {
 	color: var(--text-subtle);
 }
 

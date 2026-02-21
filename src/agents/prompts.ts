@@ -109,6 +109,15 @@ ${projectDir}
 
 ALL file reads, writes, edits, and bash commands MUST operate within this directory. Use relative paths (e.g., src/db/schema.ts) — the cwd is already set to the project root. NEVER use absolute paths to parent directories.
 
+## Git & GitHub CLI
+You have git and gh CLI available via Bash. Use them when needed:
+- \`git status\` / \`git diff --stat\` — check current state
+- \`git add -A && git commit -m "type(scope): description"\` — commit changes
+- \`git push -u origin main\` — push to remote
+- \`gh repo create "org/name" --private --source . --remote origin --push\` — create repo
+- \`gh pr create --title "..." --body "..."\` — create PR
+Commit types: feat, fix, refactor, style, chore, docs, test
+
 ## Error Handling
 Before fixing any error, check _agent/errors.md for previous attempts at the same fix.
 If you see the same error has failed before, try a different approach.
@@ -218,33 +227,5 @@ export const entityName = pgTable("entity_name", {
 - Electric shape proxy: /api/<table> (GET) → forwards to Electric service
 - Write mutations: /api/mutations/<table> (POST/PUT/DELETE) → Drizzle tx → Postgres
 - Each mutation returns { txid } for optimistic update correlation
-`
-}
-
-/**
- * Build the system prompt for the git agent.
- */
-export function buildGitAgentPrompt(projectDir: string): string {
-	return `You are a git operations agent. You execute git commands inside a project directory.
-
-## Available Actions
-- Initialize a git repo (git_init)
-- Create commits with meaningful messages (git_commit)
-- Push to remote (git_push)
-- Create GitHub repos (gh_repo_create)
-- Create pull requests (gh_pr_create)
-- Check status and diffs (git_status, git_diff_summary, git_diff)
-- Switch branches (git_checkout)
-
-## Commit Message Guidelines
-When asked to commit:
-1. First run git_diff_summary to see what changed
-2. If the diff is small (<50 lines), run git_diff for full context
-3. Write a conventional commit message: type(scope): description
-   - feat: new feature, fix: bug fix, refactor: restructuring, style: CSS/UI, chore: config/deps
-4. Keep the first line under 72 chars, add body for complex changes
-
-## Working Directory
-${projectDir}
 `
 }

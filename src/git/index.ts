@@ -67,7 +67,8 @@ function execGit(cwd: string, args: string[], env?: Record<string, string>): str
 	} catch (e: unknown) {
 		const stderr = (e as Record<string, string>)?.stderr || ""
 		const stdout = (e as Record<string, string>)?.stdout || ""
-		throw new Error(stderr || stdout || (e instanceof Error ? e.message : "git command failed"))
+		const detail = stderr || stdout || (e instanceof Error ? e.message : "git command failed")
+		throw new Error(`git ${args.join(" ")}: ${detail}`)
 	}
 }
 
@@ -83,7 +84,8 @@ function execGh(args: string[], opts?: { cwd?: string; env?: Record<string, stri
 	} catch (e: unknown) {
 		const stderr = (e as Record<string, string>)?.stderr || ""
 		const stdout = (e as Record<string, string>)?.stdout || ""
-		throw new Error(stderr || stdout || (e instanceof Error ? e.message : "gh command failed"))
+		const detail = stderr || stdout || (e instanceof Error ? e.message : "gh command failed")
+		throw new Error(`gh ${args.join(" ")}: ${detail}`)
 	}
 }
 

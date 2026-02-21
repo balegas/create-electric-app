@@ -19,6 +19,7 @@ export interface SessionInfo {
 		branch: string
 		remoteUrl: string | null
 		repoName: string | null
+		repoVisibility?: "public" | "private"
 		lastCommitHash: string | null
 		lastCommitMessage: string | null
 		lastCheckpointAt: string | null

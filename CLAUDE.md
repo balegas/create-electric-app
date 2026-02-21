@@ -139,7 +139,7 @@ src/
 - **Durable Streams**: File-backed event log (`@durable-streams/server`) enables real-time SSE push, reconnect catch-up, and full session replay.
 - **Hook interception**: Guardrail hooks intercept tool calls at `PreToolUse`/`PostToolUse` transparently. Return `{ hookSpecificOutput: { permissionDecision: "deny" } }` to block.
 - **MCP Tools**: Created via `tool()` + `createSdkMcpServer()`. Referenced as `mcp__<server>__<tool>` in `allowedTools`.
-- **Agent SDK**: Uses `query()` with async generators. Planner uses Sonnet (10 turns), Coder uses Sonnet (60 turns, $5), Git Agent uses Haiku (5 turns, $0.25).
+- **Agent SDK**: Uses `query()` with async generators. Planner uses Sonnet (10 turns), Coder uses Sonnet (200 turns, $25), Git Agent uses Haiku (5 turns, $0.25).
 - **Session resumption**: Coder returns `session_id` from SDK, stored and passed as `{ resume: sessionId }` on subsequent runs.
 
 ## Conventions
@@ -182,6 +182,6 @@ src/
 
 - **EngineEvent sync**: Forgetting to update client-side `event-types.ts` when changing `events.ts` causes silent type mismatches at runtime.
 - **Sandbox image staleness**: Code changes require rebuilding the Docker image (`npm run build:sandbox`). Easy to forget.
-- **Gate categories**: Server-side gates (`checkpoint`, `publish`, `infra_config`) resolve in-process. Container-forwarded gates (`clarification`, `approval`, `continue`, `revision`) are written to container stdin. Adding a new gate requires choosing the right category and updating the `serverGates` set in `server.ts`.
+- **Gate categories**: Server-side gates (`checkpoint`, `publish`, `infra_config`, `repo_setup`) resolve in-process. Container-forwarded gates (`clarification`, `approval`, `continue`, `revision`) are written to container stdin. Adding a new gate requires choosing the right category and updating the `serverGates` set in `server.ts`.
 - **Hook denial format**: Must return `{ hookSpecificOutput: { permissionDecision: "deny" } }` — not just a boolean.
 - **`initGit` in scaffold**: The scaffold's `skipGit` option controls whether git init runs during scaffolding. In headless/sandbox mode, git is initialized early in `headless.ts` before `runNew()`.

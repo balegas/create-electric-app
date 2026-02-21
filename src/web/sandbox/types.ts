@@ -64,6 +64,9 @@ export interface SandboxProvider {
 	stopApp(handle: SandboxHandle): Promise<boolean>
 	isAppRunning(handle: SandboxHandle): boolean
 
+	// Execute a shell command inside the container
+	exec(handle: SandboxHandle, command: string): string
+
 	// Git (read-only — mutations go through the git agent inside the container)
 	gitStatus(handle: SandboxHandle, projectDir: string): GitStatus
 

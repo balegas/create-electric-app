@@ -352,6 +352,11 @@ export class DockerSandboxProvider implements SandboxProvider {
 		handle.process.stdin?.write(`${JSON.stringify({ gate, ...value })}\n`)
 	}
 
+	exec(handle: SandboxHandle, command: string): string {
+		const dh = this.toDockerHandle(handle)
+		return execInContainer(dh, command).trim()
+	}
+
 	listFiles(handle: SandboxHandle, dir: string): string[] {
 		const dh = this.toDockerHandle(handle)
 		const containerId = getAgentContainerId(dh)

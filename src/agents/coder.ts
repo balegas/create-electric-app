@@ -79,8 +79,8 @@ export async function runCoder(
 		mcpServers: { "electric-agent-tools": mcpServer },
 		hooks: createCoderHooks(projectDir),
 		cwd: projectDir,
-		maxTurns: 60,
-		maxBudgetUsd: 5.0,
+		maxTurns: 200,
+		maxBudgetUsd: 25.0,
 		permissionMode: "bypassPermissions",
 		allowDangerouslySkipPermissions: true,
 	}

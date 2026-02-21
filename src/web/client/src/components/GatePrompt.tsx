@@ -177,163 +177,6 @@ function ContinueGate({
 	)
 }
 
-function PublishGate({
-	sessionId,
-	event,
-	onResolved,
-}: {
-	sessionId: string
-	event: Extract<EngineEvent, { type: "publish_prompt" }>
-	onResolved: (summary: string) => void
-}) {
-	const [account, setAccount] = useState(event.accounts[0]?.login ?? "")
-	const [repoName, setRepoName] = useState(event.defaultRepoName)
-	const [visibility, setVisibility] = useState<"public" | "private">("private")
-	const [submitting, setSubmitting] = useState(false)
-
-	async function handleSubmit() {
-		setSubmitting(true)
-		const fullName = account ? `${account}/${repoName}` : repoName
-		const summary = `${fullName} (${visibility})`
-		try {
-			await respondToGate(sessionId, "publish", {
-				account,
-				repoName,
-				visibility,
-				_summary: summary,
-			})
-			onResolved(summary)
-		} catch {
-			setSubmitting(false)
-		}
-	}
-
-	return (
-		<div className="gate-prompt">
-			<h3>Publish to GitHub</h3>
-			<div className="question">
-				<label>Account</label>
-				{event.accounts.length > 1 ? (
-					<select
-						value={account}
-						onChange={(e) => setAccount(e.target.value)}
-						disabled={submitting}
-					>
-						{event.accounts.map((a) => (
-							<option key={a.login} value={a.login}>
-								{a.login} {a.type === "org" ? "(org)" : "(personal)"}
-							</option>
-						))}
-					</select>
-				) : event.accounts.length === 1 ? (
-					<input type="text" value={event.accounts[0].login} disabled />
-				) : (
-					<input
-						type="text"
-						value={account}
-						onChange={(e) => setAccount(e.target.value)}
-						disabled={submitting}
-						placeholder="github-username-or-org"
-					/>
-				)}
-			</div>
-			<div className="question">
-				<label>Repository name</label>
-				<input
-					type="text"
-					value={repoName}
-					onChange={(e) => setRepoName(e.target.value)}
-					disabled={submitting}
-					placeholder="my-app"
-				/>
-			</div>
-			<div className="question">
-				<label>Visibility</label>
-				<div className="gate-radio-group">
-					<label className="gate-radio">
-						<input
-							type="radio"
-							name="visibility"
-							checked={visibility === "private"}
-							onChange={() => setVisibility("private")}
-							disabled={submitting}
-						/>
-						Private
-					</label>
-					<label className="gate-radio">
-						<input
-							type="radio"
-							name="visibility"
-							checked={visibility === "public"}
-							onChange={() => setVisibility("public")}
-							disabled={submitting}
-						/>
-						Public
-					</label>
-				</div>
-			</div>
-			<div className="gate-actions">
-				<button
-					className="gate-btn gate-btn-primary"
-					onClick={handleSubmit}
-					disabled={submitting || !repoName.trim()}
-				>
-					{submitting ? "Publishing..." : "Publish"}
-				</button>
-			</div>
-		</div>
-	)
-}
-
-function CheckpointGate({
-	sessionId,
-	onResolved,
-}: {
-	sessionId: string
-	onResolved: (summary: string) => void
-}) {
-	const [message, setMessage] = useState("")
-	const [submitting, setSubmitting] = useState(false)
-
-	async function handleSubmit() {
-		setSubmitting(true)
-		const summary = message || "Auto-generated commit message"
-		try {
-			await respondToGate(sessionId, "checkpoint", {
-				message: message || undefined,
-				_summary: summary,
-			})
-			onResolved(summary)
-		} catch {
-			setSubmitting(false)
-		}
-	}
-
-	return (
-		<div className="gate-prompt">
-			<h3>Checkpoint</h3>
-			<div className="question">
-				<label>Commit message (optional)</label>
-				<input
-					type="text"
-					value={message}
-					onChange={(e) => setMessage(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Enter") handleSubmit()
-					}}
-					disabled={submitting}
-					placeholder="Auto-generated if empty"
-				/>
-			</div>
-			<div className="gate-actions">
-				<button className="gate-btn gate-btn-primary" onClick={handleSubmit} disabled={submitting}>
-					{submitting ? "Committing..." : "Commit"}
-				</button>
-			</div>
-		</div>
-	)
-}
-
 function InfraConfigGate({
 	sessionId,
 	event,
@@ -350,39 +193,54 @@ function InfraConfigGate({
 	const [secret, setSecret] = useState("")
 	const [submitting, setSubmitting] = useState(false)
 
+	// Repo setup fields
+	const hasGh = event.ghAccounts.length > 0
+	const [repoAccount, setRepoAccount] = useState(event.ghAccounts[0]?.login ?? "")
+	const [repoName, setRepoName] = useState(event.projectName)
+	const [repoVisibility, setRepoVisibility] = useState<"public" | "private">("private")
+	const [setupRepo, setSetupRepo] = useState(hasGh)
+
 	async function handleSubmit() {
 		setSubmitting(true)
+		const parts: string[] = []
 		try {
+			const payload: Record<string, unknown> = {}
+
 			if (mode === "cloud") {
-				const summary = `Electric Cloud (${electricUrl})`
-				await respondToGate(sessionId, "infra_config", {
-					mode: "cloud",
-					databaseUrl,
-					electricUrl,
-					sourceId,
-					secret,
-					_summary: summary,
-				})
-				onResolved(summary)
+				payload.mode = "cloud"
+				payload.databaseUrl = databaseUrl
+				payload.electricUrl = electricUrl
+				payload.sourceId = sourceId
+				payload.secret = secret
+				parts.push(`Electric Cloud`)
 			} else {
-				const summary = "Local Docker (Postgres + Electric)"
-				await respondToGate(sessionId, "infra_config", {
-					mode: "local",
-					_summary: summary,
-				})
-				onResolved(summary)
+				payload.mode = "local"
+				parts.push("Local Docker")
 			}
+
+			if (setupRepo && repoAccount && repoName.trim()) {
+				payload.repoAccount = repoAccount
+				payload.repoName = repoName
+				payload.repoVisibility = repoVisibility
+				parts.push(`${repoAccount}/${repoName} (${repoVisibility})`)
+			}
+
+			payload._summary = parts.join(" · ")
+			await respondToGate(sessionId, "infra_config", payload)
+			onResolved(parts.join(" · "))
 		} catch {
 			setSubmitting(false)
 		}
 	}
 
 	const cloudValid = databaseUrl.trim() && sourceId.trim() && secret.trim()
+	const repoValid = !setupRepo || (repoAccount && repoName.trim())
 
 	return (
 		<div className="gate-prompt">
-			<h3>Infrastructure for {event.projectName}</h3>
-			<p className="gate-summary">Choose how to run Postgres and Electric for this project.</p>
+			<h3>Setup {event.projectName}</h3>
+
+			<p className="gate-summary">Infrastructure</p>
 			<div className="question">
 				<div className="gate-radio-group">
 					<label className="gate-radio">
@@ -451,13 +309,90 @@ function InfraConfigGate({
 					</div>
 				</>
 			)}
+
+			{hasGh && (
+				<>
+					<p className="gate-summary" style={{ marginTop: 16 }}>
+						GitHub Repository
+					</p>
+					<div className="question">
+						<label className="gate-radio" style={{ marginBottom: 8 }}>
+							<input
+								type="checkbox"
+								checked={setupRepo}
+								onChange={(e) => setSetupRepo(e.target.checked)}
+								disabled={submitting}
+							/>
+							Create a GitHub repo for this project
+						</label>
+					</div>
+					{setupRepo && (
+						<>
+							<div className="question">
+								<label>Account</label>
+								{event.ghAccounts.length > 1 ? (
+									<select
+										value={repoAccount}
+										onChange={(e) => setRepoAccount(e.target.value)}
+										disabled={submitting}
+									>
+										{event.ghAccounts.map((a) => (
+											<option key={a.login} value={a.login}>
+												{a.login} {a.type === "org" ? "(org)" : "(personal)"}
+											</option>
+										))}
+									</select>
+								) : (
+									<input type="text" value={event.ghAccounts[0].login} disabled />
+								)}
+							</div>
+							<div className="question">
+								<label>Repository name</label>
+								<input
+									type="text"
+									value={repoName}
+									onChange={(e) => setRepoName(e.target.value)}
+									disabled={submitting}
+									placeholder="my-app"
+								/>
+							</div>
+							<div className="question">
+								<label>Visibility</label>
+								<div className="gate-radio-group">
+									<label className="gate-radio">
+										<input
+											type="radio"
+											name="repo-visibility"
+											checked={repoVisibility === "private"}
+											onChange={() => setRepoVisibility("private")}
+											disabled={submitting}
+										/>
+										Private
+									</label>
+									<label className="gate-radio">
+										<input
+											type="radio"
+											name="repo-visibility"
+											checked={repoVisibility === "public"}
+											onChange={() => setRepoVisibility("public")}
+											disabled={submitting}
+										/>
+										Public
+									</label>
+								</div>
+							</div>
+						</>
+					)}
+				</>
+			)}
+
 			<div className="gate-actions">
 				<button
 					className="gate-btn gate-btn-primary"
 					onClick={handleSubmit}
-					disabled={submitting || (mode === "cloud" && !cloudValid)}
+					disabled={submitting || (mode === "cloud" && !cloudValid) || !repoValid}
 				>
-					{submitting ? "Configuring..." : mode === "local" ? "Use Docker" : "Connect to Cloud"}
+					{submitting ? "Configuring..." : "Start"}
 				</button>
 			</div>
 		</div>
@@ -470,12 +405,8 @@ function resolvedLabel(type: string): string {
 			return "Clarification answered"
 		case "plan_ready":
 			return "Plan reviewed"
-		case "publish_prompt":
-			return "Published to GitHub"
-		case "checkpoint_prompt":
-			return "Checkpoint created"
 		case "infra_config_prompt":
-			return "Infrastructure configured"
+			return "Project configured"
 		case "continue_needed":
 			return "Decision made"
 		default:
@@ -519,10 +450,6 @@ export function GatePrompt({
 			return <PlanGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
 		case "continue_needed":
 			return <ContinueGate sessionId={sessionId} reason={entry.event.reason} onResolved={resolve} />
-		case "publish_prompt":
-			return <PublishGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
-		case "checkpoint_prompt":
-			return <CheckpointGate sessionId={sessionId} onResolved={resolve} />
 		case "infra_config_prompt":
 			return <InfraConfigGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
 		default:

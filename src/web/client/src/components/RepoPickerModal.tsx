@@ -96,13 +96,12 @@ export function RepoPickerModal({ onSelect, onClose }: RepoPickerModalProps) {
 				{!selectedRepo ? (
 					<>
 						<div className="modal-title">Resume from GitHub</div>
-						<div style={{ marginTop: 12 }}>
+						<div className="repo-picker-filter">
 							<input
 								type="text"
 								value={filter}
 								onChange={(e) => setFilter(e.target.value)}
 								placeholder="Filter repositories..."
-								style={{ width: "100%", boxSizing: "border-box" }}
 							/>
 						</div>
 
@@ -144,7 +143,7 @@ export function RepoPickerModal({ onSelect, onClose }: RepoPickerModalProps) {
 							</div>
 						)}
 
-						<div className="modal-actions" style={{ marginTop: 16 }}>
+						<div className="modal-actions">
 							<button type="button" className="modal-btn" onClick={onClose}>
 								Cancel
 							</button>
@@ -169,13 +168,12 @@ export function RepoPickerModal({ onSelect, onClose }: RepoPickerModalProps) {
 							</button>
 							{selectedRepo.nameWithOwner}
 						</div>
-						<div style={{ marginTop: 12 }}>
+						<div className="repo-picker-filter">
 							<input
 								type="text"
 								value={branchFilter}
 								onChange={(e) => setBranchFilter(e.target.value)}
 								placeholder="Filter branches..."
-								style={{ width: "100%", boxSizing: "border-box" }}
 							/>
 						</div>
 
@@ -221,7 +219,7 @@ export function RepoPickerModal({ onSelect, onClose }: RepoPickerModalProps) {
 										<span className="repo-picker-item-name">+ Create new branch</span>
 									</div>
 								) : (
-									<div style={{ padding: "8px 12px", display: "flex", gap: 8 }}>
+									<div className="repo-picker-new-branch">
 										<input
 											type="text"
 											value={newBranchName}
@@ -232,7 +230,6 @@ export function RepoPickerModal({ onSelect, onClose }: RepoPickerModalProps) {
 												}
 											}}
 											placeholder="branch-name"
-											style={{ flex: 1 }}
 										/>
 										<button
 											type="button"
@@ -247,7 +244,7 @@ export function RepoPickerModal({ onSelect, onClose }: RepoPickerModalProps) {
 							</div>
 						)}
 
-						<div className="modal-actions" style={{ marginTop: 16 }}>
+						<div className="modal-actions">
 							<button type="button" className="modal-btn" onClick={handleBack}>
 								Back
 							</button>

@@ -11,7 +11,12 @@ export interface HeadlessConfig {
 	request?: string
 	resumeSessionId?: string
 	initGit?: boolean
-	gitTask?: string
+	gitOp?: "commit" | "push" | "create-repo" | "create-pr"
+	gitMessage?: string
+	gitRepoName?: string
+	gitRepoVisibility?: "public" | "private"
+	gitPrTitle?: string
+	gitPrBody?: string
 }
 
 /**

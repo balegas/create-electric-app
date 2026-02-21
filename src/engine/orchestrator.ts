@@ -1,9 +1,9 @@
+import { execSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { evaluateDescription, inferProjectName } from "../agents/clarifier.js"
 import { runCoder } from "../agents/coder.js"
-import { runGitAgent } from "../agents/git-agent.js"
 import { runPlanner } from "../agents/planner.js"
 import { createProgressReporter, type ProgressReporter } from "../progress/reporter.js"
 import { scaffold } from "../scaffold/index.js"
@@ -299,23 +299,14 @@ export async function runNew(opts: {
 	if (result.success) {
 		// Auto-commit after successful generation
 		emit({ type: "log", level: "task", message: "Creating git checkpoint...", ts: ts() })
-		try {
-			const gitResult = await runGitAgent({
-				projectDir,
-				task: "Run git_diff_summary to see all changes, then create a commit with a descriptive message summarizing what was built. This is the initial app generation.",
-				onMessage: messageForwarder,
+		const commitResult = gitAutoCommit(projectDir, "feat: initial app generation", emit)
+		if (commitResult) {
+			emit({
+				type: "git_checkpoint",
+				commitHash: commitResult,
+				message: "feat: initial app generation",
+				ts: ts(),
 			})
-			if (gitResult.commitHash) {
-				emit({
-					type: "git_checkpoint",
-					commitHash: gitResult.commitHash,
-					message: gitResult.output,
-					ts: ts(),
-				})
-			}
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : "unknown error"
-			emit({ type: "log", level: "error", message: `Git checkpoint failed: ${msg}`, ts: ts() })
 		}
 
 		emit({
@@ -422,23 +413,15 @@ Do NOT just write a plan — implement the changes directly.`
 	if (result.success) {
 		// Auto-commit after successful iteration
 		emit({ type: "log", level: "task", message: "Creating git checkpoint...", ts: ts() })
-		try {
-			const gitResult = await runGitAgent({
-				projectDir,
-				task: `Run git_diff_summary, then commit changes with a message describing: ${userRequest.slice(0, 200)}`,
-				onMessage: messageForwarder,
+		const commitMsg = `feat: ${userRequest.slice(0, 70)}`
+		const commitResult = gitAutoCommit(projectDir, commitMsg, emit)
+		if (commitResult) {
+			emit({
+				type: "git_checkpoint",
+				commitHash: commitResult,
+				message: commitMsg,
+				ts: ts(),
 			})
-			if (gitResult.commitHash) {
-				emit({
-					type: "git_checkpoint",
-					commitHash: gitResult.commitHash,
-					message: gitResult.output,
-					ts: ts(),
-				})
-			}
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : "unknown error"
-			emit({ type: "log", level: "error", message: `Git checkpoint failed: ${msg}`, ts: ts() })
 		}
 
 		emit({ type: "log", level: "done", message: "Changes applied successfully", ts: ts() })
@@ -452,6 +435,39 @@ Do NOT just write a plan — implement the changes directly.`
 	}
 
 	return { success: result.success, errors: result.errors, sessionId: result.sessionId }
+}
+
+/**
+ * Stage all changes and commit. Returns the commit hash, or null if there were no changes.
+ */
+function gitAutoCommit(
+	projectDir: string,
+	message: string,
+	emit: (event: EngineEvent) => void | Promise<void>,
+): string | null {
+	try {
+		execSync("git add -A", { cwd: projectDir, stdio: "pipe" })
+		try {
+			execSync("git diff --cached --quiet", { cwd: projectDir, stdio: "pipe" })
+			emit({ type: "log", level: "done", message: "No changes to commit", ts: ts() })
+			return null
+		} catch {
+			// There are staged changes — proceed
+		}
+		const safeMsg = message.replace(/"/g, '\\"')
+		execSync(`git commit -m "${safeMsg}"`, { cwd: projectDir, stdio: "pipe" })
+		const hash = execSync("git rev-parse HEAD", {
+			cwd: projectDir,
+			encoding: "utf-8",
+			stdio: "pipe",
+		}).trim()
+		emit({ type: "log", level: "done", message: `Committed: ${message}`, ts: ts() })
+		return hash
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : "unknown error"
+		emit({ type: "log", level: "error", message: `Git checkpoint failed: ${msg}`, ts: ts() })
+		return null
+	}
 }
 
 /**

@@ -111,6 +111,15 @@
 	max-width: 600px;
 }
 
+.tool-inline-command {
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .spinner-inline {
 	width: 10px;
 	height: 10px;
@@ -157,74 +166,10 @@
 	margin-top: 0;
 }
 
-/* Assistant text (short, inline) */
-.assistant-text {
-	display: flex;
-	align-items: baseline;
-	gap: 6px;
-	padding: 3px 0;
-	font-size: 13px;
-	color: var(--text-muted);
-	line-height: 1.6;
-}
-
-/* Assistant text (long, collapsible) */
-.assistant-text-collapsible {
-	margin: 0;
-	padding: 0;
-}
-
-.assistant-text-collapsible summary {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 3px 0;
-	cursor: pointer;
-	font-family: var(--font-mono);
-	font-size: 13px;
-	color: var(--text-muted);
-	user-select: none;
-	list-style: none;
-	line-height: 1.6;
-}
-
-.assistant-text-collapsible summary::-webkit-details-marker {
-	display: none;
-}
-
-.assistant-text-collapsible summary:hover .assistant-text-preview {
-	text-decoration: underline;
-}
-
-.assistant-text-collapsible summary .assistant-text-preview {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	max-width: 700px;
-}
-
-.assistant-text-body {
-	padding: 8px 0 8px 16px;
-	border-left: 2px solid var(--border);
-	margin: 2px 0 4px 6px;
-}
-
-.assistant-text-body pre {
-	font-family: var(--font-mono);
-	font-size: 12px;
-	line-height: 1.5;
-	color: var(--text-muted);
-	white-space: pre-wrap;
-	word-break: break-word;
-	max-height: 600px;
-	overflow-y: auto;
-}
-
-/* Thinking (inline, dimmed) */
+/* Thinking (inline) */
 .thinking-inline {
 	margin: 0;
 	padding: 0;
-	opacity: 0.7;
 }
 
 .thinking-inline summary {
@@ -252,9 +197,8 @@
 }
 
 .thinking-label {
-	font-style: italic;
 	color: var(--brand-2);
-	font-size: 11px;
+	font-size: 13px;
 	font-weight: 600;
 	flex-shrink: 0;
 }

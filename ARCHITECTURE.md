@@ -30,10 +30,10 @@ onRevisionRequested()             → gate: pauses until feedback text
 onContinueNeeded()                → gate: pauses until yes/no
 ```
 
-**`EngineEvent`** (`src/engine/events.ts`) — 16-type discriminated union. Single source of truth for all events:
+**`EngineEvent`** (`src/engine/events.ts`) — 18-type discriminated union. Single source of truth for all events:
 - Logging: `log`, `user_message`, `assistant_text`, `assistant_thinking`
 - Tool tracking: `tool_start`, `tool_result`
-- Gates: `clarification_needed`, `plan_ready`, `continue_needed`, `publish_prompt`, `checkpoint_prompt`, `infra_config_prompt`, `gate_resolved`
+- Gates: `clarification_needed`, `plan_ready`, `continue_needed`, `publish_prompt`, `checkpoint_prompt`, `infra_config_prompt`, `repo_setup_prompt`, `gate_resolved`
 - Lifecycle: `phase_complete`, `session_complete`, `app_ready`, `cost_update`, `git_checkpoint`
 
 **`sdkMessageToEvents()`** (`src/engine/message-parser.ts`) — Converts raw Claude Agent SDK messages into `EngineEvent[]`.
@@ -55,7 +55,7 @@ Two implementations, same concept — a Promise that blocks until an external ev
 | Headless/container | `StdinReader.waitFor(gateName)` | Matching JSON line arrives on stdin |
 | Web server | `createGate(sessionId, gateName)` in `src/web/gate.ts` | `POST /api/sessions/:id/respond` calls `resolveGate()` |
 
-Server-side gates: `checkpoint`, `publish`, `infra_config`
+Server-side gates: `checkpoint`, `publish`, `infra_config`, `repo_setup`
 Container-forwarded gates: `clarification`, `approval`, `continue`, `revision`
 
 ### 4. Durable Streams
@@ -75,7 +75,7 @@ All agents use `query()` from `@anthropic-ai/claude-agent-sdk` with async genera
 |-------|------|-------|-----------|--------|-------|
 | **Clarifier** | `src/agents/clarifier.ts` | sonnet (evaluate) / haiku (name) | 1 | — | None |
 | **Planner** | `src/agents/planner.ts` | sonnet | 10 | — | `read_playbook`, `list_playbooks`, `WebSearch` |
-| **Coder** | `src/agents/coder.ts` | sonnet | 60 | $5.00 | Read/Write/Edit/Glob/Grep/Bash/WebSearch + MCP build/playbooks |
+| **Coder** | `src/agents/coder.ts` | sonnet | 200 | $25.00 | Read/Write/Edit/Glob/Grep/Bash/WebSearch + MCP build/playbooks |
 | **Git Agent** | `src/agents/git-agent.ts` | haiku | 5 | $0.25 | 9 git MCP tools |
 
 **Session resumption**: The coder returns a `session_id` from the SDK. Stored in `SessionInfo.lastCoderSessionId` and passed as `{ resume: sessionId }` on subsequent runs, preserving full conversation context.
@@ -144,7 +144,7 @@ Hooks return `{ hookSpecificOutput: { permissionDecision: "deny" } }` to block a
 
 Hono REST API with 20+ endpoints. Key patterns:
 
-- **Session creation** is async: returns `{ sessionId, streamUrl }` immediately (201), then launches background flow: wait for infra gate → create Docker sandbox → bridge container stdout → send "new" command
+- **Session creation** is async: returns `{ sessionId, streamUrl }` immediately (201), then launches background flow: wait for infra gate → create Docker sandbox → bridge container stdout → optionally emit `repo_setup_prompt` gate (if GitHub accounts exist) → send "new" command
 - **Iterate** detects app lifecycle commands (start/stop/restart) and handles them directly via `sandbox.startApp()`/`stopApp()` without invoking the agent
 - **Git operations** (checkpoint/publish/PR) send `{ command: "git", gitTask: "..." }` to the container, letting the git agent handle it inside
 
@@ -190,6 +190,7 @@ User types "build a todo app" in browser
   → DockerSandboxProvider.create():
       postgres:17 + electricsql/electric + agent container
   → bridgeContainerToStream(stdout → DurableStream)
+  → (if GitHub accounts exist) emit repo_setup_prompt → user configures repo
   → sendCommand({ command: "new", description })
   → Container headlessCommand() reads config from stdin
   → runNew():
@@ -197,7 +198,7 @@ User types "build a todo app" in browser
       scaffold() → clone KPB + overlay + install
       runPlanner() → Sonnet reads playbooks → outputs PLAN.md
       emit plan_ready → user clicks Approve → gate resolves
-      runCoder() → Sonnet executes PLAN.md (60 turns):
+      runCoder() → Sonnet executes PLAN.md (200 turns):
         hooks auto-fix: REPLICA IDENTITY FULL, import validation
         writes schema → migrations → collections → routes → UI
         runs build tool → passes
@@ -247,7 +248,7 @@ flowchart TD
     WritePlan["Write PLAN.md<br/>+ init session state"] --> Coder
 
     subgraph "Phase 3 — Code Generation"
-        Coder["Coder Agent (Sonnet)<br/>Tools: Read, Write, Edit, Glob,<br/>Grep, Bash, WebSearch,<br/>build, read_playbook<br/>Max 60 turns · $5 budget"]
+        Coder["Coder Agent (Sonnet)<br/>Tools: Read, Write, Edit, Glob,<br/>Grep, Bash, WebSearch,<br/>build, read_playbook<br/>Max 200 turns · $25 budget"]
         Coder --> CoderResult{Stop reason?}
         CoderResult -- complete --> GitCommit
         CoderResult -- error --> Failed([Failed])

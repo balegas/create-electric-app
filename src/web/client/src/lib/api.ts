@@ -136,25 +136,6 @@ export function getGitStatus(sessionId: string) {
 	return request<GitStatus>(`/sessions/${sessionId}/git-status`)
 }
 
-export function checkpointSession(sessionId: string) {
-	return request<{ ok: boolean }>(`/sessions/${sessionId}/checkpoint`, {
-		method: "POST",
-	})
-}
-
-export function publishSession(sessionId: string) {
-	return request<{ ok: boolean }>(`/sessions/${sessionId}/publish`, {
-		method: "POST",
-	})
-}
-
-export function createPr(sessionId: string, title?: string, body?: string) {
-	return request<{ ok: boolean }>(`/sessions/${sessionId}/pr`, {
-		method: "POST",
-		body: { title, body },
-	})
-}
-
 export function listGithubRepos() {
 	return request<{ repos: GhRepo[] }>("/github/repos")
 }

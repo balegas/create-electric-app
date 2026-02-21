@@ -80,20 +80,24 @@ export function ConsoleTextEntry({
 }) {
 	if (entry.text.length <= COLLAPSE_THRESHOLD) {
 		return (
-			<div className="assistant-text">
-				<Markdown inline>{entry.text}</Markdown>
+			<div className="console-entry">
+				<span className="prefix task">[agent]</span>
+				<span>
+					<Markdown inline>{entry.text}</Markdown>
+				</span>
 				<Duration value={duration} />
 			</div>
 		)
 	}
 
 	return (
-		<details className="assistant-text-collapsible">
+		<details className="tool-inline">
 			<summary>
-				<span className="assistant-text-preview">{entry.text.slice(0, 120)}...</span>
+				<span className="tool-inline-name">agent</span>
+				<span className="tool-inline-summary">{entry.text.slice(0, 120)}...</span>
 				<Duration value={duration} />
 			</summary>
-			<div className="assistant-text-body">
+			<div className="tool-inline-body">
 				<Markdown>{entry.text}</Markdown>
 			</div>
 		</details>

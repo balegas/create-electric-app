@@ -1,10 +1,9 @@
 import { type ChildProcess, execSync, spawn } from "node:child_process"
 import { mkdirSync } from "node:fs"
 import path from "node:path"
-import { runGitAgent } from "../agents/git-agent.js"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
-import { createHeadlessAdapter } from "../engine/headless-adapter.js"
+import { createHeadlessAdapter, type HeadlessConfig } from "../engine/headless-adapter.js"
 import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
 
 /**
@@ -55,13 +54,50 @@ export async function headlessCommand(): Promise<void> {
 				]
 				for (const cmd of gitCmds) {
 					const toolUseId = `early-git-${Date.now()}`
-					callbacks.onEvent({ type: "tool_start", toolName: "bash", toolUseId, input: { command: cmd }, ts: ts() })
+					callbacks.onEvent({
+						type: "tool_start",
+						toolName: "bash",
+						toolUseId,
+						input: { command: cmd },
+						ts: ts(),
+					})
 					const output = execSync(cmd, { cwd: earlyDir, stdio: "pipe" }).toString().trim()
 					callbacks.onEvent({ type: "tool_result", toolUseId, output: output || "(ok)", ts: ts() })
 				}
-				callbacks.onEvent({ type: "log", level: "done", message: "Git repository initialized", ts: ts() })
+				callbacks.onEvent({
+					type: "log",
+					level: "done",
+					message: "Git repository initialized",
+					ts: ts(),
+				})
 			} catch {
 				/* non-fatal — git init may fail if dir already has a repo */
+			}
+
+			// Validate gh auth if GH_TOKEN is available
+			if (process.env.GH_TOKEN) {
+				try {
+					const ghOut = execSync("gh auth status 2>&1", {
+						cwd: earlyDir,
+						encoding: "utf-8",
+						timeout: 10_000,
+						env: { ...process.env },
+					}).trim()
+					const firstLine = ghOut.split("\n")[0] || ghOut
+					callbacks.onEvent({
+						type: "log",
+						level: "done",
+						message: `GitHub CLI: ${firstLine}`,
+						ts: ts(),
+					})
+				} catch {
+					callbacks.onEvent({
+						type: "log",
+						level: "error",
+						message: "GitHub CLI auth check failed — repo creation may not work",
+						ts: ts(),
+					})
+				}
 			}
 
 			const result = await runNew({
@@ -104,24 +140,18 @@ export async function headlessCommand(): Promise<void> {
 				process.exitCode = 1
 				return
 			}
-			if (!config.gitTask) {
-				process.stderr.write('Error: "gitTask" is required for command "git"\n')
+			if (!config.gitOp) {
+				process.stderr.write('Error: "gitOp" is required for command "git"\n')
 				process.exitCode = 1
 				return
 			}
 
 			projectDir = config.projectDir
 
-			const gitResult = await runGitAgent({
-				projectDir: config.projectDir,
-				task: config.gitTask,
-				onMessage: (msg) => {
-					callbacks.onEvent(msg as unknown as EngineEvent)
-				},
-			})
+			const gitSuccess = executeGitOp(config, callbacks.onEvent)
 			callbacks.onEvent({
 				type: "session_complete",
-				success: gitResult.success,
+				success: gitSuccess,
 				ts: ts(),
 			})
 		} else {
@@ -173,37 +203,23 @@ async function listenForIterations(
 		}
 
 		if (cmd.command === "git") {
-			const gitDir = cmd.projectDir || projectDir
-			const gitTask = (cmd as Record<string, unknown>).gitTask as string | undefined
-			if (!gitDir || !gitTask) {
+			const gitCmd = cmd as unknown as HeadlessConfig
+			if (!gitCmd.gitOp || !gitCmd.projectDir) {
 				callbacks.onEvent({
 					type: "log",
 					level: "error",
-					message: "git command requires projectDir and gitTask",
-					ts: ts(),
-				})
-				continue
-			}
-
-			try {
-				const gitResult = await runGitAgent({
-					projectDir: gitDir,
-					task: gitTask,
-					onMessage: (msg) => {
-						callbacks.onEvent(msg as unknown as EngineEvent)
-					},
-				})
-				callbacks.onEvent({ type: "session_complete", success: gitResult.success, ts: ts() })
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : "Git operation failed"
-				callbacks.onEvent({
-					type: "log",
-					level: "error",
-					message: `Git failed: ${msg}`,
+					message: "git command requires projectDir and gitOp",
 					ts: ts(),
 				})
 				callbacks.onEvent({ type: "session_complete", success: false, ts: ts() })
+				continue
 			}
+
+			const gitSuccess = executeGitOp(
+				{ ...gitCmd, projectDir: gitCmd.projectDir || projectDir },
+				callbacks.onEvent,
+			)
+			callbacks.onEvent({ type: "session_complete", success: gitSuccess, ts: ts() })
 			continue
 		}
 
@@ -257,6 +273,131 @@ async function listenForIterations(
 	// Clean up dev server when stdin closes
 	if (devServer && !devServer.killed) {
 		devServer.kill()
+	}
+}
+
+/**
+ * Execute a structured git operation directly via execSync.
+ * Returns true on success, false on failure.
+ */
+function executeGitOp(
+	config: HeadlessConfig,
+	emit: (event: EngineEvent) => void | Promise<void>,
+): boolean {
+	const cwd = config.projectDir!
+	const op = config.gitOp!
+	const toolUseId = `git-${op}-${Date.now()}`
+
+	function run(cmd: string): string {
+		emit({ type: "tool_start", toolName: "bash", toolUseId, input: { command: cmd }, ts: ts() })
+		try {
+			const output = execSync(cmd, {
+				cwd,
+				encoding: "utf-8",
+				timeout: 60_000,
+				env: { ...process.env },
+				stdio: ["pipe", "pipe", "pipe"],
+			}).trim()
+			emit({ type: "tool_result", toolUseId, output: output || "(ok)", ts: ts() })
+			return output
+		} catch (e) {
+			const stderr = (e as Record<string, string>)?.stderr || ""
+			const stdout = (e as Record<string, string>)?.stdout || ""
+			const detail = stderr || stdout || (e instanceof Error ? e.message : "Command failed")
+			emit({ type: "tool_result", toolUseId, output: `Error: ${detail}`, ts: ts() })
+			throw new Error(detail)
+		}
+	}
+
+	try {
+		switch (op) {
+			case "commit": {
+				const message = config.gitMessage || "checkpoint"
+				run("git add -A")
+				try {
+					execSync("git diff --cached --quiet", { cwd, stdio: "pipe" })
+					emit({
+						type: "log",
+						level: "done",
+						message: "No changes to commit",
+						ts: ts(),
+					})
+					return true
+				} catch {
+					// There are staged changes — proceed
+				}
+				const safeMsg = message.replace(/"/g, '\\"')
+				run(`git commit -m "${safeMsg}"`)
+				const hash = run("git rev-parse HEAD")
+				emit({
+					type: "git_checkpoint",
+					commitHash: hash,
+					message,
+					ts: ts(),
+				})
+				return true
+			}
+			case "push": {
+				const branch = run("git rev-parse --abbrev-ref HEAD")
+				run(`git push -u origin ${branch}`)
+				emit({
+					type: "log",
+					level: "done",
+					message: `Pushed to origin/${branch}`,
+					ts: ts(),
+				})
+				return true
+			}
+			case "create-repo": {
+				const name = config.gitRepoName
+				if (!name) {
+					emit({
+						type: "log",
+						level: "error",
+						message: "gitRepoName is required for create-repo",
+						ts: ts(),
+					})
+					return false
+				}
+				const vis = config.gitRepoVisibility || "private"
+				run(`gh repo create "${name}" --${vis} --source . --remote origin --push`)
+				emit({
+					type: "log",
+					level: "done",
+					message: `GitHub repo created: ${name} (${vis})`,
+					ts: ts(),
+				})
+				return true
+			}
+			case "create-pr": {
+				const title = config.gitPrTitle || "Changes from electric-agent"
+				const body =
+					config.gitPrBody ||
+					"Generated by electric-agent.\n\nReview the changes and merge when ready."
+				const safeTitle = title.replace(/"/g, '\\"')
+				const safeBody = body.replace(/"/g, '\\"')
+				const output = run(`gh pr create --title "${safeTitle}" --body "${safeBody}"`)
+				emit({
+					type: "log",
+					level: "done",
+					message: `PR created: ${output}`,
+					ts: ts(),
+				})
+				return true
+			}
+			default:
+				emit({
+					type: "log",
+					level: "error",
+					message: `Unknown git operation: ${op}`,
+					ts: ts(),
+				})
+				return false
+		}
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : "Git operation failed"
+		emit({ type: "log", level: "error", message: `Git ${op} failed: ${msg}`, ts: ts() })
+		return false
 	}
 }
 

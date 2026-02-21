@@ -28,13 +28,11 @@ export type EngineEvent =
 	| { type: "app_ready"; port?: number; ts: string }
 	| { type: "git_checkpoint"; commitHash: string; message: string; ts: string }
 	| {
-			type: "publish_prompt"
-			defaultRepoName: string
-			accounts: { login: string; type: "user" | "org" }[]
+			type: "infra_config_prompt"
+			projectName: string
+			ghAccounts: { login: string; type: "user" | "org" }[]
 			ts: string
 	  }
-	| { type: "checkpoint_prompt"; ts: string }
-	| { type: "infra_config_prompt"; projectName: string; ts: string }
 	| { type: "gate_resolved"; gate: string; summary?: string; ts: string }
 
 export type ConsoleEntry =
@@ -55,13 +53,7 @@ export type ConsoleEntry =
 			event: Extract<
 				EngineEvent,
 				{
-					type:
-						| "clarification_needed"
-						| "plan_ready"
-						| "continue_needed"
-						| "publish_prompt"
-						| "checkpoint_prompt"
-						| "infra_config_prompt"
+					type: "clarification_needed" | "plan_ready" | "continue_needed" | "infra_config_prompt"
 				}
 			>
 			resolved: boolean

@@ -63,6 +63,23 @@ function HighlightedPre({ text, maxLen }: { text: string; maxLen: number }) {
 
 export function ToolExecution({ entry, duration }: { entry: ToolEntry; duration: string | null }) {
 	const isLoading = entry.output === null
+	const isBash = entry.toolName === "Bash" || entry.toolName === "bash"
+	const command = isBash ? (entry.input.command as string) || "" : ""
+
+	if (isBash) {
+		return (
+			<details className="tool-inline">
+				<summary>
+					<span className="tool-inline-name">$</span>
+					<span className="tool-inline-command">{command}</span>
+					{isLoading ? <span className="spinner-inline" /> : <Duration value={duration} />}
+				</summary>
+				<div className="tool-inline-body">
+					{entry.output !== null && <HighlightedPre text={entry.output} maxLen={5000} />}
+				</div>
+			</details>
+		)
+	}
 
 	return (
 		<details className="tool-inline">

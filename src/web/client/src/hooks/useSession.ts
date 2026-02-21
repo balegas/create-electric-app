@@ -62,8 +62,6 @@ export function useSession(sessionId: string | null) {
 				case "clarification_needed":
 				case "plan_ready":
 				case "continue_needed":
-				case "publish_prompt":
-				case "checkpoint_prompt":
 				case "infra_config_prompt":
 					return [...prev, { kind: "gate" as const, event, resolved: false, ts: event.ts }]
 

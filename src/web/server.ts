@@ -154,29 +154,99 @@ export function createApp(config: ServerConfig) {
 			JSON.stringify({ type: "user_message", message: body.description, ts: ts() }),
 		)
 
-		// Emit infra config gate and wait for user choice, then create sandbox
+		// Gather GitHub accounts for the merged setup gate
+		let ghAccounts: { login: string; type: "user" | "org" }[] = []
+		if (isGhAuthenticated()) {
+			try {
+				ghAccounts = ghListAccounts()
+			} catch {
+				// gh not available — no repo setup
+			}
+		}
+
+		// Emit combined infra + repo setup gate
 		await promptStream.append(
-			JSON.stringify({ type: "infra_config_prompt", projectName, ts: ts() }),
+			JSON.stringify({ type: "infra_config_prompt", projectName, ghAccounts, ts: ts() }),
 		)
 
-		// Launch async flow: wait for infra gate → create sandbox → start agent
+		// Launch async flow: wait for setup gate → create sandbox → start agent
 		const asyncFlow = async () => {
-			// 1. Wait for infrastructure config
+			// 1. Wait for combined infra + repo config
 			let infra: InfraConfig
+			let repoConfig: {
+				account: string
+				repoName: string
+				visibility: "public" | "private"
+			} | null = null
+
 			try {
-				infra = await createGate<InfraConfig>(sessionId, "infra_config")
+				const gateValue = await createGate<
+					InfraConfig & {
+						repoAccount?: string
+						repoName?: string
+						repoVisibility?: "public" | "private"
+					}
+				>(sessionId, "infra_config")
+
+				if (gateValue.mode === "cloud") {
+					infra = {
+						mode: "cloud",
+						databaseUrl: gateValue.databaseUrl,
+						electricUrl: gateValue.electricUrl,
+						sourceId: gateValue.sourceId,
+						secret: gateValue.secret,
+					}
+				} else {
+					infra = { mode: "local" }
+				}
+
+				// Extract repo config if provided
+				if (gateValue.repoAccount && gateValue.repoName?.trim()) {
+					repoConfig = {
+						account: gateValue.repoAccount,
+						repoName: gateValue.repoName,
+						visibility: gateValue.repoVisibility ?? "private",
+					}
+					updateSessionInfo(config.dataDir, sessionId, {
+						git: {
+							branch: "main",
+							remoteUrl: null,
+							repoName: `${repoConfig.account}/${repoConfig.repoName}`,
+							repoVisibility: repoConfig.visibility,
+							lastCommitHash: null,
+							lastCommitMessage: null,
+							lastCheckpointAt: null,
+						},
+					})
+				}
 			} catch {
 				infra = { mode: "local" }
 			}
 
-			// 2. Create sandbox with the chosen infra (git init happens inside container automatically)
+			// 2. Create sandbox with the chosen infra
 			const handle = await config.sandbox.create(sessionId, { projectName, infra })
 			updateSessionInfo(config.dataDir, sessionId, {
 				appPort: handle.port,
 				sandboxProjectDir: handle.projectDir,
 			})
 
-			// 4. Bridge container stdout → durable stream
+			// 4. Log repo config (gh auth is validated when the git agent runs after scaffold)
+			if (repoConfig) {
+				const ghStream = new DurableStream({ url, contentType: "application/json" })
+				await ghStream.append(
+					JSON.stringify({
+						type: "log",
+						level: "done",
+						message: `GitHub repo: ${repoConfig.account}/${repoConfig.repoName} (${repoConfig.visibility}) — will be created after scaffolding`,
+						ts: ts(),
+					}),
+				)
+			}
+
+			// 5. Bridge container stdout → durable stream
+			// When the initial "new" command completes (session_complete), create the repo and push
+			const capturedRepoConfig = repoConfig
+			let repoCreationSent = false
 			bridgeContainerToStream(sessionId, handle.process, url, (success) => {
 				const updates: Partial<SessionInfo> = {
 					status: success ? "complete" : "error",
@@ -184,22 +254,37 @@ export function createApp(config: ServerConfig) {
 				try {
 					const gs = config.sandbox.gitStatus(handle, handle.projectDir)
 					if (gs.initialized) {
+						const existing = getSession(config.dataDir, sessionId)
 						updates.git = {
 							branch: gs.branch ?? "main",
-							remoteUrl: null,
-							repoName: null,
+							remoteUrl: existing?.git?.remoteUrl ?? null,
+							repoName: existing?.git?.repoName ?? null,
+							repoVisibility: existing?.git?.repoVisibility,
 							lastCommitHash: gs.lastCommitHash ?? null,
 							lastCommitMessage: gs.lastCommitMessage ?? null,
-							lastCheckpointAt: null,
+							lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
 						}
 					}
 				} catch {
 					// Container may already be stopped
 				}
 				updateSessionInfo(config.dataDir, sessionId, updates)
+
+				// After scaffold completes, create the GitHub repo and push (once only)
+				if (capturedRepoConfig && !repoCreationSent && success && !handle.process.killed) {
+					repoCreationSent = true
+					const fullRepoName = `${capturedRepoConfig.account}/${capturedRepoConfig.repoName}`
+					config.sandbox.sendCommand(handle, {
+						command: "git",
+						projectDir: handle.projectDir,
+						gitOp: "create-repo",
+						gitRepoName: fullRepoName,
+						gitRepoVisibility: capturedRepoConfig.visibility,
+					})
+				}
 			})
 
-			// 5. Send the new command — git init happens automatically via scaffold
+			// 6. Send the new command — git init happens automatically via scaffold
 			config.sandbox.sendCommand(handle, {
 				command: "new",
 				description: body.description,
@@ -319,7 +404,7 @@ export function createApp(config: ServerConfig) {
 		const summary = (body._summary as string) || undefined
 
 		// Server-side gates are resolved in-process (they run on the server, not inside the container)
-		const serverGates = new Set(["checkpoint", "publish", "infra_config"])
+		const serverGates = new Set(["infra_config"])
 
 		// Forward agent gate responses to container stdin
 		if (!serverGates.has(gate)) {
@@ -344,12 +429,6 @@ export function createApp(config: ServerConfig) {
 		// Resolve in-process gate
 		let value: unknown
 		switch (gate) {
-			case "publish":
-				value = { account: body.account, repoName: body.repoName, visibility: body.visibility }
-				break
-			case "checkpoint":
-				value = { message: body.message }
-				break
 			case "infra_config":
 				if (body.mode === "cloud") {
 					value = {
@@ -358,9 +437,17 @@ export function createApp(config: ServerConfig) {
 						electricUrl: body.electricUrl,
 						sourceId: body.sourceId,
 						secret: body.secret,
+						repoAccount: body.repoAccount,
+						repoName: body.repoName,
+						repoVisibility: body.repoVisibility,
 					}
 				} else {
-					value = { mode: "local" }
+					value = {
+						mode: "local",
+						repoAccount: body.repoAccount,
+						repoName: body.repoName,
+						repoVisibility: body.repoVisibility,
+					}
 				}
 				break
 			default:
@@ -514,122 +601,6 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "File not found or unreadable" }, 404)
 		}
 		return c.json({ content })
-	})
-
-	// Checkpoint: emit prompt event, wait for gate response, then send git command to container
-	app.post("/api/sessions/:id/checkpoint", async (c) => {
-		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
-		if (!session) return c.json({ error: "Session not found" }, 404)
-
-		console.log(`[checkpoint] session=${sessionId}`)
-
-		const sUrl = streamUrl(config.streamsPort, sessionId)
-		const s = new DurableStream({ url: sUrl, contentType: "application/json" })
-
-		await s.append(JSON.stringify({ type: "checkpoint_prompt", ts: ts() }))
-		console.log("[checkpoint] gate emitted, waiting for user response...")
-
-		const gateValue = await createGate<{ message?: string }>(sessionId, "checkpoint")
-		console.log("[checkpoint] gate resolved:", JSON.stringify(gateValue))
-
-		const handle = config.sandbox.get(sessionId)
-		if (!handle || handle.process.killed) {
-			return c.json({ error: "Container not available" }, 404)
-		}
-
-		const commitMsg = gateValue.message || "checkpoint"
-		config.sandbox.sendCommand(handle, {
-			command: "git",
-			projectDir: session.sandboxProjectDir,
-			gitTask: `Run git_diff_summary to see changes, then commit with message: ${commitMsg}`,
-		})
-
-		return c.json({ ok: true })
-	})
-
-	// Publish: emit prompt event, wait for gate response, then send git command to container
-	app.post("/api/sessions/:id/publish", async (c) => {
-		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
-		if (!session) return c.json({ error: "Session not found" }, 404)
-
-		const sUrl = streamUrl(config.streamsPort, sessionId)
-		const s = new DurableStream({ url: sUrl, contentType: "application/json" })
-
-		console.log(`[publish] session=${sessionId}`)
-
-		// List accounts via gh api inside the container
-		const handle = config.sandbox.get(sessionId)
-		let accounts: { login: string; type: "user" | "org" }[] = []
-		if (handle && !handle.process.killed) {
-			try {
-				const gs = config.sandbox.gitStatus(handle, session.sandboxProjectDir || handle.projectDir)
-				// If git is initialized, we can try listing accounts
-				if (gs.initialized) {
-					accounts = ghListAccounts()
-				}
-			} catch {
-				// Fall back to server-side accounts
-				accounts = ghListAccounts()
-			}
-		}
-
-		await s.append(
-			JSON.stringify({
-				type: "publish_prompt",
-				defaultRepoName: session.projectName,
-				accounts,
-				ts: ts(),
-			}),
-		)
-		console.log("[publish] gate emitted, waiting for user response...")
-
-		const gateValue = await createGate<{
-			account: string
-			repoName: string
-			visibility: "public" | "private"
-		}>(sessionId, "publish")
-		console.log("[publish] gate resolved:", JSON.stringify(gateValue))
-
-		const bareRepoName = gateValue.repoName || session.projectName
-		const repoName = gateValue.account ? `${gateValue.account}/${bareRepoName}` : bareRepoName
-
-		if (!handle || handle.process.killed) {
-			return c.json({ error: "Container not available" }, 404)
-		}
-
-		config.sandbox.sendCommand(handle, {
-			command: "git",
-			projectDir: session.sandboxProjectDir,
-			gitTask: `Create a GitHub repo named "${repoName}" (${gateValue.visibility}) using gh_repo_create, then push using git_push.`,
-		})
-
-		return c.json({ ok: true })
-	})
-
-	// Create a PR from the current branch — send git command to container
-	app.post("/api/sessions/:id/pr", async (c) => {
-		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
-		if (!session) return c.json({ error: "Session not found" }, 404)
-
-		const handle = config.sandbox.get(sessionId)
-		if (!handle || handle.process.killed) {
-			return c.json({ error: "Container not available" }, 404)
-		}
-
-		const body = (await c.req.json()) as { title?: string; body?: string }
-		const titleHint = body.title ? ` with title "${body.title}"` : ""
-		const bodyHint = body.body ? ` and body "${body.body}"` : ""
-
-		config.sandbox.sendCommand(handle, {
-			command: "git",
-			projectDir: session.sandboxProjectDir,
-			gitTask: `Run git_diff_summary to understand recent changes, then create a PR using gh_pr_create${titleHint}${bodyHint}.`,
-		})
-
-		return c.json({ ok: true })
 	})
 
 	// List GitHub accounts (personal + orgs)

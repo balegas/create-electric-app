@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { Console } from "../components/Console"
-import { GitControls } from "../components/GitControls"
 import { PromptInput } from "../components/PromptInput"
 import { RightPanel } from "../components/RightPanel"
 import { Settings } from "../components/Settings"
@@ -268,14 +267,6 @@ export function SessionPage() {
 					>
 						Preview
 					</a>
-				)}
-
-				{activeSession && sessionDone && (
-					<GitControls
-						sessionId={effectiveId ?? ""}
-						gitState={activeSession.git}
-						onUpdate={refreshSessions}
-					/>
 				)}
 			</div>
 

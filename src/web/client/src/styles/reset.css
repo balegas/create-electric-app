@@ -102,6 +102,7 @@
 	/* Layout */
 	--sidebar-width: 240px;
 	--topbar-height: 48px;
+	--footer-height: 60px;
 }
 
 html,
