@@ -244,9 +244,6 @@ export function createApp(config: ServerConfig) {
 			}
 
 			// 5. Bridge container stdout → durable stream
-			// When the initial "new" command completes (session_complete), create the repo and push
-			const capturedRepoConfig = repoConfig
-			let repoCreationSent = false
 			bridgeContainerToStream(sessionId, handle.process, url, (success) => {
 				const updates: Partial<SessionInfo> = {
 					status: success ? "complete" : "error",
@@ -269,28 +266,20 @@ export function createApp(config: ServerConfig) {
 					// Container may already be stopped
 				}
 				updateSessionInfo(config.dataDir, sessionId, updates)
-
-				// After scaffold completes, create the GitHub repo and push (once only)
-				if (capturedRepoConfig && !repoCreationSent && success && !handle.process.killed) {
-					repoCreationSent = true
-					const fullRepoName = `${capturedRepoConfig.account}/${capturedRepoConfig.repoName}`
-					config.sandbox.sendCommand(handle, {
-						command: "git",
-						projectDir: handle.projectDir,
-						gitOp: "create-repo",
-						gitRepoName: fullRepoName,
-						gitRepoVisibility: capturedRepoConfig.visibility,
-					})
-				}
 			})
 
-			// 6. Send the new command — git init happens automatically via scaffold
-			config.sandbox.sendCommand(handle, {
+			// 6. Send the new command with repo config — repo is created right after scaffold
+			const newCmd: Record<string, unknown> = {
 				command: "new",
 				description: body.description,
 				projectName,
 				baseDir: "/home/agent/workspace",
-			})
+			}
+			if (repoConfig) {
+				newCmd.gitRepoName = `${repoConfig.account}/${repoConfig.repoName}`
+				newCmd.gitRepoVisibility = repoConfig.visibility
+			}
+			config.sandbox.sendCommand(handle, newCmd)
 		}
 
 		asyncFlow().catch((err) => {

@@ -87,6 +87,9 @@ export async function runNew(opts: {
 	initGit?: boolean
 	callbacks: OrchestratorCallbacks
 	abortController?: AbortController
+	/** If provided, create a GitHub repo and push the scaffold before planning */
+	gitRepoName?: string
+	gitRepoVisibility?: "public" | "private"
 }): Promise<{ sessionId?: string; projectDir?: string }> {
 	const { callbacks } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
@@ -194,6 +197,35 @@ export async function runNew(opts: {
 			ts: ts(),
 		})
 		return { projectDir }
+	}
+
+	// Step 1c: Create GitHub repo and push scaffold (if repo config provided)
+	if (opts.gitRepoName) {
+		emit({
+			type: "log",
+			level: "task",
+			message: "Creating GitHub repo and pushing scaffold...",
+			ts: ts(),
+		})
+		gitAutoCommit(projectDir, "chore: initial scaffold", emit)
+		try {
+			const vis = opts.gitRepoVisibility || "private"
+			execSync(`gh repo create "${opts.gitRepoName}" --${vis} --source . --remote origin --push`, {
+				cwd: projectDir,
+				stdio: "pipe",
+				timeout: 60_000,
+				env: { ...process.env },
+			})
+			emit({
+				type: "log",
+				level: "done",
+				message: `GitHub repo created: ${opts.gitRepoName} (${vis})`,
+				ts: ts(),
+			})
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "unknown error"
+			emit({ type: "log", level: "error", message: `Repo creation failed: ${msg}`, ts: ts() })
+		}
 	}
 
 	// Step 2: Plan

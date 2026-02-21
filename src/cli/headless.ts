@@ -124,6 +124,8 @@ export async function headlessCommand(): Promise<void> {
 				baseDir,
 				callbacks,
 				initGit: false,
+				gitRepoName: config.gitRepoName,
+				gitRepoVisibility: config.gitRepoVisibility,
 			})
 
 			projectDir = result.projectDir
