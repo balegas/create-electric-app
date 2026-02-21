@@ -31,12 +31,15 @@ import {
 	type SessionInfo,
 	updateSessionInfo,
 } from "./sessions.js"
+import { getStreamConnectionInfo, type StreamConfig } from "./streams.js"
 
 interface ServerConfig {
 	port: number
 	streamsPort: number
 	dataDir: string
 	sandbox: SandboxProvider
+	/** Hosted stream config (null = use local DS server) */
+	streamConfig: StreamConfig | null
 }
 
 /** Check if the Claude CLI is installed and authenticated (OAuth) */
@@ -678,6 +681,71 @@ export function createApp(config: ServerConfig) {
 		return c.json({ ok: true })
 	})
 
+	// --- SSE Proxy ---
+
+	// Server-side SSE proxy: reads from the hosted durable stream and proxies
+	// events to the React client. The client never sees DS credentials.
+	app.get("/api/sessions/:id/events", async (c) => {
+		const sessionId = c.req.param("id")
+		const session = getSession(config.dataDir, sessionId)
+		if (!session) return c.json({ error: "Session not found" }, 404)
+
+		// Get the stream connection info (hosted or local)
+		const connection = getStreamConnectionInfo(sessionId, config.streamConfig, config.streamsPort)
+
+		// Last-Event-ID allows reconnection from where the client left off
+		const lastEventId = c.req.header("Last-Event-ID") || "-1"
+
+		const reader = new DurableStream({
+			url: connection.url,
+			headers: connection.headers,
+			contentType: "application/json",
+		})
+
+		const { readable, writable } = new TransformStream()
+		const writer = writable.getWriter()
+		const encoder = new TextEncoder()
+
+		let cancelled = false
+
+		const response = await reader.stream<Record<string, unknown>>({
+			offset: lastEventId,
+			live: true,
+		})
+
+		const cancel = response.subscribeJson<Record<string, unknown>>((batch) => {
+			if (cancelled) return
+			for (const item of batch.items) {
+				// Skip server-originated messages (commands, gate responses)
+				// Only proxy events that are either untagged (legacy) or source: "agent"
+				if (item.source === "server") continue
+
+				// Strip the source field before sending to client
+				const { source: _, ...eventData } = item
+				const data = JSON.stringify(eventData)
+				writer.write(encoder.encode(`id:${batch.offset}\ndata:${data}\n\n`)).catch(() => {
+					cancelled = true
+				})
+			}
+		})
+
+		// Clean up when client disconnects
+		c.req.raw.signal.addEventListener("abort", () => {
+			cancelled = true
+			cancel()
+			writer.close().catch(() => {})
+		})
+
+		return new Response(readable, {
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				Connection: "keep-alive",
+				"Access-Control-Allow-Origin": "*",
+			},
+		})
+	})
+
 	// --- Git/GitHub Routes ---
 
 	// Get git status for a session
@@ -870,12 +938,14 @@ export async function startWebServer(opts: {
 	streamsPort?: number
 	dataDir?: string
 	sandbox: SandboxProvider
+	streamConfig?: StreamConfig | null
 }): Promise<void> {
 	const config: ServerConfig = {
 		port: opts.port ?? 4400,
 		streamsPort: opts.streamsPort ?? 4437,
 		dataDir: opts.dataDir ?? path.resolve(process.cwd(), ".electric-agent"),
 		sandbox: opts.sandbox,
+		streamConfig: opts.streamConfig ?? null,
 	}
 
 	fs.mkdirSync(config.dataDir, { recursive: true })

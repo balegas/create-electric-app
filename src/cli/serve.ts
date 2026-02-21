@@ -1,6 +1,7 @@
 import { startStreamServer, stopStreamServer } from "../web/infra.js"
 import { DockerSandboxProvider } from "../web/sandbox/index.js"
 import { startWebServer } from "../web/server.js"
+import { getStreamConfig } from "../web/streams.js"
 
 export async function serveCommand(opts: {
 	port?: number
@@ -17,7 +18,8 @@ export async function serveCommand(opts: {
 
 	// Start web API + static file server with Docker sandbox
 	const sandbox = new DockerSandboxProvider()
-	await startWebServer({ port, streamsPort, dataDir, sandbox })
+	const streamConfig = getStreamConfig()
+	await startWebServer({ port, streamsPort, dataDir, sandbox, streamConfig })
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
 

@@ -1,9 +1,6 @@
-import { stream } from "@durable-streams/client"
 import { useCallback, useEffect, useRef, useState } from "react"
 import toast from "react-hot-toast"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
-
-const STREAMS_BASE = "http://127.0.0.1:4437"
 
 export function useSession(sessionId: string | null) {
 	const [entries, setEntries] = useState<ConsoleEntry[]>([])
@@ -11,8 +8,6 @@ export function useSession(sessionId: string | null) {
 	const [isComplete, setIsComplete] = useState(false)
 	const [appReady, setAppReady] = useState(false)
 	const [totalCost, setTotalCost] = useState(0)
-	const cancelRef = useRef<(() => void) | null>(null)
-	const offsetRef = useRef<string>("-1")
 	const toastShownRef = useRef(false)
 	const liveRef = useRef(false)
 
@@ -121,45 +116,42 @@ export function useSession(sessionId: string | null) {
 		setIsComplete(false)
 		setAppReady(false)
 		setTotalCost(0)
-		offsetRef.current = "-1"
 		toastShownRef.current = false
 		liveRef.current = false
 
 		let cancelled = false
+		let eventSource: EventSource | null = null
 
-		async function connect() {
-			try {
-				const res = await stream<EngineEvent>({
-					url: `${STREAMS_BASE}/session/${sessionId}`,
-					offset: offsetRef.current,
-					live: true,
-				})
+		function connect() {
+			if (cancelled) return
 
-				cancelRef.current = () => res.cancel()
-				if (cancelled) {
-					res.cancel()
-					return
-				}
+			eventSource = new EventSource(`/api/sessions/${sessionId}/events`)
 
-				setIsLive(true)
-				let firstBatch = true
-
-				res.subscribeJson(async (batch) => {
-					if (cancelled) return
-					for (const item of batch.items) {
-						processEvent(item)
-					}
-					offsetRef.current = batch.offset
-					// Mark live after processing the first (catch-up) batch
-					if (firstBatch) {
-						firstBatch = false
-						liveRef.current = true
-					}
-				})
-			} catch {
+			eventSource.onopen = () => {
 				if (!cancelled) {
-					setTimeout(connect, 1000)
+					setIsLive(true)
+					// Mark live after connection — first batch of events is catch-up
+					setTimeout(() => {
+						liveRef.current = true
+					}, 500)
 				}
+			}
+
+			eventSource.onmessage = (e) => {
+				if (cancelled) return
+				try {
+					const event = JSON.parse(e.data) as EngineEvent
+					processEvent(event)
+				} catch {
+					// Ignore malformed events
+				}
+			}
+
+			eventSource.onerror = () => {
+				if (cancelled) return
+				eventSource?.close()
+				// Reconnect after 1 second
+				setTimeout(connect, 1000)
 			}
 		}
 
@@ -167,9 +159,9 @@ export function useSession(sessionId: string | null) {
 
 		return () => {
 			cancelled = true
-			if (cancelRef.current) {
-				cancelRef.current()
-				cancelRef.current = null
+			if (eventSource) {
+				eventSource.close()
+				eventSource = null
 			}
 		}
 	}, [sessionId, processEvent])
