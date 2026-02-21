@@ -3,6 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { evaluateDescription, inferProjectName } from "../agents/clarifier.js"
 import { runCoder } from "../agents/coder.js"
+import { runGitAgent } from "../agents/git-agent.js"
 import { runPlanner } from "../agents/planner.js"
 import { createProgressReporter, type ProgressReporter } from "../progress/reporter.js"
 import { scaffold } from "../scaffold/index.js"
@@ -83,6 +84,7 @@ export async function runNew(opts: {
 	baseDir?: string
 	verbose?: boolean
 	autoApprove?: boolean
+	initGit?: boolean
 	callbacks: OrchestratorCallbacks
 	abortController?: AbortController
 }): Promise<{ sessionId?: string; projectDir?: string }> {
@@ -104,7 +106,7 @@ export async function runNew(opts: {
 		])
 		if (!inferredName) inferredName = earlyName
 
-		if (evaluation.confidence < 70) {
+		if (evaluation.confidence < 50) {
 			emit({
 				type: "log",
 				level: "plan",
@@ -157,7 +159,8 @@ export async function runNew(opts: {
 		message: "Scaffolding project from KPB template...",
 		ts: ts(),
 	})
-	const scaffoldResult = await scaffold(projectDir, { projectName, reporter })
+	const skipGit = opts.initGit === false
+	const scaffoldResult = await scaffold(projectDir, { projectName, reporter, skipGit })
 	if (scaffoldResult.errors.length > 0) {
 		for (const err of scaffoldResult.errors) {
 			emit({ type: "log", level: "error", message: err, ts: ts() })
@@ -294,6 +297,27 @@ export async function runNew(opts: {
 	}
 
 	if (result.success) {
+		// Auto-commit after successful generation
+		emit({ type: "log", level: "task", message: "Creating git checkpoint...", ts: ts() })
+		try {
+			const gitResult = await runGitAgent({
+				projectDir,
+				task: "Run git_diff_summary to see all changes, then create a commit with a descriptive message summarizing what was built. This is the initial app generation.",
+				onMessage: messageForwarder,
+			})
+			if (gitResult.commitHash) {
+				emit({
+					type: "git_checkpoint",
+					commitHash: gitResult.commitHash,
+					message: gitResult.output,
+					ts: ts(),
+				})
+			}
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "unknown error"
+			emit({ type: "log", level: "error", message: `Git checkpoint failed: ${msg}`, ts: ts() })
+		}
+
 		emit({
 			type: "log",
 			level: "done",
@@ -348,14 +372,17 @@ export async function runIterate(opts: {
 ${userRequest}
 
 Instructions:
-1. Read PLAN.md and the current codebase to understand the existing app
-2. Read "electric-app-guardrails" playbook FIRST for critical integration rules
-3. Use list_playbooks to discover relevant skills, then read only what you need for this change
-4. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
-5. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
-6. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
-7. Mark tasks as done in PLAN.md after completing them
-8. Run the build tool ONCE after all changes are complete — not after each file
+1. Consult ARCHITECTURE.md (injected into your context as <app-architecture>) to understand the app structure — do NOT scan the filesystem
+2. Read PLAN.md to see what was built and previous iterations
+3. Read "electric-app-guardrails" playbook FIRST for critical integration rules
+4. Use list_playbooks to discover relevant skills, then read only what you need for this change
+5. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
+6. Read ONLY the specific source files you need to modify (consult ARCHITECTURE.md for exact paths)
+7. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
+8. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
+9. Mark tasks as done in PLAN.md after completing them
+10. Update ARCHITECTURE.md to reflect any changes (new entities, routes, components, styles, or contexts)
+11. Run the build tool ONCE after all changes are complete — not after each file
 
 Do NOT just write a plan — implement the changes directly.`
 
@@ -393,6 +420,27 @@ Do NOT just write a plan — implement the changes directly.`
 	}
 
 	if (result.success) {
+		// Auto-commit after successful iteration
+		emit({ type: "log", level: "task", message: "Creating git checkpoint...", ts: ts() })
+		try {
+			const gitResult = await runGitAgent({
+				projectDir,
+				task: `Run git_diff_summary, then commit changes with a message describing: ${userRequest.slice(0, 200)}`,
+				onMessage: messageForwarder,
+			})
+			if (gitResult.commitHash) {
+				emit({
+					type: "git_checkpoint",
+					commitHash: gitResult.commitHash,
+					message: gitResult.output,
+					ts: ts(),
+				})
+			}
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "unknown error"
+			emit({ type: "log", level: "error", message: `Git checkpoint failed: ${msg}`, ts: ts() })
+		}
+
 		emit({ type: "log", level: "done", message: "Changes applied successfully", ts: ts() })
 	} else {
 		emit({
