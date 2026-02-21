@@ -234,24 +234,33 @@ export class DockerSandboxProvider implements SandboxProvider {
 		const project = `ea-${slug}`
 		const infra: InfraConfig = opts?.infra ?? { mode: "local" }
 
+		console.log(
+			`[docker] Creating sandbox: session=${sessionId} project=${project} port=${port} infra=${infra.mode}`,
+		)
+
 		const composeDir = fs.mkdtempSync(path.join(os.tmpdir(), `${project}-`))
 		const composePath = path.join(composeDir, "docker-compose.yml")
 		const auth = resolveAuthEnv(opts)
 		fs.writeFileSync(composePath, generateComposeFile(port, auth, infra, opts?.streamEnv), "utf-8")
+		console.log(`[docker] Compose file written: ${composePath}`)
 
 		if (infra.mode === "local") {
+			console.log(`[docker] Starting postgres + electric...`)
 			execSync(`docker compose -p ${project} -f ${composePath} up -d postgres electric`, {
 				stdio: "pipe",
 				timeout: 120_000,
 			})
 			await waitForElectric(project, composePath)
+			console.log(`[docker] Electric is ready`)
 		}
 
 		// Start the agent service in detached mode — it communicates via the durable stream
+		console.log(`[docker] Starting agent container...`)
 		execSync(`docker compose -p ${project} -f ${composePath} up -d agent`, {
 			stdio: "pipe",
 			timeout: 60_000,
 		})
+		console.log(`[docker] Agent container started`)
 
 		const handle: SandboxHandle = {
 			sessionId,

@@ -39,6 +39,10 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 		const isCloud = infra.mode === "cloud"
 		const projectName = opts?.projectName || sessionId.slice(0, 8)
 
+		console.log(
+			`[daytona] Creating sandbox: session=${sessionId} project=${projectName} image=${SANDBOX_IMAGE} infra=${infra.mode}`,
+		)
+
 		const envVars: Record<string, string> = {
 			SANDBOX_MODE: "1",
 			VITE_PORT: "5173",
@@ -68,6 +72,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			Object.assign(envVars, opts.streamEnv)
 		}
 
+		console.log(`[daytona] Creating sandbox with ${Object.keys(envVars).length} env vars...`)
 		const sandbox = await this.client.create(
 			{
 				image: SANDBOX_IMAGE,
@@ -76,9 +81,12 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			},
 			{ timeout: 120 },
 		)
+		console.log(`[daytona] Sandbox created, getting preview link...`)
 
 		const previewLink = await sandbox.getPreviewLink(5173)
 		const projectDir = `/home/agent/workspace/${projectName}`
+
+		console.log(`[daytona] Preview URL: ${previewLink.url}`)
 
 		const handle: SandboxHandle = {
 			sessionId,

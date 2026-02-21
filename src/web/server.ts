@@ -191,6 +191,8 @@ export function createApp(config: ServerConfig) {
 		const baseDir = body.baseDir || process.cwd()
 		const { projectName } = resolveProjectDir(baseDir, inferredName)
 
+		console.log(`[session] Creating new session: id=${sessionId} project=${projectName}`)
+
 		// Create the durable stream
 		const conn = sessionStream(config, sessionId)
 		try {
@@ -199,7 +201,9 @@ export function createApp(config: ServerConfig) {
 				headers: conn.headers,
 				contentType: "application/json",
 			})
-		} catch {
+			console.log(`[session] Durable stream created: ${conn.url}`)
+		} catch (err) {
+			console.error(`[session] Failed to create durable stream:`, err)
 			return c.json({ error: "Failed to create event stream" }, 500)
 		}
 
@@ -245,6 +249,7 @@ export function createApp(config: ServerConfig) {
 				visibility: "public" | "private"
 			} | null = null
 
+			console.log(`[session:${sessionId}] Waiting for infra_config gate...`)
 			try {
 				const gateValue = await createGate<
 					InfraConfig & {
@@ -253,6 +258,8 @@ export function createApp(config: ServerConfig) {
 						repoVisibility?: "public" | "private"
 					}
 				>(sessionId, "infra_config")
+
+				console.log(`[session:${sessionId}] Infra gate resolved: mode=${gateValue.mode}`)
 
 				if (gateValue.mode === "cloud") {
 					infra = {
@@ -285,17 +292,24 @@ export function createApp(config: ServerConfig) {
 						},
 					})
 				}
-			} catch {
+			} catch (err) {
+				console.log(`[session:${sessionId}] Infra gate error (defaulting to local):`, err)
 				infra = { mode: "local" }
 			}
 
 			// 2. Create sandbox with stream env vars
 			const streamEnv = getStreamEnvVars(sessionId, config.streamConfig)
+			console.log(
+				`[session:${sessionId}] Creating sandbox: runtime=${config.sandbox.runtime} project=${projectName}`,
+			)
 			const handle = await config.sandbox.create(sessionId, {
 				projectName,
 				infra,
 				streamEnv,
 			})
+			console.log(
+				`[session:${sessionId}] Sandbox created: projectDir=${handle.projectDir} port=${handle.port} previewUrl=${handle.previewUrl ?? "none"}`,
+			)
 			updateSessionInfo(config.dataDir, sessionId, {
 				appPort: handle.port,
 				sandboxProjectDir: handle.projectDir,
@@ -337,7 +351,9 @@ export function createApp(config: ServerConfig) {
 				updateSessionInfo(config.dataDir, sessionId, updates)
 			})
 
+			console.log(`[session:${sessionId}] Starting bridge listener...`)
 			await bridge.start()
+			console.log(`[session:${sessionId}] Bridge started, sending 'new' command...`)
 
 			// 5. Send the new command via the bridge
 			const newCmd: Record<string, unknown> = {
@@ -351,10 +367,11 @@ export function createApp(config: ServerConfig) {
 				newCmd.gitRepoVisibility = repoConfig.visibility
 			}
 			await bridge.sendCommand(newCmd)
+			console.log(`[session:${sessionId}] Command sent, waiting for agent...`)
 		}
 
 		asyncFlow().catch((err) => {
-			console.error("[server] session creation flow failed:", err)
+			console.error(`[session:${sessionId}] Session creation flow failed:`, err)
 			updateSessionInfo(config.dataDir, sessionId, { status: "error" })
 		})
 

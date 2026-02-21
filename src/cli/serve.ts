@@ -20,18 +20,29 @@ export async function serveCommand(opts: {
 		process.exit(1)
 	}
 
-	// Select sandbox provider: Daytona (cloud) if API key is set, otherwise Docker (local)
+	// Select sandbox provider:
+	//   SANDBOX_RUNTIME=docker  → always Docker
+	//   SANDBOX_RUNTIME=daytona → always Daytona
+	//   (unset)                 → Daytona if DAYTONA_API_KEY is set, otherwise Docker
+	const runtime = process.env.SANDBOX_RUNTIME?.toLowerCase()
 	let sandbox: SandboxProvider
-	if (process.env.DAYTONA_API_KEY) {
+	if (runtime === "docker") {
+		sandbox = new DockerSandboxProvider()
+		console.log("[serve] Sandbox runtime: Docker (SANDBOX_RUNTIME=docker)")
+	} else if (runtime === "daytona" || (!runtime && process.env.DAYTONA_API_KEY)) {
+		if (!process.env.DAYTONA_API_KEY) {
+			console.error("Error: SANDBOX_RUNTIME=daytona requires DAYTONA_API_KEY to be set.")
+			process.exit(1)
+		}
 		sandbox = new DaytonaSandboxProvider({
 			apiKey: process.env.DAYTONA_API_KEY,
 			apiUrl: process.env.DAYTONA_API_URL,
 			target: process.env.DAYTONA_TARGET,
 		})
-		console.log("Using Daytona cloud sandboxes")
+		console.log(`[serve] Sandbox runtime: Daytona (target: ${process.env.DAYTONA_TARGET ?? "us"})`)
 	} else {
 		sandbox = new DockerSandboxProvider()
-		console.log("Using Docker local sandboxes")
+		console.log("[serve] Sandbox runtime: Docker (default)")
 	}
 
 	await startWebServer({ port, dataDir, sandbox, streamConfig })
