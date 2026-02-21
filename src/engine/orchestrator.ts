@@ -330,7 +330,7 @@ export async function runNew(opts: {
 
 	if (result.success) {
 		// Auto-commit after successful generation
-		emit({ type: "log", level: "task", message: "Creating git checkpoint...", ts: ts() })
+		emit({ type: "log", level: "task", message: "Creating git commit...", ts: ts() })
 		const commitResult = gitAutoCommit(projectDir, "feat: initial app generation", emit)
 		if (commitResult) {
 			emit({
@@ -444,7 +444,7 @@ Do NOT just write a plan — implement the changes directly.`
 
 	if (result.success) {
 		// Auto-commit after successful iteration
-		emit({ type: "log", level: "task", message: "Creating git checkpoint...", ts: ts() })
+		emit({ type: "log", level: "task", message: "Creating git commit...", ts: ts() })
 		const commitMsg = `feat: ${userRequest.slice(0, 70)}`
 		const commitResult = gitAutoCommit(projectDir, commitMsg, emit)
 		if (commitResult) {
@@ -497,7 +497,7 @@ function gitAutoCommit(
 		return hash
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : "unknown error"
-		emit({ type: "log", level: "error", message: `Git checkpoint failed: ${msg}`, ts: ts() })
+		emit({ type: "log", level: "error", message: `Git commit failed: ${msg}`, ts: ts() })
 		return null
 	}
 }

@@ -1,6 +1,4 @@
 import { type ChildProcess, execSync, spawn } from "node:child_process"
-import { mkdirSync } from "node:fs"
-import path from "node:path"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
 import { createHeadlessAdapter, type HeadlessConfig } from "../engine/headless-adapter.js"
@@ -41,38 +39,7 @@ export async function headlessCommand(): Promise<void> {
 				return
 			}
 
-			// Early git init so users can debug intermediate states
 			const baseDir = config.baseDir || process.cwd()
-			const projectName = config.projectName || "project"
-			const earlyDir = path.join(baseDir, projectName)
-			mkdirSync(earlyDir, { recursive: true })
-			try {
-				const gitCmds = [
-					"git init -b main",
-					'git config user.email "electric-agent@local"',
-					'git config user.name "Electric Agent"',
-				]
-				for (const cmd of gitCmds) {
-					const toolUseId = `early-git-${Date.now()}`
-					callbacks.onEvent({
-						type: "tool_start",
-						toolName: "bash",
-						toolUseId,
-						input: { command: cmd },
-						ts: ts(),
-					})
-					const output = execSync(cmd, { cwd: earlyDir, stdio: "pipe" }).toString().trim()
-					callbacks.onEvent({ type: "tool_result", toolUseId, output: output || "(ok)", ts: ts() })
-				}
-				callbacks.onEvent({
-					type: "log",
-					level: "done",
-					message: "Git repository initialized",
-					ts: ts(),
-				})
-			} catch {
-				/* non-fatal — git init may fail if dir already has a repo */
-			}
 
 			// Validate gh auth if GH_TOKEN is available
 			if (process.env.GH_TOKEN) {
@@ -87,7 +54,6 @@ export async function headlessCommand(): Promise<void> {
 				})
 				try {
 					const ghOut = execSync(`${ghCmd} 2>&1`, {
-						cwd: earlyDir,
 						encoding: "utf-8",
 						timeout: 10_000,
 						env: { ...process.env },
@@ -123,7 +89,6 @@ export async function headlessCommand(): Promise<void> {
 				projectName: config.projectName,
 				baseDir,
 				callbacks,
-				initGit: false,
 				gitRepoName: config.gitRepoName,
 				gitRepoVisibility: config.gitRepoVisibility,
 			})
@@ -332,7 +297,7 @@ function executeGitOp(
 	try {
 		switch (op) {
 			case "commit": {
-				const message = config.gitMessage || "checkpoint"
+				const message = config.gitMessage || "commit"
 				run("git add -A")
 				try {
 					execSync("git diff --cached --quiet", { cwd, stdio: "pipe" })
