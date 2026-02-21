@@ -3,19 +3,45 @@ import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
 import { createHeadlessAdapter, type HeadlessConfig } from "../engine/headless-adapter.js"
 import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
+import { createStreamAdapter } from "../engine/stream-adapter.js"
 
 /**
  * Handler for `electric-agent headless`.
  *
- * Uses a single stdin reader: first line is JSON config,
- * subsequent lines are either gate responses or new commands.
+ * Two modes:
+ *   --stream: read commands from a hosted Durable Stream, write events back
+ *   (default): NDJSON stdin/stdout protocol
  *
- * After the initial "new" command completes, the dev server starts
- * in the background and the process keeps listening for "iterate"
- * commands. Vite HMR picks up code changes automatically.
+ * In both modes, first message is the initial config (command: "new" or "iterate"),
+ * subsequent messages are gate responses or new commands.
  */
-export async function headlessCommand(): Promise<void> {
-	const { readConfig, waitForCommand, callbacks, close } = createHeadlessAdapter()
+export async function headlessCommand(opts?: { stream?: boolean }): Promise<void> {
+	let readConfig: () => Promise<HeadlessConfig>
+	let waitForCommand: () => Promise<HeadlessConfig>
+	let callbacks: OrchestratorCallbacks
+	let close: () => void
+
+	if (opts?.stream) {
+		const streamUrl = process.env.DS_STREAM_URL
+		const secret = process.env.DS_SECRET
+		if (!streamUrl || !secret) {
+			process.stderr.write("Error: DS_STREAM_URL and DS_SECRET are required for --stream mode\n")
+			process.exitCode = 1
+			return
+		}
+		const adapter = createStreamAdapter(streamUrl, secret)
+		await adapter.startListening()
+		readConfig = adapter.readConfig
+		waitForCommand = adapter.waitForCommand
+		callbacks = adapter.callbacks
+		close = adapter.close
+	} else {
+		const adapter = createHeadlessAdapter()
+		readConfig = adapter.readConfig
+		waitForCommand = adapter.waitForCommand
+		callbacks = adapter.callbacks
+		close = adapter.close
+	}
 
 	let config: Awaited<ReturnType<typeof readConfig>>
 	try {

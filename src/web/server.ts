@@ -21,6 +21,7 @@ import {
 import { bridgeContainerToStream } from "./container-bridge.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { getStreamServerUrl } from "./infra.js"
+import type { DockerSandboxProvider } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import {
 	addSession,
@@ -279,30 +280,34 @@ export function createApp(config: ServerConfig) {
 				)
 			}
 
-			// 5. Bridge container stdout → durable stream
-			bridgeContainerToStream(sessionId, handle.process, url, (success) => {
-				const updates: Partial<SessionInfo> = {
-					status: success ? "complete" : "error",
-				}
-				try {
-					const gs = config.sandbox.gitStatus(handle, handle.projectDir)
-					if (gs.initialized) {
-						const existing = getSession(config.dataDir, sessionId)
-						updates.git = {
-							branch: gs.branch ?? "main",
-							remoteUrl: existing?.git?.remoteUrl ?? null,
-							repoName: existing?.git?.repoName ?? null,
-							repoVisibility: existing?.git?.repoVisibility,
-							lastCommitHash: gs.lastCommitHash ?? null,
-							lastCommitMessage: gs.lastCommitMessage ?? null,
-							lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
-						}
+			// 5. Bridge container stdout → durable stream (Docker stdio mode)
+			const dockerSandbox = config.sandbox as DockerSandboxProvider
+			const containerProcess = dockerSandbox.getProcess(sessionId)
+			if (containerProcess) {
+				bridgeContainerToStream(sessionId, containerProcess, url, async (success) => {
+					const updates: Partial<SessionInfo> = {
+						status: success ? "complete" : "error",
 					}
-				} catch {
-					// Container may already be stopped
-				}
-				updateSessionInfo(config.dataDir, sessionId, updates)
-			})
+					try {
+						const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
+						if (gs.initialized) {
+							const existing = getSession(config.dataDir, sessionId)
+							updates.git = {
+								branch: gs.branch ?? "main",
+								remoteUrl: existing?.git?.remoteUrl ?? null,
+								repoName: existing?.git?.repoName ?? null,
+								repoVisibility: existing?.git?.repoVisibility,
+								lastCommitHash: gs.lastCommitHash ?? null,
+								lastCommitMessage: gs.lastCommitMessage ?? null,
+								lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
+							}
+						}
+					} catch {
+						// Container may already be stopped
+					}
+					updateSessionInfo(config.dataDir, sessionId, updates)
+				})
+			}
 
 			// 6. Send the new command with repo config — repo is created right after scaffold
 			const newCmd: Record<string, unknown> = {
@@ -315,7 +320,7 @@ export function createApp(config: ServerConfig) {
 				newCmd.gitRepoName = `${repoConfig.account}/${repoConfig.repoName}`
 				newCmd.gitRepoVisibility = repoConfig.visibility
 			}
-			config.sandbox.sendCommand(handle, newCmd)
+			dockerSandbox.writeStdin(handle, JSON.stringify(newCmd))
 		}
 
 		asyncFlow().catch((err) => {
@@ -358,12 +363,12 @@ export function createApp(config: ServerConfig) {
 			try {
 				const handle = config.sandbox.get(sessionId)
 				if (isStopCmd) {
-					if (handle && !handle.process.killed) await config.sandbox.stopApp(handle)
+					if (handle && config.sandbox.isAlive(handle)) await config.sandbox.stopApp(handle)
 					await opStream.append(
 						JSON.stringify({ type: "log", level: "done", message: "App stopped", ts: ts() }),
 					)
 				} else {
-					if (!handle || handle.process.killed) {
+					if (!handle || !config.sandbox.isAlive(handle)) {
 						return c.json({ error: "Container is not running" }, 400)
 					}
 					if (isRestartCmd) await config.sandbox.stopApp(handle)
@@ -399,21 +404,25 @@ export function createApp(config: ServerConfig) {
 			)
 
 			const handle = config.sandbox.get(sessionId)
-			if (!handle || handle.process.killed) {
+			if (!handle || !config.sandbox.isAlive(handle)) {
 				return c.json({ error: "Container is not running" }, 400)
 			}
 
-			config.sandbox.sendCommand(handle, {
-				command: "git",
-				projectDir: session.sandboxProjectDir || handle.projectDir,
-				...gitOp,
-			})
+			const dockerSandbox = config.sandbox as DockerSandboxProvider
+			dockerSandbox.writeStdin(
+				handle,
+				JSON.stringify({
+					command: "git",
+					projectDir: session.sandboxProjectDir || handle.projectDir,
+					...gitOp,
+				}),
+			)
 
 			return c.json({ ok: true })
 		}
 
 		const handle = config.sandbox.get(sessionId)
-		if (!handle || handle.process.killed) {
+		if (!handle || !config.sandbox.isAlive(handle)) {
 			return c.json({ error: "Container is not running" }, 400)
 		}
 
@@ -426,12 +435,16 @@ export function createApp(config: ServerConfig) {
 
 		updateSessionInfo(config.dataDir, sessionId, { status: "running" })
 
-		config.sandbox.sendCommand(handle, {
-			command: "iterate",
-			projectDir: session.sandboxProjectDir || handle.projectDir,
-			request: body.request,
-			resumeSessionId: session.lastCoderSessionId,
-		})
+		const dockerSandboxIter = config.sandbox as DockerSandboxProvider
+		dockerSandboxIter.writeStdin(
+			handle,
+			JSON.stringify({
+				command: "iterate",
+				projectDir: session.sandboxProjectDir || handle.projectDir,
+				request: body.request,
+				resumeSessionId: session.lastCoderSessionId,
+			}),
+		)
 
 		return c.json({ ok: true })
 	})
@@ -461,7 +474,8 @@ export function createApp(config: ServerConfig) {
 				return c.json({ error: "No active container found" }, 404)
 			}
 			const { gate: _, _summary: _s, ...value } = body
-			config.sandbox.sendGateResponse(handle, gate, value as Record<string, unknown>)
+			const dockerSandbox = config.sandbox as DockerSandboxProvider
+			dockerSandbox.writeStdin(handle, JSON.stringify({ gate, ...value }))
 
 			// Persist gate resolution for replay
 			try {
@@ -523,16 +537,16 @@ export function createApp(config: ServerConfig) {
 	})
 
 	// Check app status
-	app.get("/api/sessions/:id/app-status", (c) => {
+	app.get("/api/sessions/:id/app-status", async (c) => {
 		const sessionId = c.req.param("id")
 		const session = getSession(config.dataDir, sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const handle = config.sandbox.get(sessionId)
-		if (!handle || handle.process.killed) {
+		if (!handle || !config.sandbox.isAlive(handle)) {
 			return c.json({ running: false, port: session.appPort })
 		}
-		const running = config.sandbox.isAppRunning(handle)
+		const running = await config.sandbox.isAppRunning(handle)
 		return c.json({ running, port: handle.port ?? session.appPort })
 	})
 
@@ -543,7 +557,7 @@ export function createApp(config: ServerConfig) {
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const handle = config.sandbox.get(sessionId)
-		if (!handle || handle.process.killed) {
+		if (!handle || !config.sandbox.isAlive(handle)) {
 			return c.json({ error: "Container is not running" }, 400)
 		}
 		const ok = await config.sandbox.startApp(handle)
@@ -557,18 +571,18 @@ export function createApp(config: ServerConfig) {
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const handle = config.sandbox.get(sessionId)
-		if (handle && !handle.process.killed) {
+		if (handle && config.sandbox.isAlive(handle)) {
 			await config.sandbox.stopApp(handle)
 		}
 		return c.json({ success: true })
 	})
 
 	// Cancel a running session
-	app.post("/api/sessions/:id/cancel", (c) => {
+	app.post("/api/sessions/:id/cancel", async (c) => {
 		const sessionId = c.req.param("id")
 
 		const handle = config.sandbox.get(sessionId)
-		if (handle) config.sandbox.destroy(handle)
+		if (handle) await config.sandbox.destroy(handle)
 
 		rejectAllGates(sessionId)
 		updateSessionInfo(config.dataDir, sessionId, { status: "cancelled" })
@@ -576,11 +590,11 @@ export function createApp(config: ServerConfig) {
 	})
 
 	// Delete a session
-	app.delete("/api/sessions/:id", (c) => {
+	app.delete("/api/sessions/:id", async (c) => {
 		const sessionId = c.req.param("id")
 
 		const handle = config.sandbox.get(sessionId)
-		if (handle) config.sandbox.destroy(handle)
+		if (handle) await config.sandbox.destroy(handle)
 
 		rejectAllGates(sessionId)
 
@@ -589,10 +603,85 @@ export function createApp(config: ServerConfig) {
 		return c.json({ ok: true })
 	})
 
+	// --- Sandbox CRUD Routes ---
+
+	// List all active sandboxes
+	app.get("/api/sandboxes", (c) => {
+		const sandboxes = config.sandbox.list().map((h) => ({
+			sessionId: h.sessionId,
+			runtime: h.runtime,
+			port: h.port,
+			projectDir: h.projectDir,
+			previewUrl: h.previewUrl,
+			alive: config.sandbox.isAlive(h),
+		}))
+		return c.json({ sandboxes })
+	})
+
+	// Get a specific sandbox's status
+	app.get("/api/sandboxes/:sessionId", async (c) => {
+		const sessionId = c.req.param("sessionId")
+		const handle = config.sandbox.get(sessionId)
+		if (!handle) return c.json({ error: "Sandbox not found" }, 404)
+
+		const alive = config.sandbox.isAlive(handle)
+		const appRunning = alive ? await config.sandbox.isAppRunning(handle) : false
+
+		return c.json({
+			sessionId: handle.sessionId,
+			runtime: handle.runtime,
+			port: handle.port,
+			projectDir: handle.projectDir,
+			previewUrl: handle.previewUrl,
+			alive,
+			appRunning,
+		})
+	})
+
+	// Create a standalone sandbox (not tied to session creation flow)
+	app.post("/api/sandboxes", async (c) => {
+		const body = (await c.req.json()) as {
+			sessionId?: string
+			projectName?: string
+			infra?: InfraConfig
+		}
+
+		const sessionId = body.sessionId ?? crypto.randomUUID()
+		try {
+			const handle = await config.sandbox.create(sessionId, {
+				projectName: body.projectName,
+				infra: body.infra,
+			})
+			return c.json(
+				{
+					sessionId: handle.sessionId,
+					runtime: handle.runtime,
+					port: handle.port,
+					projectDir: handle.projectDir,
+					previewUrl: handle.previewUrl,
+				},
+				201,
+			)
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : "Failed to create sandbox"
+			return c.json({ error: msg }, 500)
+		}
+	})
+
+	// Delete a sandbox
+	app.delete("/api/sandboxes/:sessionId", async (c) => {
+		const sessionId = c.req.param("sessionId")
+		const handle = config.sandbox.get(sessionId)
+		if (!handle) return c.json({ error: "Sandbox not found" }, 404)
+
+		await config.sandbox.destroy(handle)
+		return c.json({ ok: true })
+	})
+
 	// --- Git/GitHub Routes ---
 
 	// Get git status for a session
-	app.get("/api/sessions/:id/git-status", (c) => {
+	app.get("/api/sessions/:id/git-status", async (c) => {
 		const sessionId = c.req.param("id")
 		const session = getSession(config.dataDir, sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
@@ -602,7 +691,7 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "Container not available" }, 404)
 		}
 		try {
-			const status = config.sandbox.gitStatus(
+			const status = await config.sandbox.gitStatus(
 				handle,
 				session.sandboxProjectDir || handle.projectDir,
 			)
@@ -613,7 +702,7 @@ export function createApp(config: ServerConfig) {
 	})
 
 	// List all files in the project directory
-	app.get("/api/sessions/:id/files", (c) => {
+	app.get("/api/sessions/:id/files", async (c) => {
 		const sessionId = c.req.param("id")
 		const session = getSession(config.dataDir, sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
@@ -623,12 +712,12 @@ export function createApp(config: ServerConfig) {
 		if (!handle || !sandboxDir) {
 			return c.json({ files: [], prefix: sandboxDir ?? "" })
 		}
-		const files = config.sandbox.listFiles(handle, sandboxDir)
+		const files = await config.sandbox.listFiles(handle, sandboxDir)
 		return c.json({ files, prefix: sandboxDir })
 	})
 
 	// Read a file's content
-	app.get("/api/sessions/:id/file-content", (c) => {
+	app.get("/api/sessions/:id/file-content", async (c) => {
 		const sessionId = c.req.param("id")
 		const session = getSession(config.dataDir, sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
@@ -644,7 +733,7 @@ export function createApp(config: ServerConfig) {
 		if (!filePath.startsWith(sandboxDir)) {
 			return c.json({ error: "Path outside project directory" }, 403)
 		}
-		const content = config.sandbox.readFile(handle, filePath)
+		const content = await config.sandbox.readFile(handle, filePath)
 		if (content === null) {
 			return c.json({ error: "File not found or unreadable" }, 404)
 		}
@@ -713,7 +802,7 @@ export function createApp(config: ServerConfig) {
 			})
 
 			// Get git state from cloned repo inside the container
-			const gs = config.sandbox.gitStatus(handle, handle.projectDir)
+			const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
 
 			const session: SessionInfo = {
 				id: sessionId,

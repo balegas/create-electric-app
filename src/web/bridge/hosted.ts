@@ -51,10 +51,7 @@ export class HostedStreamBridge implements SessionBridge {
 		await this.writer.append(JSON.stringify(msg))
 	}
 
-	async sendGateResponse(
-		gate: string,
-		value: Record<string, unknown>,
-	): Promise<void> {
+	async sendGateResponse(gate: string, value: Record<string, unknown>): Promise<void> {
 		if (this.closed) return
 		const msg: StreamMessage = {
 			source: "server",
@@ -88,40 +85,35 @@ export class HostedStreamBridge implements SessionBridge {
 			live: true,
 		})
 
-		this.cancelSubscription = response.subscribeJson<StreamMessage>(
-			(batch) => {
-				for (const item of batch.items) {
-					if (item.source !== "agent") continue
+		this.cancelSubscription = response.subscribeJson<StreamMessage>((batch) => {
+			for (const item of batch.items) {
+				if (item.source !== "agent") continue
 
-					// Strip the source field to get a clean EngineEvent
-					const { source, ...eventData } = item as AgentEvent
-					const event = eventData as unknown as EngineEvent
+				// Strip the source field to get a clean EngineEvent
+				const { source: _, ...eventData } = item as AgentEvent
+				const event = eventData as unknown as EngineEvent
 
-					for (const cb of this.agentEventCallbacks) {
+				for (const cb of this.agentEventCallbacks) {
+					try {
+						cb(event)
+					} catch {
+						// Swallow callback errors
+					}
+				}
+
+				// Detect session_complete
+				if (event.type === "session_complete" && "success" in event) {
+					const success = (event as EngineEvent & { success: boolean }).success
+					for (const cb of this.completeCallbacks) {
 						try {
-							cb(event)
+							cb(success)
 						} catch {
 							// Swallow callback errors
 						}
 					}
-
-					// Detect session_complete
-					if (
-						event.type === "session_complete" &&
-						"success" in event
-					) {
-						const success = (event as EngineEvent & { success: boolean }).success
-						for (const cb of this.completeCallbacks) {
-							try {
-								cb(success)
-							} catch {
-								// Swallow callback errors
-							}
-						}
-					}
 				}
-			},
-		)
+			}
+		})
 	}
 
 	close(): void {

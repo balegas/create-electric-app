@@ -18,8 +18,9 @@ program
 program
 	.command("headless")
 	.description("Run in headless mode with NDJSON stdin/stdout protocol")
-	.action(async () => {
-		await headlessCommand()
+	.option("--stream", "Use hosted Durable Stream instead of stdin/stdout")
+	.action(async (opts: { stream?: boolean }) => {
+		await headlessCommand({ stream: opts.stream })
 	})
 
 program
