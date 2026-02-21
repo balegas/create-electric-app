@@ -18,9 +18,9 @@ import {
 	isGhAuthenticated,
 	validateGhToken,
 } from "../git/index.js"
-import { bridgeContainerToStream } from "./container-bridge.js"
+import { HostedStreamBridge } from "./bridge/hosted.js"
+import type { SessionBridge } from "./bridge/types.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
-import type { DockerSandboxProvider } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import {
 	addSession,
@@ -30,7 +30,12 @@ import {
 	type SessionInfo,
 	updateSessionInfo,
 } from "./sessions.js"
-import { getStreamConnectionInfo, type StreamConfig, type StreamConnectionInfo } from "./streams.js"
+import {
+	getStreamConnectionInfo,
+	getStreamEnvVars,
+	type StreamConfig,
+	type StreamConnectionInfo,
+} from "./streams.js"
 
 interface ServerConfig {
 	port: number
@@ -39,6 +44,9 @@ interface ServerConfig {
 	/** Hosted stream config — required */
 	streamConfig: StreamConfig
 }
+
+/** Active session bridges — one per running session */
+const bridges = new Map<string, SessionBridge>()
 
 /** Check if the Claude CLI is installed and authenticated (OAuth) */
 function hasClaudeCliAuth(): boolean {
@@ -63,14 +71,24 @@ function sessionStream(config: ServerConfig, sessionId: string): StreamConnectio
 	return getStreamConnectionInfo(sessionId, config.streamConfig)
 }
 
-/** Create a DurableStream writer for a session */
-function sessionStreamWriter(config: ServerConfig, sessionId: string): DurableStream {
-	const conn = sessionStream(config, sessionId)
-	return new DurableStream({
-		url: conn.url,
-		headers: conn.headers,
-		contentType: "application/json",
-	})
+/** Create or retrieve the SessionBridge for a session */
+function getOrCreateBridge(config: ServerConfig, sessionId: string): SessionBridge {
+	let bridge = bridges.get(sessionId)
+	if (!bridge) {
+		const conn = sessionStream(config, sessionId)
+		bridge = new HostedStreamBridge(sessionId, conn)
+		bridges.set(sessionId, bridge)
+	}
+	return bridge
+}
+
+/** Close and remove a bridge */
+function closeBridge(sessionId: string): void {
+	const bridge = bridges.get(sessionId)
+	if (bridge) {
+		bridge.close()
+		bridges.delete(sessionId)
+	}
 }
 
 /**
@@ -185,6 +203,9 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "Failed to create event stream" }, 500)
 		}
 
+		// Create and start the session bridge
+		const bridge = getOrCreateBridge(config, sessionId)
+
 		// Record session
 		const sandboxProjectDir = `/home/agent/workspace/${projectName}`
 		const session: SessionInfo = {
@@ -199,10 +220,7 @@ export function createApp(config: ServerConfig) {
 		addSession(config.dataDir, session)
 
 		// Write user prompt to the stream so it shows in the UI
-		const promptStream = sessionStreamWriter(config, sessionId)
-		await promptStream.append(
-			JSON.stringify({ type: "user_message", message: body.description, ts: ts() }),
-		)
+		await bridge.emit({ type: "user_message", message: body.description, ts: ts() })
 
 		// Gather GitHub accounts for the merged setup gate
 		let ghAccounts: { login: string; type: "user" | "org" }[] = []
@@ -215,9 +233,7 @@ export function createApp(config: ServerConfig) {
 		}
 
 		// Emit combined infra + repo setup gate
-		await promptStream.append(
-			JSON.stringify({ type: "infra_config_prompt", projectName, ghAccounts, ts: ts() }),
-		)
+		await bridge.emit({ type: "infra_config_prompt", projectName, ghAccounts, ts: ts() })
 
 		// Launch async flow: wait for setup gate → create sandbox → start agent
 		const asyncFlow = async () => {
@@ -273,64 +289,56 @@ export function createApp(config: ServerConfig) {
 				infra = { mode: "local" }
 			}
 
-			// 2. Create sandbox with the chosen infra
-			const handle = await config.sandbox.create(sessionId, { projectName, infra })
+			// 2. Create sandbox with stream env vars
+			const streamEnv = getStreamEnvVars(sessionId, config.streamConfig)
+			const handle = await config.sandbox.create(sessionId, {
+				projectName,
+				infra,
+				streamEnv,
+			})
 			updateSessionInfo(config.dataDir, sessionId, {
 				appPort: handle.port,
 				sandboxProjectDir: handle.projectDir,
 			})
 
-			// 4. Log repo config (gh auth is validated when the git agent runs after scaffold)
+			// 3. Log repo config
 			if (repoConfig) {
-				const ghStream = sessionStreamWriter(config, sessionId)
-				await ghStream.append(
-					JSON.stringify({
-						type: "log",
-						level: "done",
-						message: `GitHub repo: ${repoConfig.account}/${repoConfig.repoName} (${repoConfig.visibility}) — will be created after scaffolding`,
-						ts: ts(),
-					}),
-				)
+				await bridge.emit({
+					type: "log",
+					level: "done",
+					message: `GitHub repo: ${repoConfig.account}/${repoConfig.repoName} (${repoConfig.visibility}) — will be created after scaffolding`,
+					ts: ts(),
+				})
 			}
 
-			// 5. Bridge container stdout → durable stream (Docker stdio mode)
-			// TODO: Phase 5 will replace this with SessionBridge
-			const bridgeConn = sessionStream(config, sessionId)
-			const dockerSandbox = config.sandbox as DockerSandboxProvider
-			const containerProcess = dockerSandbox.getProcess(sessionId)
-			if (containerProcess) {
-				bridgeContainerToStream(
-					sessionId,
-					containerProcess,
-					bridgeConn.url,
-					async (success) => {
-						const updates: Partial<SessionInfo> = {
-							status: success ? "complete" : "error",
+			// 4. Start listening for agent events via the bridge
+			bridge.onComplete(async (success) => {
+				const updates: Partial<SessionInfo> = {
+					status: success ? "complete" : "error",
+				}
+				try {
+					const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
+					if (gs.initialized) {
+						const existing = getSession(config.dataDir, sessionId)
+						updates.git = {
+							branch: gs.branch ?? "main",
+							remoteUrl: existing?.git?.remoteUrl ?? null,
+							repoName: existing?.git?.repoName ?? null,
+							repoVisibility: existing?.git?.repoVisibility,
+							lastCommitHash: gs.lastCommitHash ?? null,
+							lastCommitMessage: gs.lastCommitMessage ?? null,
+							lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
 						}
-						try {
-							const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
-							if (gs.initialized) {
-								const existing = getSession(config.dataDir, sessionId)
-								updates.git = {
-									branch: gs.branch ?? "main",
-									remoteUrl: existing?.git?.remoteUrl ?? null,
-									repoName: existing?.git?.repoName ?? null,
-									repoVisibility: existing?.git?.repoVisibility,
-									lastCommitHash: gs.lastCommitHash ?? null,
-									lastCommitMessage: gs.lastCommitMessage ?? null,
-									lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
-								}
-							}
-						} catch {
-							// Container may already be stopped
-						}
-						updateSessionInfo(config.dataDir, sessionId, updates)
-					},
-					bridgeConn.headers,
-				)
-			}
+					}
+				} catch {
+					// Container may already be stopped
+				}
+				updateSessionInfo(config.dataDir, sessionId, updates)
+			})
 
-			// 6. Send the new command with repo config — repo is created right after scaffold
+			await bridge.start()
+
+			// 5. Send the new command via the bridge
 			const newCmd: Record<string, unknown> = {
 				command: "new",
 				description: body.description,
@@ -341,7 +349,7 @@ export function createApp(config: ServerConfig) {
 				newCmd.gitRepoName = `${repoConfig.account}/${repoConfig.repoName}`
 				newCmd.gitRepoVisibility = repoConfig.visibility
 			}
-			dockerSandbox.writeStdin(handle, JSON.stringify(newCmd))
+			await bridge.sendCommand(newCmd)
 		}
 
 		asyncFlow().catch((err) => {
@@ -375,41 +383,31 @@ export function createApp(config: ServerConfig) {
 		const isRestartCmd = /^restart\b/.test(normalised) && appOrServer.test(normalised)
 
 		if (isStartCmd || isStopCmd || isRestartCmd) {
-			const opStream = sessionStreamWriter(config, sessionId)
-			await opStream.append(
-				JSON.stringify({ type: "user_message", message: body.request, ts: ts() }),
-			)
+			const bridge = getOrCreateBridge(config, sessionId)
+			await bridge.emit({ type: "user_message", message: body.request, ts: ts() })
 
 			try {
 				const handle = config.sandbox.get(sessionId)
 				if (isStopCmd) {
 					if (handle && config.sandbox.isAlive(handle)) await config.sandbox.stopApp(handle)
-					await opStream.append(
-						JSON.stringify({ type: "log", level: "done", message: "App stopped", ts: ts() }),
-					)
+					await bridge.emit({ type: "log", level: "done", message: "App stopped", ts: ts() })
 				} else {
 					if (!handle || !config.sandbox.isAlive(handle)) {
 						return c.json({ error: "Container is not running" }, 400)
 					}
 					if (isRestartCmd) await config.sandbox.stopApp(handle)
 					await config.sandbox.startApp(handle)
-					await opStream.append(
-						JSON.stringify({
-							type: "log",
-							level: "done",
-							message: "App started",
-							ts: ts(),
-						}),
-					)
-					await opStream.append(
-						JSON.stringify({ type: "app_ready", port: session.appPort, ts: ts() }),
-					)
+					await bridge.emit({
+						type: "log",
+						level: "done",
+						message: "App started",
+						ts: ts(),
+					})
+					await bridge.emit({ type: "app_ready", port: session.appPort, ts: ts() })
 				}
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : "Operation failed"
-				await opStream.append(
-					JSON.stringify({ type: "log", level: "error", message: msg, ts: ts() }),
-				)
+				await bridge.emit({ type: "log", level: "error", message: msg, ts: ts() })
 			}
 			return c.json({ ok: true })
 		}
@@ -417,25 +415,19 @@ export function createApp(config: ServerConfig) {
 		// Intercept git commands (commit, push, create PR)
 		const gitOp = detectGitOp(body.request)
 		if (gitOp) {
-			const gitStream = sessionStreamWriter(config, sessionId)
-			await gitStream.append(
-				JSON.stringify({ type: "user_message", message: body.request, ts: ts() }),
-			)
+			const bridge = getOrCreateBridge(config, sessionId)
+			await bridge.emit({ type: "user_message", message: body.request, ts: ts() })
 
 			const handle = config.sandbox.get(sessionId)
 			if (!handle || !config.sandbox.isAlive(handle)) {
 				return c.json({ error: "Container is not running" }, 400)
 			}
 
-			const dockerSandbox = config.sandbox as DockerSandboxProvider
-			dockerSandbox.writeStdin(
-				handle,
-				JSON.stringify({
-					command: "git",
-					projectDir: session.sandboxProjectDir || handle.projectDir,
-					...gitOp,
-				}),
-			)
+			await bridge.sendCommand({
+				command: "git",
+				projectDir: session.sandboxProjectDir || handle.projectDir,
+				...gitOp,
+			})
 
 			return c.json({ ok: true })
 		}
@@ -446,23 +438,17 @@ export function createApp(config: ServerConfig) {
 		}
 
 		// Write user prompt to the stream
-		const promptStream = sessionStreamWriter(config, sessionId)
-		await promptStream.append(
-			JSON.stringify({ type: "user_message", message: body.request, ts: ts() }),
-		)
+		const bridge = getOrCreateBridge(config, sessionId)
+		await bridge.emit({ type: "user_message", message: body.request, ts: ts() })
 
 		updateSessionInfo(config.dataDir, sessionId, { status: "running" })
 
-		const dockerSandboxIter = config.sandbox as DockerSandboxProvider
-		dockerSandboxIter.writeStdin(
-			handle,
-			JSON.stringify({
-				command: "iterate",
-				projectDir: session.sandboxProjectDir || handle.projectDir,
-				request: body.request,
-				resumeSessionId: session.lastCoderSessionId,
-			}),
-		)
+		await bridge.sendCommand({
+			command: "iterate",
+			projectDir: session.sandboxProjectDir || handle.projectDir,
+			request: body.request,
+			resumeSessionId: session.lastCoderSessionId,
+		})
 
 		return c.json({ ok: true })
 	})
@@ -485,20 +471,18 @@ export function createApp(config: ServerConfig) {
 		// Server-side gates are resolved in-process (they run on the server, not inside the container)
 		const serverGates = new Set(["infra_config"])
 
-		// Forward agent gate responses to container stdin
+		// Forward agent gate responses via the bridge
 		if (!serverGates.has(gate)) {
-			const handle = config.sandbox.get(sessionId)
-			if (!handle) {
-				return c.json({ error: "No active container found" }, 404)
+			const bridge = bridges.get(sessionId)
+			if (!bridge) {
+				return c.json({ error: "No active bridge found" }, 404)
 			}
 			const { gate: _, _summary: _s, ...value } = body
-			const dockerSandbox = config.sandbox as DockerSandboxProvider
-			dockerSandbox.writeStdin(handle, JSON.stringify({ gate, ...value }))
+			await bridge.sendGateResponse(gate, value as Record<string, unknown>)
 
 			// Persist gate resolution for replay
 			try {
-				const s = sessionStreamWriter(config, sessionId)
-				await s.append(JSON.stringify({ type: "gate_resolved", gate, summary, ts: ts() }))
+				await bridge.emit({ type: "gate_resolved", gate, summary, ts: ts() })
 			} catch {
 				// Non-critical
 			}
@@ -542,8 +526,8 @@ export function createApp(config: ServerConfig) {
 
 		// Persist gate resolution so replays mark the gate as resolved
 		try {
-			const s = sessionStreamWriter(config, sessionId)
-			await s.append(JSON.stringify({ type: "gate_resolved", gate, summary, ts: ts() }))
+			const bridge = getOrCreateBridge(config, sessionId)
+			await bridge.emit({ type: "gate_resolved", gate, summary, ts: ts() })
 		} catch {
 			// Non-critical
 		}
@@ -597,6 +581,8 @@ export function createApp(config: ServerConfig) {
 	app.post("/api/sessions/:id/cancel", async (c) => {
 		const sessionId = c.req.param("id")
 
+		closeBridge(sessionId)
+
 		const handle = config.sandbox.get(sessionId)
 		if (handle) await config.sandbox.destroy(handle)
 
@@ -608,6 +594,8 @@ export function createApp(config: ServerConfig) {
 	// Delete a session
 	app.delete("/api/sessions/:id", async (c) => {
 		const sessionId = c.req.param("id")
+
+		closeBridge(sessionId)
 
 		const handle = config.sandbox.get(sessionId)
 		if (handle) await config.sandbox.destroy(handle)
@@ -663,10 +651,12 @@ export function createApp(config: ServerConfig) {
 		}
 
 		const sessionId = body.sessionId ?? crypto.randomUUID()
+		const streamEnv = getStreamEnvVars(sessionId, config.streamConfig)
 		try {
 			const handle = await config.sandbox.create(sessionId, {
 				projectName: body.projectName,
 				infra: body.infra,
+				streamEnv,
 			})
 			return c.json(
 				{
@@ -690,6 +680,7 @@ export function createApp(config: ServerConfig) {
 		const handle = config.sandbox.get(sessionId)
 		if (!handle) return c.json({ error: "Sandbox not found" }, 404)
 
+		closeBridge(sessionId)
 		await config.sandbox.destroy(handle)
 		return c.json({ ok: true })
 	})
@@ -910,15 +901,13 @@ export function createApp(config: ServerConfig) {
 			addSession(config.dataDir, session)
 
 			// Write initial message to stream
-			const initStream = sessionStreamWriter(config, sessionId)
-			await initStream.append(
-				JSON.stringify({
-					type: "log",
-					level: "done",
-					message: `Resumed from ${body.repoUrl}`,
-					ts: ts(),
-				}),
-			)
+			const bridge = getOrCreateBridge(config, sessionId)
+			await bridge.emit({
+				type: "log",
+				level: "done",
+				message: `Resumed from ${body.repoUrl}`,
+				ts: ts(),
+			})
 
 			return c.json({ sessionId, appPort: handle.port }, 201)
 		} catch (e) {

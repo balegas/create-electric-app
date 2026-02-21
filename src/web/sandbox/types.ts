@@ -47,6 +47,8 @@ export interface CreateSandboxOpts {
 	apiKey?: string
 	projectName?: string
 	infra?: InfraConfig
+	/** Stream env vars to inject into the sandbox for --stream mode */
+	streamEnv?: Record<string, string>
 }
 
 // ---------------------------------------------------------------------------

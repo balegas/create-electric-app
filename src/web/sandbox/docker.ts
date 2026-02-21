@@ -1,4 +1,4 @@
-import { type ChildProcess, execFileSync, execSync, spawn } from "node:child_process"
+import { execFileSync, execSync } from "node:child_process"
 import fs from "node:fs"
 import net from "node:net"
 import os from "node:os"
@@ -16,7 +16,6 @@ import type {
 // ---------------------------------------------------------------------------
 
 interface DockerInternalState {
-	process: ChildProcess
 	composeDir: string
 	composeProject: string
 }
@@ -79,6 +78,7 @@ function generateComposeFile(
 	port: number,
 	auth: [string, string] | null,
 	infra: InfraConfig = { mode: "local" },
+	streamEnv: Record<string, string> = {},
 ): string {
 	const isCloud = infra.mode === "cloud"
 
@@ -100,13 +100,17 @@ function generateComposeFile(
 		agentEnv.push(`GH_TOKEN=${ghToken}`)
 	}
 
+	// Add stream env vars for hosted Durable Streams communication
+	for (const [key, value] of Object.entries(streamEnv)) {
+		agentEnv.push(`${key}=${value}`)
+	}
+
 	const agentEnvYaml = agentEnv.map((e) => `      - ${e}`).join("\n")
 
 	if (isCloud) {
 		return `services:
   agent:
     image: ${SANDBOX_IMAGE}
-    stdin_open: true
     ports:
       - "${port}:5173"
     environment:
@@ -145,7 +149,6 @@ volumes:
 
   agent:
     image: ${SANDBOX_IMAGE}
-    stdin_open: true
     ports:
       - "${port}:5173"
     environment:
@@ -223,23 +226,6 @@ export class DockerSandboxProvider implements SandboxProvider {
 		return state
 	}
 
-	/**
-	 * Get the ChildProcess for a session.
-	 * Used by container-bridge.ts to attach stdout bridging in stdio mode.
-	 */
-	getProcess(sessionId: string): ChildProcess | null {
-		return this.internalState.get(sessionId)?.process ?? null
-	}
-
-	/**
-	 * Write a line to the container's stdin (NDJSON protocol).
-	 * Used for backward-compatible stdio mode communication.
-	 */
-	writeStdin(handle: SandboxHandle, data: string): void {
-		const state = this.getState(handle)
-		state.process.stdin?.write(`${data}\n`)
-	}
-
 	async create(sessionId: string, opts?: CreateSandboxOpts): Promise<SandboxHandle> {
 		const port = await findFreePort()
 		const slug = (opts?.projectName || sessionId.slice(0, 8))
@@ -251,7 +237,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 		const composeDir = fs.mkdtempSync(path.join(os.tmpdir(), `${project}-`))
 		const composePath = path.join(composeDir, "docker-compose.yml")
 		const auth = resolveAuthEnv(opts)
-		fs.writeFileSync(composePath, generateComposeFile(port, auth, infra), "utf-8")
+		fs.writeFileSync(composePath, generateComposeFile(port, auth, infra, opts?.streamEnv), "utf-8")
 
 		if (infra.mode === "local") {
 			execSync(`docker compose -p ${project} -f ${composePath} up -d postgres electric`, {
@@ -261,22 +247,11 @@ export class DockerSandboxProvider implements SandboxProvider {
 			await waitForElectric(project, composePath)
 		}
 
-		const child = spawn(
-			"docker",
-			[
-				"compose",
-				"-p",
-				project,
-				"-f",
-				composePath,
-				"run",
-				"--rm",
-				"-i",
-				"--service-ports",
-				"agent",
-			],
-			{ stdio: ["pipe", "pipe", "pipe"] },
-		)
+		// Start the agent service in detached mode — it communicates via the durable stream
+		execSync(`docker compose -p ${project} -f ${composePath} up -d agent`, {
+			stdio: "pipe",
+			timeout: 60_000,
+		})
 
 		const handle: SandboxHandle = {
 			sessionId,
@@ -286,18 +261,12 @@ export class DockerSandboxProvider implements SandboxProvider {
 		}
 
 		const state: DockerInternalState = {
-			process: child,
 			composeDir,
 			composeProject: project,
 		}
 
 		this.activeContainers.set(sessionId, handle)
 		this.internalState.set(sessionId, state)
-
-		child.on("exit", () => {
-			this.activeContainers.delete(sessionId)
-			this.internalState.delete(sessionId)
-		})
 
 		return handle
 	}
@@ -309,17 +278,15 @@ export class DockerSandboxProvider implements SandboxProvider {
 
 		if (!state) return
 
-		try {
-			state.process.kill()
-		} catch {
-			// Process may already be dead
-		}
 		const composePath = path.join(state.composeDir, "docker-compose.yml")
-		spawn(
-			"docker",
-			["compose", "-p", state.composeProject, "-f", composePath, "down", "-v", "--remove-orphans"],
-			{ stdio: "ignore" },
-		)
+		try {
+			execSync(
+				`docker compose -p ${state.composeProject} -f ${composePath} down -v --remove-orphans`,
+				{ stdio: "ignore", timeout: 30_000 },
+			)
+		} catch {
+			// Best effort
+		}
 		setTimeout(() => {
 			fs.rm(state.composeDir, { recursive: true, force: true }, () => {})
 		}, 5000)
@@ -331,32 +298,22 @@ export class DockerSandboxProvider implements SandboxProvider {
 			throw new Error("No active container for session")
 		}
 
-		try {
-			state.process.kill()
-		} catch {
-			// Process may already be dead
-		}
-		this.activeContainers.delete(handle.sessionId)
-		this.internalState.delete(handle.sessionId)
-
 		const composePath = path.join(state.composeDir, "docker-compose.yml")
 
-		const child = spawn(
-			"docker",
-			[
-				"compose",
-				"-p",
-				state.composeProject,
-				"-f",
-				composePath,
-				"run",
-				"--rm",
-				"-i",
-				"--service-ports",
-				"agent",
-			],
-			{ stdio: ["pipe", "pipe", "pipe"] },
-		)
+		// Stop and restart the agent service
+		try {
+			execSync(`docker compose -p ${state.composeProject} -f ${composePath} stop agent`, {
+				stdio: "ignore",
+				timeout: 15_000,
+			})
+		} catch {
+			// May already be stopped
+		}
+
+		execSync(`docker compose -p ${state.composeProject} -f ${composePath} up -d agent`, {
+			stdio: "pipe",
+			timeout: 60_000,
+		})
 
 		const newHandle: SandboxHandle = {
 			sessionId: handle.sessionId,
@@ -365,19 +322,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 			projectDir: handle.projectDir,
 		}
 
-		const newState: DockerInternalState = {
-			process: child,
-			composeDir: state.composeDir,
-			composeProject: state.composeProject,
-		}
-
 		this.activeContainers.set(handle.sessionId, newHandle)
-		this.internalState.set(handle.sessionId, newState)
-
-		child.on("exit", () => {
-			this.activeContainers.delete(handle.sessionId)
-			this.internalState.delete(handle.sessionId)
-		})
 
 		return newHandle
 	}
@@ -393,7 +338,8 @@ export class DockerSandboxProvider implements SandboxProvider {
 	isAlive(handle: SandboxHandle): boolean {
 		const state = this.internalState.get(handle.sessionId)
 		if (!state) return false
-		return !state.process.killed && state.process.exitCode === null
+		const containerId = getAgentContainerId(state)
+		return containerId !== null
 	}
 
 	async exec(handle: SandboxHandle, command: string): Promise<string> {

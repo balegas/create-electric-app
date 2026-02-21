@@ -1,47 +1,37 @@
-import { type ChildProcess, execSync, spawn } from "node:child_process"
+import { execSync } from "node:child_process"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
-import { createHeadlessAdapter, type HeadlessConfig } from "../engine/headless-adapter.js"
 import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
 import { createStreamAdapter } from "../engine/stream-adapter.js"
 
 /**
  * Handler for `electric-agent headless`.
  *
- * Two modes:
- *   --stream: read commands from a hosted Durable Stream, write events back
- *   (default): NDJSON stdin/stdout protocol
+ * Communicates via a hosted Durable Stream. Reads commands and gate
+ * responses from the stream, writes agent events back.
  *
- * In both modes, first message is the initial config (command: "new" or "iterate"),
- * subsequent messages are gate responses or new commands.
+ * Required env vars: DS_URL, DS_SERVICE_ID, DS_SECRET, SESSION_ID
  */
-export async function headlessCommand(opts?: { stream?: boolean }): Promise<void> {
-	let readConfig: () => Promise<HeadlessConfig>
-	let waitForCommand: () => Promise<HeadlessConfig>
-	let callbacks: OrchestratorCallbacks
-	let close: () => void
+export async function headlessCommand(): Promise<void> {
+	// Construct stream URL from env vars
+	const dsUrl = process.env.DS_URL
+	const dsServiceId = process.env.DS_SERVICE_ID
+	const dsSecret = process.env.DS_SECRET
+	const sessionId = process.env.SESSION_ID
 
-	if (opts?.stream) {
-		const streamUrl = process.env.DS_STREAM_URL
-		const secret = process.env.DS_SECRET
-		if (!streamUrl || !secret) {
-			process.stderr.write("Error: DS_STREAM_URL and DS_SECRET are required for --stream mode\n")
-			process.exitCode = 1
-			return
-		}
-		const adapter = createStreamAdapter(streamUrl, secret)
-		await adapter.startListening()
-		readConfig = adapter.readConfig
-		waitForCommand = adapter.waitForCommand
-		callbacks = adapter.callbacks
-		close = adapter.close
-	} else {
-		const adapter = createHeadlessAdapter()
-		readConfig = adapter.readConfig
-		waitForCommand = adapter.waitForCommand
-		callbacks = adapter.callbacks
-		close = adapter.close
+	if (!dsUrl || !dsServiceId || !dsSecret || !sessionId) {
+		process.stderr.write(
+			"Error: DS_URL, DS_SERVICE_ID, DS_SECRET, and SESSION_ID environment variables are required\n",
+		)
+		process.exitCode = 1
+		return
 	}
+
+	const streamUrl = `${dsUrl}/v1/stream/${dsServiceId}/session/${sessionId}`
+	const adapter = createStreamAdapter(streamUrl, dsSecret)
+	await adapter.startListening()
+
+	const { readConfig, waitForCommand, callbacks, close } = adapter
 
 	let config: Awaited<ReturnType<typeof readConfig>>
 	try {
@@ -55,7 +45,6 @@ export async function headlessCommand(opts?: { stream?: boolean }): Promise<void
 	}
 
 	let projectDir: string | undefined
-	let devServer: ChildProcess | undefined
 
 	try {
 		if (config.command === "new") {
@@ -121,9 +110,9 @@ export async function headlessCommand(opts?: { stream?: boolean }): Promise<void
 
 			projectDir = result.projectDir
 
-			// In sandbox mode, run migrations and start the dev server in the background
+			// In sandbox mode, run migrations and start the dev server
 			if (process.env.SANDBOX_MODE === "1" && projectDir) {
-				devServer = await startSandboxDevServer(projectDir, callbacks.onEvent)
+				await startSandboxDevServer(projectDir, callbacks.onEvent)
 			}
 		} else if (config.command === "iterate") {
 			if (!config.projectDir) {
@@ -183,19 +172,32 @@ export async function headlessCommand(opts?: { stream?: boolean }): Promise<void
 
 	// Keep listening for iterate commands (Vite HMR picks up changes live)
 	if (process.env.SANDBOX_MODE === "1") {
-		await listenForIterations(projectDir, devServer, waitForCommand, callbacks)
+		await listenForIterations(projectDir, waitForCommand, callbacks)
 	}
 
 	close()
 }
 
+/** HeadlessConfig type for git operations */
+interface HeadlessConfig {
+	command: string
+	projectDir?: string
+	request?: string
+	resumeSessionId?: string
+	gitOp?: "commit" | "push" | "create-repo" | "create-pr"
+	gitMessage?: string
+	gitRepoName?: string
+	gitRepoVisibility?: "public" | "private"
+	gitPrTitle?: string
+	gitPrBody?: string
+}
+
 /**
- * Listen for iterate commands on stdin and run them.
+ * Listen for iterate commands and run them.
  * The dev server stays running — Vite HMR handles live reloads.
  */
 async function listenForIterations(
 	projectDir: string | undefined,
-	devServer: ChildProcess | undefined,
 	waitForCommand: () => Promise<{
 		command: string
 		projectDir?: string
@@ -209,7 +211,7 @@ async function listenForIterations(
 		try {
 			cmd = await waitForCommand()
 		} catch {
-			// Stdin closed — exit gracefully
+			// Stream closed — exit gracefully
 			break
 		}
 
@@ -279,11 +281,6 @@ async function listenForIterations(
 			})
 			callbacks.onEvent({ type: "session_complete", success: false, ts: ts() })
 		}
-	}
-
-	// Clean up dev server when stdin closes
-	if (devServer && !devServer.killed) {
-		devServer.kill()
 	}
 }
 
@@ -437,14 +434,13 @@ function runMigrations(
 /**
  * After generation completes in sandbox mode:
  * 1. Run drizzle-kit migrate
- * 2. Start pnpm dev via the dev:start script (creates PID file for dev:stop)
- *
- * Returns the wrapper child process (dev server runs in background via nohup).
+ * 2. Start pnpm dev via the dev:start script
+ * 3. Emit app_ready event
  */
 async function startSandboxDevServer(
 	projectDir: string,
 	emit: (event: EngineEvent) => void | Promise<void>,
-): Promise<ChildProcess> {
+): Promise<void> {
 	// Step 1: Run migrations
 	runMigrations(projectDir, emit)
 
@@ -463,15 +459,6 @@ async function startSandboxDevServer(
 		env: { ...process.env },
 	})
 
-	// Tail the dev server log so output reaches the container bridge via stderr
-	const logTail = spawn("tail", ["-f", "/tmp/dev-server.log"], {
-		cwd: projectDir,
-		stdio: ["ignore", "pipe", "pipe"],
-	})
-
-	logTail.stdout?.on("data", (data: Buffer) => {
-		process.stderr.write(data)
-	})
-
-	return logTail
+	// Step 3: Emit app_ready — the dev server is running in the background
+	emit({ type: "app_ready", port: 5173, ts: ts() })
 }

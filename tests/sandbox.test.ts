@@ -51,11 +51,6 @@ describe("DockerSandboxProvider — interface", () => {
 		assert.equal(provider.isAlive(fakeHandle), false)
 	})
 
-	it("getProcess() returns null for unknown session", () => {
-		const provider = new DockerSandboxProvider()
-		assert.equal(provider.getProcess("nonexistent"), null)
-	})
-
 	it("listFiles returns empty for unknown handle", async () => {
 		const provider = new DockerSandboxProvider()
 		const fakeHandle: SandboxHandle = {

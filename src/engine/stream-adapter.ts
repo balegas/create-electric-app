@@ -12,8 +12,24 @@
 
 import { DurableStream } from "@durable-streams/client"
 import type { EngineEvent } from "./events.js"
-import type { HeadlessConfig } from "./headless-adapter.js"
 import type { OrchestratorCallbacks } from "./orchestrator.js"
+
+export interface HeadlessConfig {
+	command: "new" | "iterate" | "git"
+	description?: string
+	projectName?: string
+	baseDir?: string
+	projectDir?: string
+	request?: string
+	resumeSessionId?: string
+	initGit?: boolean
+	gitOp?: "commit" | "push" | "create-repo" | "create-pr"
+	gitMessage?: string
+	gitRepoName?: string
+	gitRepoVisibility?: "public" | "private"
+	gitPrTitle?: string
+	gitPrBody?: string
+}
 
 interface StreamMessage {
 	source: "server" | "agent"
