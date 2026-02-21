@@ -1,4 +1,5 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { DEFAULT_PLANNER_CONFIG, type PlannerModelConfig } from "../engine/model-settings.js"
 import { plannerHooks } from "../hooks/index.js"
 import {
 	createProgressReporter,
@@ -17,6 +18,7 @@ export async function runPlanner(
 	reporter?: ProgressReporter,
 	onMessage?: (msg: Record<string, unknown>) => void,
 	abortController?: AbortController,
+	modelConfig?: Partial<PlannerModelConfig>,
 ): Promise<string> {
 	const r = reporter ?? createProgressReporter()
 	const plannerPrompt = buildPlannerPrompt()
@@ -44,10 +46,12 @@ The plan must include read_playbook instructions in each phase so the coder read
 		}
 	}
 
+	const cfg = { ...DEFAULT_PLANNER_CONFIG, ...modelConfig }
+
 	const queryOptions: Record<string, unknown> = {
-		model: "claude-sonnet-4-6",
+		model: cfg.model,
 		systemPrompt: plannerPrompt,
-		maxThinkingTokens: 4096,
+		maxThinkingTokens: cfg.maxThinkingTokens,
 		allowedTools: [
 			"WebSearch",
 			"mcp__electric-agent-tools__read_playbook",
@@ -56,7 +60,7 @@ The plan must include read_playbook instructions in each phase so the coder read
 		mcpServers: { "electric-agent-tools": mcpServer },
 		hooks: plannerHooks,
 		cwd: projectDir,
-		maxTurns: 10,
+		maxTurns: cfg.maxTurns,
 		permissionMode: "bypassPermissions",
 		allowDangerouslySkipPermissions: true,
 	}

@@ -1,4 +1,5 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { type CoderModelConfig, DEFAULT_CODER_CONFIG } from "../engine/model-settings.js"
 import { createCoderHooks } from "../hooks/index.js"
 import {
 	createProgressReporter,
@@ -30,6 +31,7 @@ export async function runCoder(
 	onMessage?: (msg: Record<string, unknown>) => void,
 	resumeSessionId?: string,
 	abortController?: AbortController,
+	modelConfig?: Partial<CoderModelConfig>,
 ): Promise<CoderResult> {
 	const r = reporter ?? createProgressReporter()
 	const coderPrompt = buildCoderPrompt(projectDir)
@@ -60,10 +62,12 @@ export async function runCoder(
 		}
 	}
 
+	const cfg = { ...DEFAULT_CODER_CONFIG, ...modelConfig }
+
 	const queryOptions: Record<string, unknown> = {
-		model: "claude-sonnet-4-6",
+		model: cfg.model,
 		systemPrompt: coderPrompt,
-		maxThinkingTokens: 8192,
+		maxThinkingTokens: cfg.maxThinkingTokens,
 		allowedTools: [
 			"Read",
 			"Write",
@@ -79,8 +83,8 @@ export async function runCoder(
 		mcpServers: { "electric-agent-tools": mcpServer },
 		hooks: createCoderHooks(projectDir),
 		cwd: projectDir,
-		maxTurns: 200,
-		maxBudgetUsd: 25.0,
+		maxTurns: cfg.maxTurns,
+		maxBudgetUsd: cfg.maxBudgetUsd,
 		permissionMode: "bypassPermissions",
 		allowDangerouslySkipPermissions: true,
 	}

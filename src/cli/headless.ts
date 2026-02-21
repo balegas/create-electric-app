@@ -91,6 +91,7 @@ export async function headlessCommand(): Promise<void> {
 				callbacks,
 				gitRepoName: config.gitRepoName,
 				gitRepoVisibility: config.gitRepoVisibility,
+				modelSettings: config.modelSettings,
 			})
 
 			projectDir = result.projectDir
@@ -118,6 +119,7 @@ export async function headlessCommand(): Promise<void> {
 				userRequest: config.request,
 				callbacks,
 				resumeSessionId: config.resumeSessionId,
+				modelSettings: config.modelSettings,
 			})
 		} else if (config.command === "git") {
 			if (!config.projectDir) {
@@ -170,12 +172,7 @@ export async function headlessCommand(): Promise<void> {
 async function listenForIterations(
 	projectDir: string | undefined,
 	devServer: ChildProcess | undefined,
-	waitForCommand: () => Promise<{
-		command: string
-		projectDir?: string
-		request?: string
-		resumeSessionId?: string
-	}>,
+	waitForCommand: () => Promise<HeadlessConfig>,
 	callbacks: OrchestratorCallbacks,
 ): Promise<void> {
 	while (true) {
@@ -235,6 +232,7 @@ async function listenForIterations(
 				userRequest: cmd.request,
 				callbacks,
 				resumeSessionId: cmd.resumeSessionId,
+				modelSettings: cmd.modelSettings,
 			})
 
 			// Run migrations after code changes (schema may have changed)

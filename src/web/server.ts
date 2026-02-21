@@ -10,6 +10,11 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { inferProjectName } from "../agents/clarifier.js"
 import { ts } from "../engine/events.js"
+import {
+	type AgentModelSettings,
+	AVAILABLE_MODELS,
+	DEFAULT_MODEL_SETTINGS,
+} from "../engine/model-settings.js"
 import { resolveProjectDir } from "../engine/orchestrator.js"
 import {
 	ghListAccounts,
@@ -96,6 +101,9 @@ function detectGitOp(
 	return null
 }
 
+/** In-memory agent model settings (persists for server lifetime) */
+const agentModelSettings: AgentModelSettings = { ...DEFAULT_MODEL_SETTINGS }
+
 export function createApp(config: ServerConfig) {
 	const app = new Hono()
 
@@ -128,6 +136,22 @@ export function createApp(config: ServerConfig) {
 			return c.json({ ok: true, ghUsername: result.username })
 		}
 		return c.json({ ok: true })
+	})
+
+	// Model settings
+	app.get("/api/model-settings", (c) => {
+		return c.json({ models: AVAILABLE_MODELS, settings: agentModelSettings })
+	})
+
+	app.put("/api/model-settings", async (c) => {
+		const body = (await c.req.json()) as Partial<AgentModelSettings>
+		if (body.planner) {
+			agentModelSettings.planner = { ...agentModelSettings.planner, ...body.planner }
+		}
+		if (body.coder) {
+			agentModelSettings.coder = { ...agentModelSettings.coder, ...body.coder }
+		}
+		return c.json({ ok: true, settings: agentModelSettings })
 	})
 
 	// List all sessions
@@ -310,6 +334,7 @@ export function createApp(config: ServerConfig) {
 				description: body.description,
 				projectName,
 				baseDir: "/home/agent/workspace",
+				modelSettings: agentModelSettings,
 			}
 			if (repoConfig) {
 				newCmd.gitRepoName = `${repoConfig.account}/${repoConfig.repoName}`
@@ -431,6 +456,7 @@ export function createApp(config: ServerConfig) {
 			projectDir: session.sandboxProjectDir || handle.projectDir,
 			request: body.request,
 			resumeSessionId: session.lastCoderSessionId,
+			modelSettings: agentModelSettings,
 		})
 
 		return c.json({ ok: true })

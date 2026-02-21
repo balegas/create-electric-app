@@ -12,6 +12,7 @@ import { updateSession } from "../working-memory/session.js"
 import type { EngineEvent } from "./events.js"
 import { ts } from "./events.js"
 import { sdkMessageToEvents } from "./message-parser.js"
+import type { AgentModelSettings } from "./model-settings.js"
 
 export interface OrchestratorCallbacks {
 	onEvent: (event: EngineEvent) => void | Promise<void>
@@ -90,6 +91,7 @@ export async function runNew(opts: {
 	/** If provided, create a GitHub repo and push the scaffold before planning */
 	gitRepoName?: string
 	gitRepoVisibility?: "public" | "private"
+	modelSettings?: AgentModelSettings
 }): Promise<{ sessionId?: string; projectDir?: string }> {
 	const { callbacks } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
@@ -239,6 +241,7 @@ export async function runNew(opts: {
 		reporter,
 		messageForwarder,
 		opts.abortController,
+		opts.modelSettings?.planner,
 	)
 
 	// Step 3: Approve
@@ -260,6 +263,7 @@ export async function runNew(opts: {
 				reporter,
 				messageForwarder,
 				opts.abortController,
+				opts.modelSettings?.planner,
 			)
 			emit({ type: "plan_ready", plan, ts: ts() })
 			decision = await callbacks.onPlanReady(plan)
@@ -300,6 +304,7 @@ export async function runNew(opts: {
 		messageForwarder,
 		undefined,
 		opts.abortController,
+		opts.modelSettings?.coder,
 	)
 
 	while (result.stopReason === "max_turns" || result.stopReason === "max_budget") {
@@ -327,6 +332,7 @@ export async function runNew(opts: {
 			messageForwarder,
 			result.sessionId,
 			opts.abortController,
+			opts.modelSettings?.coder,
 		)
 	}
 
@@ -386,6 +392,7 @@ export async function runIterate(opts: {
 	callbacks: OrchestratorCallbacks
 	abortController?: AbortController
 	resumeSessionId?: string
+	modelSettings?: AgentModelSettings
 }): Promise<{ success: boolean; errors: string[]; sessionId?: string }> {
 	const { callbacks, projectDir, userRequest } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
@@ -419,6 +426,7 @@ Do NOT just write a plan — implement the changes directly.`
 		messageForwarder,
 		opts.resumeSessionId,
 		opts.abortController,
+		opts.modelSettings?.coder,
 	)
 
 	while (result.stopReason === "max_turns" || result.stopReason === "max_budget") {
@@ -441,6 +449,7 @@ Do NOT just write a plan — implement the changes directly.`
 			messageForwarder,
 			result.sessionId,
 			opts.abortController,
+			opts.modelSettings?.coder,
 		)
 	}
 

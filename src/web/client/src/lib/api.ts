@@ -130,6 +130,43 @@ export function updateSettings(settings: { anthropicApiKey?: string; githubPat?:
 	})
 }
 
+// --- Model Settings ---
+
+export interface ModelInfo {
+	id: string
+	label: string
+	tier: string
+}
+
+export interface PlannerModelConfig {
+	model: string
+	maxThinkingTokens: number
+	maxTurns: number
+}
+
+export interface CoderModelConfig {
+	model: string
+	maxThinkingTokens: number
+	maxTurns: number
+	maxBudgetUsd: number
+}
+
+export interface AgentModelSettings {
+	planner: PlannerModelConfig
+	coder: CoderModelConfig
+}
+
+export function getModelSettings() {
+	return request<{ models: ModelInfo[]; settings: AgentModelSettings }>("/model-settings")
+}
+
+export function updateModelSettings(settings: Partial<AgentModelSettings>) {
+	return request<{ ok: boolean; settings: AgentModelSettings }>("/model-settings", {
+		method: "PUT",
+		body: settings,
+	})
+}
+
 // --- Git/GitHub ---
 
 export function getGitStatus(sessionId: string) {

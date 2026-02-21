@@ -1,5 +1,6 @@
 import readline from "node:readline"
 import type { EngineEvent } from "./events.js"
+import type { AgentModelSettings } from "./model-settings.js"
 import type { OrchestratorCallbacks } from "./orchestrator.js"
 
 export interface HeadlessConfig {
@@ -17,6 +18,7 @@ export interface HeadlessConfig {
 	gitRepoVisibility?: "public" | "private"
 	gitPrTitle?: string
 	gitPrBody?: string
+	modelSettings?: AgentModelSettings
 }
 
 /**
