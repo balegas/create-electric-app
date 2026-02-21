@@ -34,9 +34,12 @@ export function PromptInput({
 			if (e.key === "Enter" && !e.shiftKey) {
 				e.preventDefault()
 				handleSubmit()
+			} else if (e.key === "Escape" && isRunning && onCancel) {
+				e.preventDefault()
+				onCancel()
 			}
 		},
-		[handleSubmit],
+		[handleSubmit, isRunning, onCancel],
 	)
 
 	// Auto-resize textarea

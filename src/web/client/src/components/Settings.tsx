@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom"
 import { updateSettings } from "../lib/api"
 
@@ -76,6 +76,17 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 		setCopied(true)
 		setTimeout(() => setCopied(false), 2000)
 	}, [onCopyLog])
+
+	useEffect(() => {
+		function handleKeyDown(e: KeyboardEvent) {
+			if (e.key === "Escape") {
+				e.preventDefault()
+				onClose()
+			}
+		}
+		document.addEventListener("keydown", handleKeyDown)
+		return () => document.removeEventListener("keydown", handleKeyDown)
+	}, [onClose])
 
 	return createPortal(
 		<div className="modal-overlay" onClick={onClose}>

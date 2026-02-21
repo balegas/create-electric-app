@@ -90,6 +90,8 @@ export async function runNew(opts: {
 	/** If provided, create a GitHub repo and push the scaffold before planning */
 	gitRepoName?: string
 	gitRepoVisibility?: "public" | "private"
+	/** If provided, create and work on this branch after pushing scaffold to main */
+	gitBranchName?: string
 }): Promise<{ sessionId?: string; projectDir?: string }> {
 	const { callbacks } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
@@ -227,6 +229,31 @@ export async function runNew(opts: {
 			emit({ type: "log", level: "error", message: `Repo creation failed: ${msg}`, ts: ts() })
 			emit({ type: "session_complete", success: false, ts: ts() })
 			return { projectDir }
+		}
+
+		// Create and switch to the working branch (scaffold is on main)
+		const branchName = opts.gitBranchName || `electric-agent/${projectName}`
+		emit({
+			type: "log",
+			level: "task",
+			message: `Switching to branch: ${branchName}`,
+			ts: ts(),
+		})
+		try {
+			execSync(`git checkout -b "${branchName}"`, {
+				cwd: projectDir,
+				stdio: "pipe",
+				timeout: 10_000,
+			})
+			emit({
+				type: "log",
+				level: "done",
+				message: `Working on branch: ${branchName}`,
+				ts: ts(),
+			})
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "unknown error"
+			emit({ type: "log", level: "error", message: `Branch creation failed: ${msg}`, ts: ts() })
 		}
 	}
 

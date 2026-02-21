@@ -15,6 +15,7 @@ export interface HeadlessConfig {
 	gitMessage?: string
 	gitRepoName?: string
 	gitRepoVisibility?: "public" | "private"
+	gitBranchName?: string
 	gitPrTitle?: string
 	gitPrBody?: string
 }

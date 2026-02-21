@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { respondToGate } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
@@ -25,6 +25,17 @@ function ClarificationGate({
 	const [answers, setAnswers] = useState<string[]>(event.questions.map(() => ""))
 	const [extra, setExtra] = useState("")
 	const [submitting, setSubmitting] = useState(false)
+
+	useEffect(() => {
+		function handleKeyDown(e: KeyboardEvent) {
+			if (e.key === "Enter" && !e.shiftKey && !submitting) {
+				e.preventDefault()
+				handleSubmit()
+			}
+		}
+		document.addEventListener("keydown", handleKeyDown)
+		return () => document.removeEventListener("keydown", handleKeyDown)
+	})
 
 	async function handleSubmit() {
 		setSubmitting(true)
@@ -104,6 +115,21 @@ function PlanGate({
 		}
 	}
 
+	useEffect(() => {
+		function handleKeyDown(e: KeyboardEvent) {
+			if (submitting) return
+			if (e.key === "Enter" && !e.shiftKey) {
+				e.preventDefault()
+				handleDecision("approve")
+			} else if (e.key === "Escape") {
+				e.preventDefault()
+				handleDecision("cancel")
+			}
+		}
+		document.addEventListener("keydown", handleKeyDown)
+		return () => document.removeEventListener("keydown", handleKeyDown)
+	})
+
 	return (
 		<div className="gate-plan">
 			<div className="gate-plan-body">
@@ -154,6 +180,21 @@ function ContinueGate({
 		}
 	}
 
+	useEffect(() => {
+		function handleKeyDown(e: KeyboardEvent) {
+			if (submitting) return
+			if (e.key === "Enter" && !e.shiftKey) {
+				e.preventDefault()
+				handleDecision(true)
+			} else if (e.key === "Escape") {
+				e.preventDefault()
+				handleDecision(false)
+			}
+		}
+		document.addEventListener("keydown", handleKeyDown)
+		return () => document.removeEventListener("keydown", handleKeyDown)
+	})
+
 	const isBudget = reason === "max_budget"
 
 	return (
@@ -199,6 +240,7 @@ function InfraConfigGate({
 	const [repoName, setRepoName] = useState(event.projectName)
 	const [repoVisibility, setRepoVisibility] = useState<"public" | "private">("private")
 	const [setupRepo, setSetupRepo] = useState(hasGh)
+	const [branchName, setBranchName] = useState(`electric-agent/${event.projectName}`)
 
 	async function handleSubmit() {
 		setSubmitting(true)
@@ -222,7 +264,8 @@ function InfraConfigGate({
 				payload.repoAccount = repoAccount
 				payload.repoName = repoName
 				payload.repoVisibility = repoVisibility
-				parts.push(`${repoAccount}/${repoName} (${repoVisibility})`)
+				payload.branchName = branchName.trim() || `electric-agent/${event.projectName}`
+				parts.push(`${repoAccount}/${repoName} (${repoVisibility}) → ${payload.branchName}`)
 			}
 
 			payload._summary = parts.join(" · ")
@@ -235,6 +278,18 @@ function InfraConfigGate({
 
 	const cloudValid = databaseUrl.trim() && sourceId.trim() && secret.trim()
 	const repoValid = !setupRepo || (repoAccount && repoName.trim())
+	const canSubmit = !submitting && (mode !== "cloud" || cloudValid) && repoValid
+
+	useEffect(() => {
+		function handleKeyDown(e: KeyboardEvent) {
+			if (e.key === "Enter" && !e.shiftKey && canSubmit) {
+				e.preventDefault()
+				handleSubmit()
+			}
+		}
+		document.addEventListener("keydown", handleKeyDown)
+		return () => document.removeEventListener("keydown", handleKeyDown)
+	})
 
 	return (
 		<div className="gate-prompt">
@@ -380,6 +435,16 @@ function InfraConfigGate({
 										Public
 									</label>
 								</div>
+							</div>
+							<div className="question">
+								<label>Branch</label>
+								<input
+									type="text"
+									value={branchName}
+									onChange={(e) => setBranchName(e.target.value)}
+									disabled={submitting}
+									placeholder={`electric-agent/${event.projectName}`}
+								/>
 							</div>
 						</>
 					)}

@@ -213,6 +213,7 @@ export function createApp(config: ServerConfig) {
 				account: string
 				repoName: string
 				visibility: "public" | "private"
+				branchName?: string
 			} | null = null
 
 			try {
@@ -221,6 +222,7 @@ export function createApp(config: ServerConfig) {
 						repoAccount?: string
 						repoName?: string
 						repoVisibility?: "public" | "private"
+						branchName?: string
 					}
 				>(sessionId, "infra_config")
 
@@ -242,10 +244,12 @@ export function createApp(config: ServerConfig) {
 						account: gateValue.repoAccount,
 						repoName: gateValue.repoName,
 						visibility: gateValue.repoVisibility ?? "private",
+						branchName: gateValue.branchName || undefined,
 					}
+					const targetBranch = repoConfig.branchName || "main"
 					updateSessionInfo(config.dataDir, sessionId, {
 						git: {
-							branch: "main",
+							branch: targetBranch,
 							remoteUrl: null,
 							repoName: `${repoConfig.account}/${repoConfig.repoName}`,
 							repoVisibility: repoConfig.visibility,
@@ -314,6 +318,9 @@ export function createApp(config: ServerConfig) {
 			if (repoConfig) {
 				newCmd.gitRepoName = `${repoConfig.account}/${repoConfig.repoName}`
 				newCmd.gitRepoVisibility = repoConfig.visibility
+				if (repoConfig.branchName) {
+					newCmd.gitBranchName = repoConfig.branchName
+				}
 			}
 			config.sandbox.sendCommand(handle, newCmd)
 		}
@@ -488,6 +495,7 @@ export function createApp(config: ServerConfig) {
 						repoAccount: body.repoAccount,
 						repoName: body.repoName,
 						repoVisibility: body.repoVisibility,
+						branchName: body.branchName,
 					}
 				} else {
 					value = {
@@ -495,6 +503,7 @@ export function createApp(config: ServerConfig) {
 						repoAccount: body.repoAccount,
 						repoName: body.repoName,
 						repoVisibility: body.repoVisibility,
+						branchName: body.branchName,
 					}
 				}
 				break

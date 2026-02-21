@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { type GhBranch, type GhRepo, listBranches, listGithubRepos } from "../lib/api"
 
@@ -31,6 +31,25 @@ export function RepoPickerModal({ onSelect, onClose }: RepoPickerModalProps) {
 	const [branchFilter, setBranchFilter] = useState("")
 	const [newBranchName, setNewBranchName] = useState("")
 	const [showNewBranch, setShowNewBranch] = useState(false)
+
+	const handleEsc = useCallback(
+		(e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault()
+				if (selectedRepo) {
+					handleBack()
+				} else {
+					onClose()
+				}
+			}
+		},
+		[selectedRepo, onClose],
+	)
+
+	useEffect(() => {
+		document.addEventListener("keydown", handleEsc)
+		return () => document.removeEventListener("keydown", handleEsc)
+	}, [handleEsc])
 
 	useEffect(() => {
 		listGithubRepos()
