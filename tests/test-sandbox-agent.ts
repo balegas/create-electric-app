@@ -51,16 +51,37 @@ async function main(): Promise<void> {
 		await writer.append(JSON.stringify(msg))
 	}
 
-	const reader = new DurableStream({
-		url: streamUrl,
-		headers,
-		contentType: "application/json",
-	})
+	// Retry connecting to stream — it may not exist yet when container starts
+	async function connectWithRetry(
+		maxRetries = 15,
+		delayMs = 2000,
+	): Promise<ReturnType<InstanceType<typeof DurableStream>["stream"]>> {
+		for (let attempt = 1; attempt <= maxRetries; attempt++) {
+			try {
+				const reader = new DurableStream({
+					url: streamUrl,
+					headers,
+					contentType: "application/json",
+				})
+				const resp = await reader.stream<Message>({
+					offset: "-1",
+					live: true,
+				})
+				process.stderr.write(`Connected to stream on attempt ${attempt}\n`)
+				return resp
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err)
+				if (attempt === maxRetries) throw err
+				process.stderr.write(
+					`Stream not ready (attempt ${attempt}/${maxRetries}): ${msg}\n`,
+				)
+				await new Promise((r) => setTimeout(r, delayMs))
+			}
+		}
+		throw new Error("Unreachable")
+	}
 
-	const response = await reader.stream<Message>({
-		offset: "-1",
-		live: true,
-	})
+	const response = await connectWithRetry()
 
 	let gotConfig = false
 
