@@ -43,7 +43,8 @@
 /* Prompt bar buttons (keep backward compat) */
 .prompt-bar button {
 	padding: 8px 16px;
-	border-radius: 6px;
+	min-height: 44px;
+	border-radius: 8px;
 	border: 1px solid var(--border);
 	background: var(--bg-surface);
 	color: var(--text);
@@ -57,15 +58,15 @@
 }
 
 .prompt-bar button.primary {
-	background: var(--brand-3);
-	border-color: var(--brand-3);
+	background: var(--brand-2);
+	border-color: var(--brand-2);
 	color: #fff;
 	font-weight: 600;
 }
 
 .prompt-bar button.primary:hover {
-	background: var(--brand-2);
-	border-color: var(--brand-2);
+	background: var(--brand-1);
+	border-color: var(--brand-1);
 }
 
 .prompt-bar button.danger {
