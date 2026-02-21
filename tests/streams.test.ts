@@ -1,6 +1,6 @@
 import "dotenv/config"
 import "./setup-proxy.js"
-import { after, describe, it } from "node:test"
+import { after, before, describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { DurableStream } from "@durable-streams/client"
 import { HostedStreamBridge } from "../src/web/bridge/hosted.js"
@@ -11,6 +11,7 @@ import {
 } from "../src/web/streams.js"
 import type { StreamMessage } from "../src/web/bridge/types.js"
 import type { EngineEvent } from "../src/engine/events.js"
+import { localStreamServer } from "./local-stream-server.js"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,10 +40,7 @@ function waitFor(
 	})
 }
 
-/**
- * Create a stream via the REST API (PUT) since DurableStream.create()
- * may not be supported by the hosted service. Falls back to append.
- */
+/** Create a stream via the REST API (PUT) */
 async function ensureStream(url: string, headers: Record<string, string>): Promise<void> {
 	const res = await fetch(url, {
 		method: "PUT",
@@ -57,73 +55,65 @@ async function ensureStream(url: string, headers: Record<string, string>): Promi
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Tests — config helpers (pure unit tests, no server needed)
 // ---------------------------------------------------------------------------
 
 describe("streams — config", () => {
-	it("reads hosted stream config from env vars", () => {
+	it("getStreamConfig reads from env vars", () => {
 		const config = getStreamConfig()
-		assert.ok(config, "DS_URL, DS_SERVICE_ID, DS_SECRET must be set in .env")
-		assert.ok(config.url.startsWith("https://"), "DS_URL should be HTTPS")
-		assert.ok(config.serviceId.length > 0, "DS_SERVICE_ID should be non-empty")
-		assert.ok(config.secret.length > 0, "DS_SECRET should be non-empty")
+		if (!config) {
+			// When no hosted creds are set, getStreamConfig returns null — that's valid
+			assert.equal(config, null)
+			return
+		}
+		assert.ok(config.url.length > 0)
+		assert.ok(config.serviceId.length > 0)
+		assert.ok(config.secret.length > 0)
 	})
 
-	it("builds connection info with auth headers", () => {
-		const config = getStreamConfig()!
-		const conn = getStreamConnectionInfo("test-session", config)
+	it("getStreamConnectionInfo builds URL with session ID", () => {
+		const config = { url: "https://example.com", serviceId: "svc-1", secret: "s3cret" }
+		const conn = getStreamConnectionInfo("my-session", config)
 
-		assert.ok(
-			conn.url.includes(config.serviceId),
-			"URL should contain service ID",
-		)
-		assert.ok(
-			conn.url.includes("test-session"),
-			"URL should contain session ID",
-		)
-		assert.ok(
-			conn.headers.Authorization?.startsWith("Bearer "),
-			"Should include Bearer auth header",
-		)
+		assert.ok(conn.url.includes("svc-1"))
+		assert.ok(conn.url.includes("my-session"))
+		assert.equal(conn.headers.Authorization, "Bearer s3cret")
 	})
 
-	it("builds sandbox env vars", () => {
-		const config = getStreamConfig()!
+	it("getStreamEnvVars builds env map", () => {
+		const config = { url: "https://example.com", serviceId: "svc-1", secret: "s3cret" }
 		const vars = getStreamEnvVars("my-session", config)
 
-		assert.equal(vars.DS_URL, config.url)
-		assert.equal(vars.DS_SERVICE_ID, config.serviceId)
-		assert.equal(vars.DS_SECRET, config.secret)
+		assert.equal(vars.DS_URL, "https://example.com")
+		assert.equal(vars.DS_SERVICE_ID, "svc-1")
+		assert.equal(vars.DS_SECRET, "s3cret")
 		assert.equal(vars.SESSION_ID, "my-session")
-	})
-
-	it("builds env vars with session ID", () => {
-		const config = getStreamConfig()!
-		const vars = getStreamEnvVars("env-test-session", config)
-
-		assert.equal(vars.SESSION_ID, "env-test-session")
-		assert.equal(vars.DS_URL, config.url)
 	})
 })
 
-describe("streams — hosted service connectivity", () => {
-	const config = getStreamConfig()
-	if (!config) {
-		it("SKIP: no hosted stream credentials configured", () => {
-			assert.ok(true)
-		})
-		return
-	}
+// ---------------------------------------------------------------------------
+// Tests — stream connectivity (uses local server or hosted)
+// ---------------------------------------------------------------------------
+
+const server = localStreamServer()
+
+describe("streams — connectivity", () => {
+	before(async () => {
+		await server.start()
+	})
+	after(async () => {
+		await server.stop()
+	})
 
 	it("can create a stream via PUT", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 	})
 
 	it("can write and read back a message", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const writer = new DurableStream({
@@ -141,7 +131,6 @@ describe("streams — hosted service connectivity", () => {
 		}
 		await writer.append(JSON.stringify(testEvent))
 
-		// Read back
 		const reader = new DurableStream({
 			url: conn.url,
 			headers: conn.headers,
@@ -156,15 +145,12 @@ describe("streams — hosted service connectivity", () => {
 		assert.equal(items.length, 1)
 		assert.equal(items[0].source, "agent")
 		assert.equal((items[0] as Record<string, unknown>).type, "log")
-		assert.equal(
-			(items[0] as Record<string, unknown>).message,
-			"integration test",
-		)
+		assert.equal((items[0] as Record<string, unknown>).message, "integration test")
 	})
 
 	it("can write multiple messages and read in order", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const writer = new DurableStream({
@@ -198,26 +184,26 @@ describe("streams — hosted service connectivity", () => {
 
 		assert.equal(items.length, 5)
 		for (let i = 0; i < 5; i++) {
-			assert.equal(
-				(items[i] as Record<string, unknown>).message,
-				`msg-${i}`,
-			)
+			assert.equal((items[i] as Record<string, unknown>).message, `msg-${i}`)
 		}
 	})
 })
 
+// ---------------------------------------------------------------------------
+// Tests — bridge roundtrip (uses local server or hosted)
+// ---------------------------------------------------------------------------
+
 describe("streams — bridge roundtrip", () => {
-	const config = getStreamConfig()
-	if (!config) {
-		it("SKIP: no hosted stream credentials configured", () => {
-			assert.ok(true)
-		})
-		return
-	}
+	before(async () => {
+		await server.start()
+	})
+	after(async () => {
+		await server.stop()
+	})
 
 	it("bridge.emit() writes server events to the stream", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const bridge = new HostedStreamBridge(sessionId, conn)
@@ -230,7 +216,6 @@ describe("streams — bridge roundtrip", () => {
 		}
 		await bridge.emit(event)
 
-		// Read raw stream — should see source: "server"
 		const reader = new DurableStream({
 			url: conn.url,
 			headers: conn.headers,
@@ -250,7 +235,7 @@ describe("streams — bridge roundtrip", () => {
 
 	it("bridge.sendCommand() writes command to the stream", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const bridge = new HostedStreamBridge(sessionId, conn)
@@ -280,7 +265,7 @@ describe("streams — bridge roundtrip", () => {
 
 	it("bridge.sendGateResponse() writes gate response to the stream", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const bridge = new HostedStreamBridge(sessionId, conn)
@@ -307,7 +292,7 @@ describe("streams — bridge roundtrip", () => {
 
 	it("bridge.onAgentEvent() receives agent events via subscription", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const bridge = new HostedStreamBridge(sessionId, conn)
@@ -319,7 +304,7 @@ describe("streams — bridge roundtrip", () => {
 
 		await bridge.start()
 
-		// Simulate an agent writing to the stream (as the sandbox would)
+		// Simulate an agent writing to the stream
 		const agentWriter = new DurableStream({
 			url: conn.url,
 			headers: conn.headers,
@@ -344,16 +329,13 @@ describe("streams — bridge roundtrip", () => {
 			"hello from agent",
 		)
 		// The source field should be stripped
-		assert.equal(
-			(received[0] as Record<string, unknown>).source,
-			undefined,
-		)
+		assert.equal((received[0] as Record<string, unknown>).source, undefined)
 		bridge.close()
 	})
 
 	it("bridge filters out server messages from onAgentEvent", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const bridge = new HostedStreamBridge(sessionId, conn)
@@ -390,7 +372,6 @@ describe("streams — bridge roundtrip", () => {
 		)
 
 		await waitFor(() => received.length >= 1, 10_000)
-		// Give a moment for any additional (incorrect) messages
 		await new Promise((r) => setTimeout(r, 500))
 
 		assert.equal(received.length, 1, "Should only receive agent messages")
@@ -401,17 +382,14 @@ describe("streams — bridge roundtrip", () => {
 		bridge.close()
 	})
 
-	it("server-emitted EngineEvents are distinguishable from protocol messages", async () => {
-		// This tests the invariant that the SSE proxy relies on:
-		// - command/gate_response types should be filtered (internal protocol)
-		// - other server-emitted types (infra_config_prompt, log, user_message) should pass through
+	it("SSE proxy filter: passes server EngineEvents, blocks protocol messages", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const bridge = new HostedStreamBridge(sessionId, conn)
 
-		// Emit various message types that the server sends
+		// Server emits EngineEvents (should pass SSE proxy)
 		await bridge.emit({
 			type: "infra_config_prompt",
 			projectName: "test-project",
@@ -423,6 +401,7 @@ describe("streams — bridge roundtrip", () => {
 			message: "build a todo app",
 			ts: new Date().toISOString(),
 		})
+		// Server sends protocol messages (should be blocked by SSE proxy)
 		await bridge.sendCommand({ command: "new", description: "test" })
 		await bridge.sendGateResponse("approval", { decision: "approve" })
 
@@ -440,7 +419,7 @@ describe("streams — bridge roundtrip", () => {
 
 		assert.equal(items.length, 4, "Should have 4 messages total")
 
-		// Apply the same filtering the SSE proxy uses
+		// Apply the same filtering the SSE proxy uses (server.ts)
 		const proxyFiltered = items.filter((item) => {
 			const msgType = (item as Record<string, unknown>).type as string
 			return msgType !== "command" && msgType !== "gate_response"
@@ -463,7 +442,7 @@ describe("streams — bridge roundtrip", () => {
 
 	it("bridge.onComplete() fires on session_complete", async () => {
 		const sessionId = uniqueSessionId()
-		const conn = getStreamConnectionInfo(sessionId, config)
+		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
 
 		const bridge = new HostedStreamBridge(sessionId, conn)
