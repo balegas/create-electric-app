@@ -225,6 +225,8 @@ export async function runNew(opts: {
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "unknown error"
 			emit({ type: "log", level: "error", message: `Repo creation failed: ${msg}`, ts: ts() })
+			emit({ type: "session_complete", success: false, ts: ts() })
+			return { projectDir }
 		}
 	}
 
