@@ -709,14 +709,19 @@ export function createApp(config: ServerConfig) {
 	// events to the React client. The client never sees DS credentials.
 	app.get("/api/sessions/:id/events", async (c) => {
 		const sessionId = c.req.param("id")
+		console.log(`[sse] Client connected: session=${sessionId}`)
 		const session = getSession(config.dataDir, sessionId)
-		if (!session) return c.json({ error: "Session not found" }, 404)
+		if (!session) {
+			console.log(`[sse] Session not found: ${sessionId}`)
+			return c.json({ error: "Session not found" }, 404)
+		}
 
 		// Get the stream connection info
 		const connection = sessionStream(config, sessionId)
 
 		// Last-Event-ID allows reconnection from where the client left off
 		const lastEventId = c.req.header("Last-Event-ID") || "-1"
+		console.log(`[sse] Reading stream from offset=${lastEventId} url=${connection.url}`)
 
 		const reader = new DurableStream({
 			url: connection.url,
@@ -729,6 +734,7 @@ export function createApp(config: ServerConfig) {
 		const encoder = new TextEncoder()
 
 		let cancelled = false
+		let eventCount = 0
 
 		const response = await reader.stream<Record<string, unknown>>({
 			offset: lastEventId,
@@ -741,7 +747,17 @@ export function createApp(config: ServerConfig) {
 				// Skip internal protocol messages (commands sent to agent, gate responses)
 				// but allow server-emitted EngineEvents (like infra_config_prompt) through
 				const msgType = item.type as string | undefined
-				if (msgType === "command" || msgType === "gate_response") continue
+				if (msgType === "command" || msgType === "gate_response") {
+					console.log(
+						`[sse] Filtered protocol message: type=${msgType} source=${item.source} session=${sessionId}`,
+					)
+					continue
+				}
+
+				eventCount++
+				console.log(
+					`[sse] Proxying event #${eventCount}: type=${msgType} source=${item.source} session=${sessionId}`,
+				)
 
 				// Strip the source field before sending to client
 				const { source: _, ...eventData } = item
@@ -754,6 +770,7 @@ export function createApp(config: ServerConfig) {
 
 		// Clean up when client disconnects
 		c.req.raw.signal.addEventListener("abort", () => {
+			console.log(`[sse] Client disconnected: session=${sessionId} (sent ${eventCount} events)`)
 			cancelled = true
 			cancel()
 			writer.close().catch(() => {})
