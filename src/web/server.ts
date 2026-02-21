@@ -20,7 +20,6 @@ import {
 } from "../git/index.js"
 import { bridgeContainerToStream } from "./container-bridge.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
-import { getStreamServerUrl } from "./infra.js"
 import type { DockerSandboxProvider } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import {
@@ -31,15 +30,14 @@ import {
 	type SessionInfo,
 	updateSessionInfo,
 } from "./sessions.js"
-import { getStreamConnectionInfo, type StreamConfig } from "./streams.js"
+import { getStreamConnectionInfo, type StreamConfig, type StreamConnectionInfo } from "./streams.js"
 
 interface ServerConfig {
 	port: number
-	streamsPort: number
 	dataDir: string
 	sandbox: SandboxProvider
-	/** Hosted stream config (null = use local DS server) */
-	streamConfig: StreamConfig | null
+	/** Hosted stream config — required */
+	streamConfig: StreamConfig
 }
 
 /** Check if the Claude CLI is installed and authenticated (OAuth) */
@@ -60,8 +58,19 @@ function parseRepoNameFromUrl(url: string | null): string | null {
 	return match?.[1] ?? null
 }
 
-function streamUrl(streamsPort: number, sessionId: string): string {
-	return `${getStreamServerUrl(streamsPort)}/session/${sessionId}`
+/** Get stream connection info for a session (URL + auth headers) */
+function sessionStream(config: ServerConfig, sessionId: string): StreamConnectionInfo {
+	return getStreamConnectionInfo(sessionId, config.streamConfig)
+}
+
+/** Create a DurableStream writer for a session */
+function sessionStreamWriter(config: ServerConfig, sessionId: string): DurableStream {
+	const conn = sessionStream(config, sessionId)
+	return new DurableStream({
+		url: conn.url,
+		headers: conn.headers,
+		contentType: "application/json",
+	})
 }
 
 /**
@@ -165,10 +174,11 @@ export function createApp(config: ServerConfig) {
 		const { projectName } = resolveProjectDir(baseDir, inferredName)
 
 		// Create the durable stream
-		const url = streamUrl(config.streamsPort, sessionId)
+		const conn = sessionStream(config, sessionId)
 		try {
 			await DurableStream.create({
-				url,
+				url: conn.url,
+				headers: conn.headers,
 				contentType: "application/json",
 			})
 		} catch {
@@ -189,7 +199,7 @@ export function createApp(config: ServerConfig) {
 		addSession(config.dataDir, session)
 
 		// Write user prompt to the stream so it shows in the UI
-		const promptStream = new DurableStream({ url, contentType: "application/json" })
+		const promptStream = sessionStreamWriter(config, sessionId)
 		await promptStream.append(
 			JSON.stringify({ type: "user_message", message: body.description, ts: ts() }),
 		)
@@ -272,7 +282,7 @@ export function createApp(config: ServerConfig) {
 
 			// 4. Log repo config (gh auth is validated when the git agent runs after scaffold)
 			if (repoConfig) {
-				const ghStream = new DurableStream({ url, contentType: "application/json" })
+				const ghStream = sessionStreamWriter(config, sessionId)
 				await ghStream.append(
 					JSON.stringify({
 						type: "log",
@@ -284,32 +294,40 @@ export function createApp(config: ServerConfig) {
 			}
 
 			// 5. Bridge container stdout → durable stream (Docker stdio mode)
+			// TODO: Phase 5 will replace this with SessionBridge
+			const bridgeConn = sessionStream(config, sessionId)
 			const dockerSandbox = config.sandbox as DockerSandboxProvider
 			const containerProcess = dockerSandbox.getProcess(sessionId)
 			if (containerProcess) {
-				bridgeContainerToStream(sessionId, containerProcess, url, async (success) => {
-					const updates: Partial<SessionInfo> = {
-						status: success ? "complete" : "error",
-					}
-					try {
-						const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
-						if (gs.initialized) {
-							const existing = getSession(config.dataDir, sessionId)
-							updates.git = {
-								branch: gs.branch ?? "main",
-								remoteUrl: existing?.git?.remoteUrl ?? null,
-								repoName: existing?.git?.repoName ?? null,
-								repoVisibility: existing?.git?.repoVisibility,
-								lastCommitHash: gs.lastCommitHash ?? null,
-								lastCommitMessage: gs.lastCommitMessage ?? null,
-								lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
-							}
+				bridgeContainerToStream(
+					sessionId,
+					containerProcess,
+					bridgeConn.url,
+					async (success) => {
+						const updates: Partial<SessionInfo> = {
+							status: success ? "complete" : "error",
 						}
-					} catch {
-						// Container may already be stopped
-					}
-					updateSessionInfo(config.dataDir, sessionId, updates)
-				})
+						try {
+							const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
+							if (gs.initialized) {
+								const existing = getSession(config.dataDir, sessionId)
+								updates.git = {
+									branch: gs.branch ?? "main",
+									remoteUrl: existing?.git?.remoteUrl ?? null,
+									repoName: existing?.git?.repoName ?? null,
+									repoVisibility: existing?.git?.repoVisibility,
+									lastCommitHash: gs.lastCommitHash ?? null,
+									lastCommitMessage: gs.lastCommitMessage ?? null,
+									lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
+								}
+							}
+						} catch {
+							// Container may already be stopped
+						}
+						updateSessionInfo(config.dataDir, sessionId, updates)
+					},
+					bridgeConn.headers,
+				)
 			}
 
 			// 6. Send the new command with repo config — repo is created right after scaffold
@@ -331,7 +349,7 @@ export function createApp(config: ServerConfig) {
 			updateSessionInfo(config.dataDir, sessionId, { status: "error" })
 		})
 
-		return c.json({ sessionId, streamUrl: url }, 201)
+		return c.json({ sessionId }, 201)
 	})
 
 	// Send iteration request
@@ -357,8 +375,7 @@ export function createApp(config: ServerConfig) {
 		const isRestartCmd = /^restart\b/.test(normalised) && appOrServer.test(normalised)
 
 		if (isStartCmd || isStopCmd || isRestartCmd) {
-			const url = streamUrl(config.streamsPort, sessionId)
-			const opStream = new DurableStream({ url, contentType: "application/json" })
+			const opStream = sessionStreamWriter(config, sessionId)
 			await opStream.append(
 				JSON.stringify({ type: "user_message", message: body.request, ts: ts() }),
 			)
@@ -400,8 +417,7 @@ export function createApp(config: ServerConfig) {
 		// Intercept git commands (commit, push, create PR)
 		const gitOp = detectGitOp(body.request)
 		if (gitOp) {
-			const url = streamUrl(config.streamsPort, sessionId)
-			const gitStream = new DurableStream({ url, contentType: "application/json" })
+			const gitStream = sessionStreamWriter(config, sessionId)
 			await gitStream.append(
 				JSON.stringify({ type: "user_message", message: body.request, ts: ts() }),
 			)
@@ -430,8 +446,7 @@ export function createApp(config: ServerConfig) {
 		}
 
 		// Write user prompt to the stream
-		const url = streamUrl(config.streamsPort, sessionId)
-		const promptStream = new DurableStream({ url, contentType: "application/json" })
+		const promptStream = sessionStreamWriter(config, sessionId)
 		await promptStream.append(
 			JSON.stringify({ type: "user_message", message: body.request, ts: ts() }),
 		)
@@ -482,8 +497,7 @@ export function createApp(config: ServerConfig) {
 
 			// Persist gate resolution for replay
 			try {
-				const sUrl = streamUrl(config.streamsPort, sessionId)
-				const s = new DurableStream({ url: sUrl, contentType: "application/json" })
+				const s = sessionStreamWriter(config, sessionId)
 				await s.append(JSON.stringify({ type: "gate_resolved", gate, summary, ts: ts() }))
 			} catch {
 				// Non-critical
@@ -528,8 +542,7 @@ export function createApp(config: ServerConfig) {
 
 		// Persist gate resolution so replays mark the gate as resolved
 		try {
-			const sUrl = streamUrl(config.streamsPort, sessionId)
-			const s = new DurableStream({ url: sUrl, contentType: "application/json" })
+			const s = sessionStreamWriter(config, sessionId)
 			await s.append(JSON.stringify({ type: "gate_resolved", gate, summary, ts: ts() }))
 		} catch {
 			// Non-critical
@@ -690,8 +703,8 @@ export function createApp(config: ServerConfig) {
 		const session = getSession(config.dataDir, sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
-		// Get the stream connection info (hosted or local)
-		const connection = getStreamConnectionInfo(sessionId, config.streamConfig, config.streamsPort)
+		// Get the stream connection info
+		const connection = sessionStream(config, sessionId)
 
 		// Last-Event-ID allows reconnection from where the client left off
 		const lastEventId = c.req.header("Last-Event-ID") || "-1"
@@ -857,9 +870,13 @@ export function createApp(config: ServerConfig) {
 				?.replace(/\.git$/, "") || "resumed-project"
 
 		// Create durable stream
-		const url = streamUrl(config.streamsPort, sessionId)
+		const conn = sessionStream(config, sessionId)
 		try {
-			await DurableStream.create({ url, contentType: "application/json" })
+			await DurableStream.create({
+				url: conn.url,
+				headers: conn.headers,
+				contentType: "application/json",
+			})
 		} catch {
 			return c.json({ error: "Failed to create event stream" }, 500)
 		}
@@ -893,7 +910,7 @@ export function createApp(config: ServerConfig) {
 			addSession(config.dataDir, session)
 
 			// Write initial message to stream
-			const initStream = new DurableStream({ url, contentType: "application/json" })
+			const initStream = sessionStreamWriter(config, sessionId)
 			await initStream.append(
 				JSON.stringify({
 					type: "log",
@@ -903,7 +920,7 @@ export function createApp(config: ServerConfig) {
 				}),
 			)
 
-			return c.json({ sessionId, streamUrl: url, appPort: handle.port }, 201)
+			return c.json({ sessionId, appPort: handle.port }, 201)
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Failed to resume from repo"
 			return c.json({ error: msg }, 500)
@@ -935,17 +952,15 @@ export function createApp(config: ServerConfig) {
 
 export async function startWebServer(opts: {
 	port?: number
-	streamsPort?: number
 	dataDir?: string
 	sandbox: SandboxProvider
-	streamConfig?: StreamConfig | null
+	streamConfig: StreamConfig
 }): Promise<void> {
 	const config: ServerConfig = {
 		port: opts.port ?? 4400,
-		streamsPort: opts.streamsPort ?? 4437,
 		dataDir: opts.dataDir ?? path.resolve(process.cwd(), ".electric-agent"),
 		sandbox: opts.sandbox,
-		streamConfig: opts.streamConfig ?? null,
+		streamConfig: opts.streamConfig,
 	}
 
 	fs.mkdirSync(config.dataDir, { recursive: true })
@@ -959,5 +974,5 @@ export async function startWebServer(opts: {
 	})
 
 	console.log(`Web UI server running at http://127.0.0.1:${config.port}`)
-	console.log(`Stream URL base: ${getStreamServerUrl(config.streamsPort)}`)
+	console.log(`Streams: ${config.streamConfig.url} (service: ${config.streamConfig.serviceId})`)
 }

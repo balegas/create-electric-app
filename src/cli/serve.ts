@@ -1,25 +1,26 @@
-import { startStreamServer, stopStreamServer } from "../web/infra.js"
 import { DockerSandboxProvider } from "../web/sandbox/index.js"
 import { startWebServer } from "../web/server.js"
 import { getStreamConfig } from "../web/streams.js"
 
 export async function serveCommand(opts: {
 	port?: number
-	streamsPort?: number
 	dataDir?: string
 	open?: boolean
 }): Promise<void> {
 	const port = opts.port ?? 4400
-	const streamsPort = opts.streamsPort ?? 4437
 	const dataDir = opts.dataDir ?? ".electric-agent"
 
-	// Start durable streams server
-	await startStreamServer({ port: streamsPort, dataDir })
+	// Require hosted stream credentials
+	const streamConfig = getStreamConfig()
+	if (!streamConfig) {
+		console.error("Error: DS_URL, DS_SERVICE_ID, and DS_SECRET environment variables are required.")
+		console.error("Set these to connect to the hosted Durable Streams service.")
+		process.exit(1)
+	}
 
 	// Start web API + static file server with Docker sandbox
 	const sandbox = new DockerSandboxProvider()
-	const streamConfig = getStreamConfig()
-	await startWebServer({ port, streamsPort, dataDir, sandbox, streamConfig })
+	await startWebServer({ port, dataDir, sandbox, streamConfig })
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
 
@@ -44,11 +45,6 @@ export async function serveCommand(opts: {
 		}
 		shuttingDown = true
 		console.log("\nShutting down...")
-		try {
-			await stopStreamServer()
-		} catch {
-			// Best-effort cleanup
-		}
 		process.exit(0)
 	}
 	process.on("SIGINT", shutdown)

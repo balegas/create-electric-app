@@ -8,12 +8,15 @@ import type { EngineEvent } from "../engine/events.js"
  *
  * Reads the container process stdout line by line, parses each line
  * as an EngineEvent, and appends it to the durable stream.
+ *
+ * @deprecated Will be replaced by SessionBridge in Phase 5
  */
 export function bridgeContainerToStream(
 	_sessionId: string,
 	containerProcess: ChildProcess,
 	streamUrl: string,
 	onComplete: (success: boolean) => void,
+	streamHeaders?: Record<string, string>,
 ): void {
 	const stdout = containerProcess.stdout
 	if (!stdout) {
@@ -23,6 +26,7 @@ export function bridgeContainerToStream(
 
 	const streamHandle = new DurableStream({
 		url: streamUrl,
+		headers: streamHeaders,
 		contentType: "application/json",
 	})
 

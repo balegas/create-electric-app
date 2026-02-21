@@ -87,7 +87,7 @@ describe("streams — config", () => {
 		)
 	})
 
-	it("builds sandbox env vars for hosted mode", () => {
+	it("builds sandbox env vars", () => {
 		const config = getStreamConfig()!
 		const vars = getStreamEnvVars("my-session", config)
 
@@ -95,14 +95,14 @@ describe("streams — config", () => {
 		assert.equal(vars.DS_SERVICE_ID, config.serviceId)
 		assert.equal(vars.DS_SECRET, config.secret)
 		assert.equal(vars.SESSION_ID, "my-session")
-		assert.equal(vars.STREAM_MODE, "hosted")
 	})
 
-	it("falls back to local connection info when config is null", () => {
-		const conn = getStreamConnectionInfo("test-session", null, 9999)
+	it("builds env vars with session ID", () => {
+		const config = getStreamConfig()!
+		const vars = getStreamEnvVars("env-test-session", config)
 
-		assert.equal(conn.url, "http://127.0.0.1:9999/session/test-session")
-		assert.deepEqual(conn.headers, {})
+		assert.equal(vars.SESSION_ID, "env-test-session")
+		assert.equal(vars.DS_URL, config.url)
 	})
 })
 

@@ -1,18 +1,16 @@
 /**
- * Centralized stream configuration for Durable Streams.
+ * Centralized stream configuration for hosted Durable Streams.
  *
- * Supports two modes:
- * - **Hosted**: Connects to the hosted Durable Streams service (api.electric-sql.cloud)
- *   using DS_URL, DS_SERVICE_ID, DS_SECRET environment variables.
- * - **Local**: Falls back to a local DurableStreamTestServer for development.
+ * Connects to the hosted Durable Streams service (api.electric-sql.cloud)
+ * using DS_URL, DS_SERVICE_ID, DS_SECRET environment variables.
  */
 
 export interface StreamConfig {
 	/** Base URL of the durable streams service */
 	url: string
-	/** Service identifier (hosted mode only) */
+	/** Service identifier */
 	serviceId: string
-	/** JWT secret for authorization (hosted mode only) */
+	/** JWT secret for authorization */
 	secret: string
 }
 
@@ -25,7 +23,7 @@ export interface StreamConnectionInfo {
 
 /**
  * Read stream config from environment variables.
- * Returns null if hosted stream credentials are not configured.
+ * Returns null if credentials are not configured.
  */
 export function getStreamConfig(): StreamConfig | null {
 	const url = process.env.DS_URL
@@ -41,59 +39,27 @@ export function getStreamConfig(): StreamConfig | null {
 
 /**
  * Build connection info for a specific session stream.
- *
- * For hosted mode: constructs the full URL with service ID path and auth headers.
- * For local mode: constructs a simple localhost URL with no auth.
  */
 export function getStreamConnectionInfo(
 	sessionId: string,
-	config?: StreamConfig | null,
-	localPort?: number,
+	config: StreamConfig,
 ): StreamConnectionInfo {
-	if (config) {
-		return {
-			url: `${config.url}/v1/stream/${config.serviceId}/session/${sessionId}`,
-			headers: {
-				Authorization: `Bearer ${config.secret}`,
-			},
-		}
-	}
-
-	// Fallback to local DurableStreamTestServer
 	return {
-		url: `http://127.0.0.1:${localPort ?? 4437}/session/${sessionId}`,
-		headers: {},
+		url: `${config.url}/v1/stream/${config.serviceId}/session/${sessionId}`,
+		headers: {
+			Authorization: `Bearer ${config.secret}`,
+		},
 	}
-}
-
-/**
- * Check if hosted stream credentials are configured.
- */
-export function isHostedStreams(): boolean {
-	return getStreamConfig() !== null
 }
 
 /**
  * Env vars to pass to a sandbox so it can connect to the same stream.
  */
-export function getStreamEnvVars(
-	sessionId: string,
-	config?: StreamConfig | null,
-	localPort?: number,
-): Record<string, string> {
-	if (config) {
-		return {
-			DS_URL: config.url,
-			DS_SERVICE_ID: config.serviceId,
-			DS_SECRET: config.secret,
-			SESSION_ID: sessionId,
-			STREAM_MODE: "hosted",
-		}
-	}
-
+export function getStreamEnvVars(sessionId: string, config: StreamConfig): Record<string, string> {
 	return {
+		DS_URL: config.url,
+		DS_SERVICE_ID: config.serviceId,
+		DS_SECRET: config.secret,
 		SESSION_ID: sessionId,
-		STREAM_MODE: "local",
-		DS_LOCAL_PORT: String(localPort ?? 4437),
 	}
 }
