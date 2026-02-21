@@ -738,9 +738,10 @@ export function createApp(config: ServerConfig) {
 		const cancel = response.subscribeJson<Record<string, unknown>>((batch) => {
 			if (cancelled) return
 			for (const item of batch.items) {
-				// Skip server-originated messages (commands, gate responses)
-				// Only proxy events that are either untagged (legacy) or source: "agent"
-				if (item.source === "server") continue
+				// Skip internal protocol messages (commands sent to agent, gate responses)
+				// but allow server-emitted EngineEvents (like infra_config_prompt) through
+				const msgType = item.type as string | undefined
+				if (msgType === "command" || msgType === "gate_response") continue
 
 				// Strip the source field before sending to client
 				const { source: _, ...eventData } = item

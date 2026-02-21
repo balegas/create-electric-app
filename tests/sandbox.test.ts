@@ -159,6 +159,28 @@ describe("DaytonaSandboxProvider — interface", () => {
 		const status = await provider.gitStatus(fakeHandle, "/tmp")
 		assert.equal(status.initialized, false)
 	})
+
+	it("create() rejects bare image names without registry prefix", {
+		// Only run when SANDBOX_IMAGE is not set (default is bare "electric-agent-sandbox")
+		skip: !!process.env.SANDBOX_IMAGE,
+	}, async () => {
+		// The default SANDBOX_IMAGE ("electric-agent-sandbox") has no registry prefix.
+		// Daytona can't pull local-only images, so create() should fail fast.
+		const provider = new DaytonaSandboxProvider({
+			apiKey: "test-key",
+			apiUrl: "https://example.com/api",
+		})
+		await assert.rejects(
+			() => provider.create("test-session", { projectName: "test" }),
+			(err: Error) => {
+				assert.ok(
+					err.message.includes("not registry-qualified"),
+					`Expected registry error, got: ${err.message}`,
+				)
+				return true
+			},
+		)
+	})
 })
 
 // ---------------------------------------------------------------------------

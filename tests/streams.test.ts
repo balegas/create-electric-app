@@ -401,6 +401,66 @@ describe("streams — bridge roundtrip", () => {
 		bridge.close()
 	})
 
+	it("server-emitted EngineEvents are distinguishable from protocol messages", async () => {
+		// This tests the invariant that the SSE proxy relies on:
+		// - command/gate_response types should be filtered (internal protocol)
+		// - other server-emitted types (infra_config_prompt, log, user_message) should pass through
+		const sessionId = uniqueSessionId()
+		const conn = getStreamConnectionInfo(sessionId, config)
+		await ensureStream(conn.url, conn.headers)
+
+		const bridge = new HostedStreamBridge(sessionId, conn)
+
+		// Emit various message types that the server sends
+		await bridge.emit({
+			type: "infra_config_prompt",
+			projectName: "test-project",
+			ghAccounts: [],
+			ts: new Date().toISOString(),
+		})
+		await bridge.emit({
+			type: "user_message",
+			message: "build a todo app",
+			ts: new Date().toISOString(),
+		})
+		await bridge.sendCommand({ command: "new", description: "test" })
+		await bridge.sendGateResponse("approval", { decision: "approve" })
+
+		// Read all messages from the stream
+		const reader = new DurableStream({
+			url: conn.url,
+			headers: conn.headers,
+			contentType: "application/json",
+		})
+		const response = await reader.stream<StreamMessage>({
+			offset: "-1",
+			live: false,
+		})
+		const items = await response.json()
+
+		assert.equal(items.length, 4, "Should have 4 messages total")
+
+		// Apply the same filtering the SSE proxy uses
+		const proxyFiltered = items.filter((item) => {
+			const msgType = (item as Record<string, unknown>).type as string
+			return msgType !== "command" && msgType !== "gate_response"
+		})
+
+		assert.equal(proxyFiltered.length, 2, "SSE proxy should pass 2 events")
+		assert.equal(
+			(proxyFiltered[0] as Record<string, unknown>).type,
+			"infra_config_prompt",
+			"infra_config_prompt should NOT be filtered",
+		)
+		assert.equal(
+			(proxyFiltered[1] as Record<string, unknown>).type,
+			"user_message",
+			"user_message should NOT be filtered",
+		)
+
+		bridge.close()
+	})
+
 	it("bridge.onComplete() fires on session_complete", async () => {
 		const sessionId = uniqueSessionId()
 		const conn = getStreamConnectionInfo(sessionId, config)

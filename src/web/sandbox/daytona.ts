@@ -72,6 +72,15 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			Object.assign(envVars, opts.streamEnv)
 		}
 
+		// Validate image is registry-qualified (Daytona can't pull bare local image names)
+		if (!SANDBOX_IMAGE.includes("/")) {
+			throw new Error(
+				`SANDBOX_IMAGE "${SANDBOX_IMAGE}" is not registry-qualified. ` +
+					`Daytona requires a pullable image (e.g. "username/electric-agent-sandbox"). ` +
+					`Set DOCKER_HUB_USER and run: npm run push:sandbox`,
+			)
+		}
+
 		console.log(`[daytona] Creating sandbox with ${Object.keys(envVars).length} env vars...`)
 		const sandbox = await this.client.create(
 			{
