@@ -1,4 +1,6 @@
-import { DockerSandboxProvider } from "../web/sandbox/index.js"
+import { DaytonaSandboxProvider } from "../web/sandbox/daytona.js"
+import { DockerSandboxProvider } from "../web/sandbox/docker.js"
+import type { SandboxProvider } from "../web/sandbox/types.js"
 import { startWebServer } from "../web/server.js"
 import { getStreamConfig } from "../web/streams.js"
 
@@ -18,8 +20,20 @@ export async function serveCommand(opts: {
 		process.exit(1)
 	}
 
-	// Start web API + static file server with Docker sandbox
-	const sandbox = new DockerSandboxProvider()
+	// Select sandbox provider: Daytona (cloud) if API key is set, otherwise Docker (local)
+	let sandbox: SandboxProvider
+	if (process.env.DAYTONA_API_KEY) {
+		sandbox = new DaytonaSandboxProvider({
+			apiKey: process.env.DAYTONA_API_KEY,
+			apiUrl: process.env.DAYTONA_API_URL,
+			target: process.env.DAYTONA_TARGET,
+		})
+		console.log("Using Daytona cloud sandboxes")
+	} else {
+		sandbox = new DockerSandboxProvider()
+		console.log("Using Docker local sandboxes")
+	}
+
 	await startWebServer({ port, dataDir, sandbox, streamConfig })
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)

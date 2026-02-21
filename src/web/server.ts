@@ -299,6 +299,7 @@ export function createApp(config: ServerConfig) {
 			updateSessionInfo(config.dataDir, sessionId, {
 				appPort: handle.port,
 				sandboxProjectDir: handle.projectDir,
+				previewUrl: handle.previewUrl,
 			})
 
 			// 3. Log repo config

@@ -63,6 +63,11 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			envVars.GH_TOKEN = ghToken
 		}
 
+		// Add stream env vars for hosted Durable Streams communication
+		if (opts?.streamEnv) {
+			Object.assign(envVars, opts.streamEnv)
+		}
+
 		const sandbox = await this.client.create(
 			{
 				image: SANDBOX_IMAGE,

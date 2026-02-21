@@ -14,6 +14,8 @@ export interface SessionInfo {
 	lastCoderSessionId?: string
 	/** Host port mapped to the sandbox's dev server */
 	appPort?: number
+	/** Preview URL for cloud sandboxes (Daytona) */
+	previewUrl?: string
 	/** Git state — populated after scaffold or publish */
 	git?: {
 		branch: string
