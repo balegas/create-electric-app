@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.claude
+.electric-agent
+note-share
+task-flow
+task-manager
+task-master
+pnpm-lock.yaml
+pnpm-workspace.yaml
+*.md
+!README.md

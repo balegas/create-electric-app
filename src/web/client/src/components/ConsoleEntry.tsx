@@ -1,4 +1,5 @@
 import type { ConsoleEntry as ConsoleEntryType } from "../lib/event-types"
+import { Markdown } from "./Markdown"
 
 const LEVEL_LABELS: Record<string, string> = {
 	plan: "[plan]",
@@ -8,7 +9,7 @@ const LEVEL_LABELS: Record<string, string> = {
 	fix: "[fix]",
 	done: "[done]",
 	error: "[error]",
-	debug: "[debug]",
+	verbose: "[verbose]",
 }
 
 export function Duration({ value }: { value: string | null }) {
@@ -47,6 +48,27 @@ export function ConsoleUserMessage({
 	)
 }
 
+export function ConsoleThinkingEntry({
+	entry,
+	duration,
+}: {
+	entry: Extract<ConsoleEntryType, { kind: "thinking" }>
+	duration: string | null
+}) {
+	return (
+		<details className="thinking-inline">
+			<summary>
+				<span className="thinking-label">Thinking</span>
+				<span className="thinking-preview">{entry.text.slice(0, 100)}...</span>
+				<Duration value={duration} />
+			</summary>
+			<div className="thinking-body">
+				<Markdown inline>{entry.text}</Markdown>
+			</div>
+		</details>
+	)
+}
+
 const COLLAPSE_THRESHOLD = 300
 
 export function ConsoleTextEntry({
@@ -58,22 +80,25 @@ export function ConsoleTextEntry({
 }) {
 	if (entry.text.length <= COLLAPSE_THRESHOLD) {
 		return (
-			<div className="assistant-text">
-				<span>{entry.text}</span>
+			<div className="console-entry">
+				<span className="prefix task">[agent]</span>
+				<span>
+					<Markdown inline>{entry.text}</Markdown>
+				</span>
 				<Duration value={duration} />
 			</div>
 		)
 	}
 
 	return (
-		<details className="assistant-text-collapsible">
+		<details className="tool-inline">
 			<summary>
-				<span className="arrow">&#9654;</span>
-				<span className="assistant-text-preview">{entry.text.slice(0, 120)}...</span>
+				<span className="tool-inline-name">agent</span>
+				<span className="tool-inline-summary">{entry.text.slice(0, 120)}...</span>
 				<Duration value={duration} />
 			</summary>
-			<div className="assistant-text-body">
-				<pre>{entry.text}</pre>
+			<div className="tool-inline-body">
+				<Markdown>{entry.text}</Markdown>
 			</div>
 		</details>
 	)

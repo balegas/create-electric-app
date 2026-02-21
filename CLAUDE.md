@@ -2,52 +2,87 @@
 
 ## Project
 
-`create-electric-app` — CLI tool (`electric-agent`) that generates reactive Electric SQL + TanStack DB applications from natural-language descriptions using Claude Agent SDK.
+`create-electric-app` — CLI tool (`electric-agent`) that generates reactive Electric SQL + TanStack DB applications from natural-language descriptions using the Claude Agent SDK. See `ARCHITECTURE.md` for the full system design.
 
-## Build & Lint
+## Build, Test & Run
 
 ```bash
 npm install                      # install dependencies
-npm run build                    # compile TypeScript → dist/
+npm run build                    # compile TypeScript → dist/ + build React SPA
+npm run build:server             # compile TypeScript only (no web client)
+npm run build:web                # build React SPA only (Vite)
+npm run dev                      # tsc --watch (server only)
+npm run dev:web                  # vite dev server (React SPA hot reload)
 npm run check                    # Biome lint + format check
 npm run check:fix                # auto-fix Biome issues
 npx tsc --noEmit                 # type-check without emitting
-node dist/index.js --help        # run the CLI
+npm test                         # run tests (node:test runner via tsx)
+npm run build:sandbox            # build Docker sandbox image
 ```
 
+### Running the app
+
+```bash
+npm run serve                    # start web UI (Hono + DurableStreams + React SPA)
+node dist/index.js headless      # headless NDJSON mode (used inside Docker containers)
+```
+
+### Docker sandbox
+
+```bash
+npm run build:sandbox            # docker build -f Dockerfile.sandbox -t electric-agent-sandbox .
+```
+
+The sandbox image must be rebuilt after code changes for them to take effect in containers.
+
+## Verification Checklist
+
+Before committing, always run:
+
+1. `npx tsc --noEmit` — type-check passes
+2. `npm run check` — Biome lint + format passes (or `npm run check:fix` to auto-fix)
+3. `npm run build` — full build succeeds (TypeScript + Vite)
+4. `npm test` — tests pass
+
 ## Architecture
+
+See `ARCHITECTURE.md` for the complete architecture reference. Keep it updated when making structural changes — adding/removing agents, tools, hooks, engine events, API routes, or UI components.
+
+### Source Layout
 
 ```
 src/
 ├── index.ts                     # CLI entry point (commander)
-├── cli/                         # Command implementations (thin wrappers)
-│   ├── new.ts                   # `electric-agent new <desc>` — prompts + calls engine
-│   ├── iterate.ts               # `electric-agent iterate` — REPL + calls engine
-│   ├── serve.ts                 # `electric-agent serve` — starts web UI server
-│   ├── status.ts                # `electric-agent status` — show progress
-│   ├── up.ts                    # `electric-agent up` — docker + migrations + dev server
-│   └── down.ts                  # `electric-agent down` — stop services
+├── cli/                         # Command implementations
+│   ├── headless.ts              # NDJSON stdin/stdout mode (runs inside containers)
+│   └── serve.ts                 # Web UI server startup
 ├── engine/                      # Shared orchestration (used by CLI + web)
 │   ├── events.ts                # EngineEvent union type — single source of truth
 │   ├── orchestrator.ts          # runNew() + runIterate() with callback-driven I/O
 │   ├── message-parser.ts        # SDK message → EngineEvent[] conversion
-│   └── cli-adapter.ts           # OrchestratorCallbacks using readline (CLI mode)
+│   └── headless-adapter.ts      # OrchestratorCallbacks for NDJSON stdin/stdout
 ├── agents/                      # Agent execution via Claude Agent SDK
-│   ├── planner.ts               # Planner agent (Opus) — generates PLAN.md
+│   ├── clarifier.ts             # Description evaluation + project name inference
+│   ├── planner.ts               # Planner agent (Sonnet) — generates PLAN.md
 │   ├── coder.ts                 # Coder agent (Sonnet) — executes plan tasks
-│   ├── prompts.ts               # System prompt builders for both agents
-│   └── patterns.md              # Condensed code patterns injected into coder prompt
+│   ├── git-agent.ts             # Git agent (Haiku) — commits, push, PRs
+│   └── prompts.ts               # System prompt builders for all agents
 ├── tools/                       # Custom MCP tools
-│   ├── server.ts                # createSdkMcpServer wrapper
-│   ├── build.ts                 # `build` tool — runs pnpm build + biome check
-│   └── playbook.ts              # `read_playbook` + `list_playbooks` tools
+│   ├── server.ts                # electric-agent-tools MCP server (build + playbooks)
+│   ├── git-server.ts            # git-tools MCP server (9 git operations)
+│   ├── git.ts                   # Git tool implementations
+│   ├── build.ts                 # build tool — pnpm build + check + test
+│   └── playbook.ts              # read_playbook + list_playbooks tools
 ├── hooks/                       # Agent SDK guardrail hooks
-│   ├── index.ts                 # Hook registry
+│   ├── index.ts                 # Hook registry (coder + planner configs)
+│   ├── guardrail-inject.ts      # SessionStart: inject guardrails + ARCHITECTURE.md
 │   ├── write-protection.ts      # Block writes to config files
 │   ├── import-validation.ts     # Catch hallucinated imports
 │   ├── migration-validation.ts  # Auto-append REPLICA IDENTITY FULL
 │   ├── dependency-guard.ts      # Prevent dependency removal
-│   └── schema-consistency.ts    # Warn on hand-written Zod in collections
+│   └── schema-consistency.ts    # Warn on bad Zod patterns
+├── git/                         # Server-side git helpers (used by web server)
+│   └── index.ts                 # gitStatus, ghListAccounts, ghListRepos, etc.
 ├── scaffold/                    # Project scaffolding
 │   └── index.ts                 # KPB clone + template overlay + dep merge + install
 ├── working-memory/              # Agent state persistence
@@ -56,56 +91,97 @@ src/
 ├── progress/                    # CLI output
 │   └── reporter.ts              # Color-coded progress logging
 └── web/                         # Web UI server + client
-    ├── server.ts                # Hono API server (REST + static files)
-    ├── infra.ts                 # Durable streams server lifecycle
-    ├── gate.ts                  # Promise-based gate management for user decisions
+    ├── server.ts                # Hono API server (REST + static SPA)
+    ├── infra.ts                 # DurableStream server lifecycle
+    ├── gate.ts                  # Promise-based gate management
     ├── sessions.ts              # Session index (JSON file)
+    ├── container-bridge.ts      # Container stdout → DurableStream bridge
+    ├── sandbox/                 # Container management
+    │   ├── types.ts             # SandboxProvider interface + types
+    │   ├── docker.ts            # DockerSandboxProvider implementation
+    │   └── index.ts             # Re-exports
     └── client/                  # React SPA (built with Vite)
         ├── index.html
         ├── vite.config.ts
         └── src/
-            ├── main.tsx         # Entry point
-            ├── App.tsx          # Top-level layout + session management
+            ├── main.tsx
+            ├── router.tsx       # / (HomePage) and /session/:id (SessionPage)
             ├── hooks/
             │   └── useSession.ts   # Durable stream subscription + event reducer
             ├── components/
             │   ├── Console.tsx     # Scrolling event log
-            │   ├── ConsoleEntry.tsx # Log line (level-colored)
-            │   ├── ToolExecution.tsx # Clickable/collapsible tool block
-            │   ├── GatePrompt.tsx   # Approval/clarification/continue UI
-            │   └── PromptInput.tsx  # Text input + send button
+            │   ├── ConsoleEntry.tsx
+            │   ├── ToolExecution.tsx
+            │   ├── GatePrompt.tsx  # All gate UI components
+            │   ├── PromptInput.tsx
+            │   ├── Sidebar.tsx
+            │   ├── FileTree.tsx
+            │   ├── FileViewer.tsx
+            │   ├── RightPanel.tsx
+            │   ├── GitControls.tsx
+            │   ├── Settings.tsx
+            │   └── Markdown.tsx
+            ├── layouts/
+            │   └── AppShell.tsx    # Sidebar + context provider
+            ├── pages/
+            │   ├── HomePage.tsx
+            │   └── SessionPage.tsx
             └── lib/
                 ├── api.ts          # fetch wrappers for /api/*
-                └── event-types.ts  # Client-side event type definitions
-template/                        # Files overlaid onto KPB scaffold
-├── docker-compose.yml           # Postgres + Electric + Caddy
-├── Caddyfile                    # Reverse proxy config
-├── postgres.conf                # WAL + replication settings
-├── drizzle.config.ts            # Drizzle Kit config
-├── .env.example                 # DB + Electric connection strings
-└── src/
-    ├── db/schema.ts             # Placeholder Drizzle schema
-    ├── db/zod-schemas.ts        # Placeholder Zod derivation
-    ├── db/index.ts              # Drizzle client setup
-    ├── db/utils.ts              # generateTxId helper
-    └── lib/electric-proxy.ts    # Electric shape proxy helper
+                └── event-types.ts  # Client-side EngineEvent + ConsoleEntry types
 ```
 
 ## Key Patterns
 
-- **Engine layer**: `src/engine/orchestrator.ts` contains the shared orchestration logic. Both CLI (`cli-adapter.ts`) and web (`web/server.ts`) provide different `OrchestratorCallbacks` implementations. The engine emits `EngineEvent`s that each adapter routes to its output (console or durable stream).
-- **Durable Streams**: The web UI uses `@durable-streams/server` (in-process, file-backed) to persist and stream all events. Each session gets a stream at `/session/{id}`. The React client subscribes via SSE for real-time updates and offset-based catch-up on reconnect.
-- **Gate mechanism**: When the orchestrator needs user input (plan approval, clarification, continue), it pauses on a Promise created by `web/gate.ts`. The browser POSTs to `/api/sessions/:id/respond` to resolve it.
-- **Agent SDK**: Uses `query()` with async generator for streaming input (required for MCP tools). Planner uses Opus, Coder uses Sonnet. Both accept an optional `onMessage` callback for event forwarding.
-- **Hooks**: PreToolUse hooks run before Write/Edit/Bash. PostToolUse hooks run after. Return `{ hookSpecificOutput: { permissionDecision: "deny" } }` to block.
-- **MCP Tools**: Defined via `tool()` + `createSdkMcpServer()`. Tool names become `mcp__<server>__<tool>` in allowedTools.
-- **Scaffold**: Clones KPB via gitpick, overlays template files, merges deps, deletes stale lockfile, installs.
-- **Data flow**: Drizzle pgTable → drizzle-kit generate → SQL → drizzle-kit migrate → Postgres → Electric → TanStack DB collections → useLiveQuery → UI.
+- **Callback-driven I/O**: `OrchestratorCallbacks` in `orchestrator.ts` abstracts all output and decision points. The engine never knows if it's running in CLI, web, or test mode.
+- **NDJSON protocol**: Container and server communicate via stdin/stdout newline-delimited JSON. First line is config, subsequent lines are gate responses or new commands.
+- **Promise-based gates**: Both headless (`StdinReader.waitFor()`) and web (`gate.ts createGate()`) use Promises that block until an external event resolves them.
+- **Durable Streams**: File-backed event log (`@durable-streams/server`) enables real-time SSE push, reconnect catch-up, and full session replay.
+- **Hook interception**: Guardrail hooks intercept tool calls at `PreToolUse`/`PostToolUse` transparently. Return `{ hookSpecificOutput: { permissionDecision: "deny" } }` to block.
+- **MCP Tools**: Created via `tool()` + `createSdkMcpServer()`. Referenced as `mcp__<server>__<tool>` in `allowedTools`.
+- **Agent SDK**: Uses `query()` with async generators. Planner uses Sonnet (10 turns), Coder uses Sonnet (200 turns, $25), Git Agent uses Haiku (5 turns, $0.25).
+- **Session resumption**: Coder returns `session_id` from SDK, stored and passed as `{ resume: sessionId }` on subsequent runs.
 
 ## Conventions
 
-- Biome 2.2.4 for linting/formatting (tabs, double quotes, no semicolons)
-- Avoid `any` — use `Record<string, unknown>` for untyped SDK inputs
+- **Biome 2.2.4** for linting/formatting — tabs, double quotes, no semicolons
+- **No `any`** — use `Record<string, unknown>` for untyped SDK inputs
 - Template literals preferred over string concatenation
 - `const` over `let` where possible
-- Imports sorted alphabetically by Biome
+- Imports sorted alphabetically (enforced by Biome)
+- **Event types must stay in sync**: `src/engine/events.ts` (server) and `src/web/client/src/lib/event-types.ts` (client) define the same `EngineEvent` union. When adding/removing event types, update both files plus the `useSession.ts` reducer and any `GatePrompt.tsx` gate components.
+
+## Adding New Features
+
+### New agent
+1. Create `src/agents/<name>.ts` following the pattern in `git-agent.ts` (simplest) or `coder.ts` (full-featured)
+2. Add system prompt builder to `src/agents/prompts.ts`
+3. If it needs tools, create MCP server in `src/tools/`
+4. Wire into `orchestrator.ts` or `headless.ts` depending on when it runs
+
+### New MCP tool
+1. Create tool function in `src/tools/<name>.ts` using `tool()` from the Agent SDK
+2. Add to an existing MCP server (or create a new one via `createSdkMcpServer()`)
+3. Add the `mcp__<server>__<tool>` name to the agent's `allowedTools` array
+
+### New engine event
+1. Add type to `src/engine/events.ts`
+2. Add matching type to `src/web/client/src/lib/event-types.ts`
+3. Handle in `src/web/client/src/hooks/useSession.ts` `processEvent()` reducer
+4. If it's a gate event, add UI component in `GatePrompt.tsx`
+
+### New guardrail hook
+1. Create hook in `src/hooks/<name>.ts`
+2. Register in `src/hooks/index.ts` under the appropriate agent config and matcher
+
+### New API route
+1. Add to `src/web/server.ts` in `createApp()`
+2. Add client wrapper in `src/web/client/src/lib/api.ts`
+
+## Common Gotchas
+
+- **EngineEvent sync**: Forgetting to update client-side `event-types.ts` when changing `events.ts` causes silent type mismatches at runtime.
+- **Sandbox image staleness**: Code changes require rebuilding the Docker image (`npm run build:sandbox`). Easy to forget.
+- **Gate categories**: Server-side gates (`checkpoint`, `publish`, `infra_config`, `repo_setup`) resolve in-process. Container-forwarded gates (`clarification`, `approval`, `continue`, `revision`) are written to container stdin. Adding a new gate requires choosing the right category and updating the `serverGates` set in `server.ts`.
+- **Hook denial format**: Must return `{ hookSpecificOutput: { permissionDecision: "deny" } }` — not just a boolean.
+- **`initGit` in scaffold**: The scaffold's `skipGit` option controls whether git init runs during scaffolding. In headless/sandbox mode, git is initialized early in `headless.ts` before `runNew()`.

@@ -4,13 +4,26 @@ import path from "node:path"
 export interface SessionInfo {
 	id: string
 	projectName: string
-	projectDir: string
+	/** Path inside the sandbox where the project lives */
+	sandboxProjectDir: string
 	description: string
 	createdAt: string
 	lastActiveAt: string
 	status: "running" | "complete" | "error" | "cancelled"
 	/** SDK session ID from the last coder run — used to resume conversation context across iterations */
 	lastCoderSessionId?: string
+	/** Host port mapped to the sandbox's dev server */
+	appPort?: number
+	/** Git state — populated after scaffold or publish */
+	git?: {
+		branch: string
+		remoteUrl: string | null
+		repoName: string | null
+		repoVisibility?: "public" | "private"
+		lastCommitHash: string | null
+		lastCommitMessage: string | null
+		lastCheckpointAt: string | null
+	}
 }
 
 interface SessionIndex {

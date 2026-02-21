@@ -2,6 +2,7 @@ import { useState } from "react"
 import { respondToGate } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
+import { Markdown } from "./Markdown"
 
 type GateEntry = Extract<ConsoleEntry, { kind: "gate" }>
 
@@ -9,7 +10,7 @@ interface GatePromptProps {
 	sessionId: string
 	entry: GateEntry
 	entryIndex: number
-	onResolved: (index: number) => void
+	onResolved: (index: number, summary?: string) => void
 }
 
 function ClarificationGate({
@@ -19,16 +20,22 @@ function ClarificationGate({
 }: {
 	sessionId: string
 	event: Extract<EngineEvent, { type: "clarification_needed" }>
-	onResolved: () => void
+	onResolved: (summary: string) => void
 }) {
 	const [answers, setAnswers] = useState<string[]>(event.questions.map(() => ""))
+	const [extra, setExtra] = useState("")
 	const [submitting, setSubmitting] = useState(false)
 
 	async function handleSubmit() {
 		setSubmitting(true)
+		const filled = answers.filter((a) => a.trim())
+		const summary = filled.length > 0 ? filled.join("; ") : "Answers provided"
 		try {
-			await respondToGate(sessionId, "clarification", { answers })
-			onResolved()
+			await respondToGate(sessionId, "clarification", {
+				answers: [...answers, extra],
+				_summary: summary,
+			})
+			onResolved(summary)
 		} catch {
 			setSubmitting(false)
 		}
@@ -37,9 +44,7 @@ function ClarificationGate({
 	return (
 		<div className="gate-prompt">
 			<h3>Need more details (confidence: {event.confidence}%)</h3>
-			{event.summary && (
-				<p style={{ color: "var(--text-muted)", marginBottom: 12 }}>{event.summary}</p>
-			)}
+			{event.summary && <p className="gate-summary">{event.summary}</p>}
 			{event.questions.map((q, i) => (
 				<div className="question" key={i}>
 					<label>
@@ -57,8 +62,18 @@ function ClarificationGate({
 					/>
 				</div>
 			))}
-			<div className="actions">
-				<button className="primary" onClick={handleSubmit} disabled={submitting}>
+			<div className="question">
+				<label>Anything else you'd like to add?</label>
+				<textarea
+					value={extra}
+					onChange={(e) => setExtra(e.target.value)}
+					disabled={submitting}
+					rows={3}
+					placeholder="Optional: add any extra context, requirements, or preferences..."
+				/>
+			</div>
+			<div className="gate-actions">
+				<button className="gate-btn gate-btn-primary" onClick={handleSubmit} disabled={submitting}>
 					{submitting ? "Submitting..." : "Submit Answers"}
 				</button>
 			</div>
@@ -73,32 +88,43 @@ function PlanGate({
 }: {
 	sessionId: string
 	event: Extract<EngineEvent, { type: "plan_ready" }>
-	onResolved: () => void
+	onResolved: (summary: string) => void
 }) {
 	const [submitting, setSubmitting] = useState(false)
 
 	async function handleDecision(decision: "approve" | "revise" | "cancel") {
 		setSubmitting(true)
+		const labels = { approve: "Plan approved", revise: "Revision requested", cancel: "Cancelled" }
+		const summary = labels[decision]
 		try {
-			await respondToGate(sessionId, "approval", { decision })
-			onResolved()
+			await respondToGate(sessionId, "approval", { decision, _summary: summary })
+			onResolved(summary)
 		} catch {
 			setSubmitting(false)
 		}
 	}
 
 	return (
-		<div className="gate-prompt">
-			<h3>Implementation Plan</h3>
-			<div className="plan-preview">{event.plan}</div>
-			<div className="actions">
-				<button className="primary" onClick={() => handleDecision("approve")} disabled={submitting}>
+		<div className="gate-plan">
+			<div className="gate-plan-body">
+				<Markdown>{event.plan}</Markdown>
+			</div>
+			<div className="gate-plan-actions">
+				<button
+					className="gate-btn gate-btn-primary"
+					onClick={() => handleDecision("approve")}
+					disabled={submitting}
+				>
 					Approve
 				</button>
-				<button onClick={() => handleDecision("revise")} disabled={submitting}>
+				<button className="gate-btn" onClick={() => handleDecision("revise")} disabled={submitting}>
 					Revise
 				</button>
-				<button className="danger" onClick={() => handleDecision("cancel")} disabled={submitting}>
+				<button
+					className="gate-btn gate-btn-danger"
+					onClick={() => handleDecision("cancel")}
+					disabled={submitting}
+				>
 					Cancel
 				</button>
 			</div>
@@ -113,15 +139,16 @@ function ContinueGate({
 }: {
 	sessionId: string
 	reason: string
-	onResolved: () => void
+	onResolved: (summary: string) => void
 }) {
 	const [submitting, setSubmitting] = useState(false)
 
 	async function handleDecision(proceed: boolean) {
 		setSubmitting(true)
+		const summary = proceed ? "Continued" : "Stopped"
 		try {
-			await respondToGate(sessionId, "continue", { proceed })
-			onResolved()
+			await respondToGate(sessionId, "continue", { proceed, _summary: summary })
+			onResolved(summary)
 		} catch {
 			setSubmitting(false)
 		}
@@ -130,23 +157,261 @@ function ContinueGate({
 	const isBudget = reason === "max_budget"
 
 	return (
-		<div className="gate-prompt">
-			<h3>{isBudget ? "Budget limit reached" : "Turn limit reached"}</h3>
-			<p style={{ color: "var(--text-muted)", marginBottom: 12 }}>
+		<div className="gate-continue">
+			<span className="gate-continue-text">
 				{isBudget
-					? "The agent hit the spending cap. Continue with additional budget?"
-					: "The agent needs more turns to finish. Continue?"}
-			</p>
-			<div className="actions">
-				<button className="primary" onClick={() => handleDecision(true)} disabled={submitting}>
-					Continue
-				</button>
-				<button onClick={() => handleDecision(false)} disabled={submitting}>
-					Stop
+					? "Budget limit reached. Continue with additional budget?"
+					: "Turn limit reached. Continue?"}
+			</span>
+			<button
+				className="gate-btn gate-btn-primary"
+				onClick={() => handleDecision(true)}
+				disabled={submitting}
+			>
+				Continue
+			</button>
+			<button className="gate-btn" onClick={() => handleDecision(false)} disabled={submitting}>
+				Stop
+			</button>
+		</div>
+	)
+}
+
+function InfraConfigGate({
+	sessionId,
+	event,
+	onResolved,
+}: {
+	sessionId: string
+	event: Extract<EngineEvent, { type: "infra_config_prompt" }>
+	onResolved: (summary: string) => void
+}) {
+	const [mode, setMode] = useState<"local" | "cloud">("local")
+	const [databaseUrl, setDatabaseUrl] = useState("")
+	const [electricUrl, setElectricUrl] = useState("https://api.electric-sql.cloud")
+	const [sourceId, setSourceId] = useState("")
+	const [secret, setSecret] = useState("")
+	const [submitting, setSubmitting] = useState(false)
+
+	// Repo setup fields
+	const hasGh = event.ghAccounts.length > 0
+	const [repoAccount, setRepoAccount] = useState(event.ghAccounts[0]?.login ?? "")
+	const [repoName, setRepoName] = useState(event.projectName)
+	const [repoVisibility, setRepoVisibility] = useState<"public" | "private">("private")
+	const [setupRepo, setSetupRepo] = useState(hasGh)
+
+	async function handleSubmit() {
+		setSubmitting(true)
+		const parts: string[] = []
+		try {
+			const payload: Record<string, unknown> = {}
+
+			if (mode === "cloud") {
+				payload.mode = "cloud"
+				payload.databaseUrl = databaseUrl
+				payload.electricUrl = electricUrl
+				payload.sourceId = sourceId
+				payload.secret = secret
+				parts.push(`Electric Cloud`)
+			} else {
+				payload.mode = "local"
+				parts.push("Local Docker")
+			}
+
+			if (setupRepo && repoAccount && repoName.trim()) {
+				payload.repoAccount = repoAccount
+				payload.repoName = repoName
+				payload.repoVisibility = repoVisibility
+				parts.push(`${repoAccount}/${repoName} (${repoVisibility})`)
+			}
+
+			payload._summary = parts.join(" · ")
+			await respondToGate(sessionId, "infra_config", payload)
+			onResolved(parts.join(" · "))
+		} catch {
+			setSubmitting(false)
+		}
+	}
+
+	const cloudValid = databaseUrl.trim() && sourceId.trim() && secret.trim()
+	const repoValid = !setupRepo || (repoAccount && repoName.trim())
+
+	return (
+		<div className="gate-prompt">
+			<h3>Setup {event.projectName}</h3>
+
+			<p className="gate-summary">Infrastructure</p>
+			<div className="question">
+				<div className="gate-radio-group">
+					<label className="gate-radio">
+						<input
+							type="radio"
+							name="infra-mode"
+							checked={mode === "local"}
+							onChange={() => setMode("local")}
+							disabled={submitting}
+						/>
+						Local (Docker)
+					</label>
+					<label className="gate-radio">
+						<input
+							type="radio"
+							name="infra-mode"
+							checked={mode === "cloud"}
+							onChange={() => setMode("cloud")}
+							disabled={submitting}
+						/>
+						Electric Cloud
+					</label>
+				</div>
+			</div>
+			{mode === "cloud" && (
+				<>
+					<div className="question">
+						<label>Database URL</label>
+						<input
+							type="text"
+							value={databaseUrl}
+							onChange={(e) => setDatabaseUrl(e.target.value)}
+							disabled={submitting}
+							placeholder="postgresql://user:pass@host:5432/dbname"
+						/>
+					</div>
+					<div className="question">
+						<label>Electric URL</label>
+						<input
+							type="text"
+							value={electricUrl}
+							onChange={(e) => setElectricUrl(e.target.value)}
+							disabled={submitting}
+							placeholder="https://api.electric-sql.cloud"
+						/>
+					</div>
+					<div className="question">
+						<label>Source ID</label>
+						<input
+							type="text"
+							value={sourceId}
+							onChange={(e) => setSourceId(e.target.value)}
+							disabled={submitting}
+							placeholder="Your Electric Cloud source ID"
+						/>
+					</div>
+					<div className="question">
+						<label>Secret</label>
+						<input
+							type="password"
+							value={secret}
+							onChange={(e) => setSecret(e.target.value)}
+							disabled={submitting}
+							placeholder="Your Electric Cloud secret"
+						/>
+					</div>
+				</>
+			)}
+
+			{hasGh && (
+				<>
+					<p className="gate-summary" style={{ marginTop: 16 }}>
+						GitHub Repository
+					</p>
+					<div className="question">
+						<label className="gate-radio" style={{ marginBottom: 8 }}>
+							<input
+								type="checkbox"
+								checked={setupRepo}
+								onChange={(e) => setSetupRepo(e.target.checked)}
+								disabled={submitting}
+							/>
+							Create a GitHub repo for this project
+						</label>
+					</div>
+					{setupRepo && (
+						<>
+							<div className="question">
+								<label>Account</label>
+								{event.ghAccounts.length > 1 ? (
+									<select
+										value={repoAccount}
+										onChange={(e) => setRepoAccount(e.target.value)}
+										disabled={submitting}
+									>
+										{event.ghAccounts.map((a) => (
+											<option key={a.login} value={a.login}>
+												{a.login} {a.type === "org" ? "(org)" : "(personal)"}
+											</option>
+										))}
+									</select>
+								) : (
+									<input type="text" value={event.ghAccounts[0].login} disabled />
+								)}
+							</div>
+							<div className="question">
+								<label>Repository name</label>
+								<input
+									type="text"
+									value={repoName}
+									onChange={(e) => setRepoName(e.target.value)}
+									disabled={submitting}
+									placeholder="my-app"
+								/>
+							</div>
+							<div className="question">
+								<label>Visibility</label>
+								<div className="gate-radio-group">
+									<label className="gate-radio">
+										<input
+											type="radio"
+											name="repo-visibility"
+											checked={repoVisibility === "private"}
+											onChange={() => setRepoVisibility("private")}
+											disabled={submitting}
+										/>
+										Private
+									</label>
+									<label className="gate-radio">
+										<input
+											type="radio"
+											name="repo-visibility"
+											checked={repoVisibility === "public"}
+											onChange={() => setRepoVisibility("public")}
+											disabled={submitting}
+										/>
+										Public
+									</label>
+								</div>
+							</div>
+						</>
+					)}
+				</>
+			)}
+
+			<div className="gate-actions">
+				<button
+					className="gate-btn gate-btn-primary"
+					onClick={handleSubmit}
+					disabled={submitting || (mode === "cloud" && !cloudValid) || !repoValid}
+				>
+					{submitting ? "Configuring..." : "Start"}
 				</button>
 			</div>
 		</div>
 	)
+}
+
+function resolvedLabel(type: string): string {
+	switch (type) {
+		case "clarification_needed":
+			return "Clarification answered"
+		case "plan_ready":
+			return "Plan reviewed"
+		case "infra_config_prompt":
+			return "Project configured"
+		case "continue_needed":
+			return "Decision made"
+		default:
+			return "Decision made"
+	}
 }
 
 export function GatePrompt({
@@ -157,23 +422,26 @@ export function GatePrompt({
 	duration,
 }: GatePromptProps & { duration: string | null }) {
 	if (entry.resolved) {
-		// Show collapsed resolved state
-		const label =
-			entry.event.type === "clarification_needed"
-				? "Clarification answered"
-				: entry.event.type === "plan_ready"
-					? "Plan reviewed"
-					: "Decision made"
+		const label = resolvedLabel(entry.event.type)
+		const summary = entry.resolvedSummary
+
 		return (
-			<div className="console-entry">
-				<span className="prefix done">[gate]</span>
-				<span style={{ color: "var(--text-subtle)" }}>{label}</span>
-				<Duration value={duration} />
-			</div>
+			<details className="gate-resolved-details">
+				<summary>
+					<span className="prefix done">[gate]</span>
+					<span className="gate-resolved-label">{label}</span>
+					<Duration value={duration} />
+				</summary>
+				{summary && (
+					<div className="gate-resolved-body">
+						<pre>{summary}</pre>
+					</div>
+				)}
+			</details>
 		)
 	}
 
-	const resolve = () => onResolved(entryIndex)
+	const resolve = (summary?: string) => onResolved(entryIndex, summary)
 
 	switch (entry.event.type) {
 		case "clarification_needed":
@@ -182,6 +450,8 @@ export function GatePrompt({
 			return <PlanGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
 		case "continue_needed":
 			return <ContinueGate sessionId={sessionId} reason={entry.event.reason} onResolved={resolve} />
+		case "infra_config_prompt":
+			return <InfraConfigGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
 		default:
 			return null
 	}

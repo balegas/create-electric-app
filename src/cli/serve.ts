@@ -1,4 +1,5 @@
 import { startStreamServer, stopStreamServer } from "../web/infra.js"
+import { DockerSandboxProvider } from "../web/sandbox/index.js"
 import { startWebServer } from "../web/server.js"
 
 export async function serveCommand(opts: {
@@ -14,8 +15,9 @@ export async function serveCommand(opts: {
 	// Start durable streams server
 	await startStreamServer({ port: streamsPort, dataDir })
 
-	// Start web API + static file server
-	await startWebServer({ port, streamsPort, dataDir })
+	// Start web API + static file server with Docker sandbox
+	const sandbox = new DockerSandboxProvider()
+	await startWebServer({ port, streamsPort, dataDir, sandbox })
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
 
@@ -32,15 +34,21 @@ export async function serveCommand(opts: {
 		exec(cmd)
 	}
 
-	// Keep process alive
-	process.on("SIGINT", async () => {
+	// Graceful shutdown — force exit on second Ctrl+C
+	let shuttingDown = false
+	const shutdown = async () => {
+		if (shuttingDown) {
+			process.exit(1)
+		}
+		shuttingDown = true
 		console.log("\nShutting down...")
-		await stopStreamServer()
+		try {
+			await stopStreamServer()
+		} catch {
+			// Best-effort cleanup
+		}
 		process.exit(0)
-	})
-
-	process.on("SIGTERM", async () => {
-		await stopStreamServer()
-		process.exit(0)
-	})
+	}
+	process.on("SIGINT", shutdown)
+	process.on("SIGTERM", shutdown)
 }

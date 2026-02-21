@@ -4,9 +4,17 @@ interface PromptInputProps {
 	onSubmit: (text: string) => void
 	placeholder?: string
 	disabled?: boolean
+	isRunning?: boolean
+	onCancel?: () => void
 }
 
-export function PromptInput({ onSubmit, placeholder, disabled }: PromptInputProps) {
+export function PromptInput({
+	onSubmit,
+	placeholder,
+	disabled,
+	isRunning,
+	onCancel,
+}: PromptInputProps) {
 	const [value, setValue] = useState("")
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -57,6 +65,11 @@ export function PromptInput({ onSubmit, placeholder, disabled }: PromptInputProp
 			<button className="primary" onClick={handleSubmit} disabled={disabled || !value.trim()}>
 				Send
 			</button>
+			{isRunning && onCancel && (
+				<button className="danger" onClick={onCancel}>
+					Stop
+				</button>
+			)}
 		</div>
 	)
 }

@@ -20,11 +20,16 @@ function gateKey(sessionId: string, gate: string): string {
  * Create a gate that blocks until resolved via resolveGate().
  */
 export function createGate<T>(sessionId: string, gate: string): Promise<T> {
+	const key = gateKey(sessionId, gate)
+	console.log(
+		`[gate] creating gate key=${key} (existing gates: ${[...gates.keys()].join(", ") || "none"})`,
+	)
 	return new Promise<T>((resolve, reject) => {
-		gates.set(gateKey(sessionId, gate), {
+		gates.set(key, {
 			resolve: resolve as (value: unknown) => void,
 			reject,
 		})
+		console.log(`[gate] gate registered key=${key}`)
 	})
 }
 
@@ -34,12 +39,17 @@ export function createGate<T>(sessionId: string, gate: string): Promise<T> {
  */
 export function resolveGate(sessionId: string, gate: string, value: unknown): boolean {
 	const key = gateKey(sessionId, gate)
+	console.log(
+		`[gate] resolving key=${key} (existing gates: ${[...gates.keys()].join(", ") || "none"})`,
+	)
 	const pending = gates.get(key)
 	if (pending) {
 		pending.resolve(value)
 		gates.delete(key)
+		console.log(`[gate] resolved key=${key}`)
 		return true
 	}
+	console.log(`[gate] NOT FOUND key=${key}`)
 	return false
 }
 

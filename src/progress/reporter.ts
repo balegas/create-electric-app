@@ -1,4 +1,4 @@
-type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "debug"
+type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "verbose"
 
 const PREFIXES: Record<LogLevel, string> = {
 	plan: "\x1b[36m[plan]\x1b[0m",
@@ -8,22 +8,22 @@ const PREFIXES: Record<LogLevel, string> = {
 	fix: "\x1b[33m[fix]\x1b[0m",
 	done: "\x1b[32m[done]\x1b[0m",
 	error: "\x1b[31m[error]\x1b[0m",
-	debug: "\x1b[2m[debug]\x1b[0m",
+	verbose: "\x1b[2m[verbose]\x1b[0m",
 }
 
 export interface ProgressReporter {
 	log(level: LogLevel, message: string): void
 	logToolUse(toolName: string, summary: string): void
-	debugMode: boolean
+	verboseMode: boolean
 }
 
-export function createProgressReporter(opts?: { debug?: boolean }): ProgressReporter {
-	const debugMode = opts?.debug ?? false
+export function createProgressReporter(opts?: { verbose?: boolean }): ProgressReporter {
+	const verboseMode = opts?.verbose ?? false
 	return {
-		debugMode,
+		verboseMode,
 
 		log(level: LogLevel, message: string) {
-			if (level === "debug" && !debugMode) return
+			if (level === "verbose" && !verboseMode) return
 			console.log(`${PREFIXES[level]} ${message}`)
 		},
 
@@ -50,14 +50,14 @@ export function processAgentMessage(
 		for (const block of content) {
 			if ("text" in block && block.text) {
 				const text = block.text as string
-				if (reporter.debugMode) {
-					reporter.log("debug", text)
+				if (reporter.verboseMode) {
+					reporter.log("verbose", text)
 				} else if (text.length > 10) {
-					reporter.log("task", text.slice(0, 200))
+					reporter.log("task", text)
 				}
-			} else if ("thinking" in block && block.thinking && reporter.debugMode) {
+			} else if ("thinking" in block && block.thinking && reporter.verboseMode) {
 				const thinking = block.thinking as string
-				reporter.log("debug", `[thinking] ${thinking.slice(0, 500)}`)
+				reporter.log("verbose", `[thinking] ${thinking.slice(0, 500)}`)
 			} else if ("name" in block) {
 				const name = block.name as string
 				const input = (block.input || {}) as Record<string, unknown>
@@ -98,7 +98,7 @@ export function processAgentMessage(
 					}
 
 					for (const text of texts) {
-						// Always surface build tool results (even without --debug)
+						// Always surface build tool results (even without --verbose)
 						if (text.includes("=== pnpm run build ===")) {
 							try {
 								const result = JSON.parse(text) as {
@@ -123,8 +123,8 @@ export function processAgentMessage(
 							continue
 						}
 
-						if (reporter.debugMode) {
-							reporter.log("debug", `[tool_result] ${text.slice(0, 1000)}`)
+						if (reporter.verboseMode) {
+							reporter.log("verbose", `[tool_result] ${text.slice(0, 1000)}`)
 						}
 					}
 				}

@@ -1,5 +1,5 @@
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
-import { hooks as guardrailHooks } from "../hooks/index.js"
+import { createCoderHooks } from "../hooks/index.js"
 import {
 	createProgressReporter,
 	type ProgressReporter,
@@ -77,10 +77,10 @@ export async function runCoder(
 			"mcp__electric-agent-tools__list_playbooks",
 		],
 		mcpServers: { "electric-agent-tools": mcpServer },
-		hooks: guardrailHooks,
+		hooks: createCoderHooks(projectDir),
 		cwd: projectDir,
-		maxTurns: 60,
-		maxBudgetUsd: 5.0,
+		maxTurns: 200,
+		maxBudgetUsd: 25.0,
 		permissionMode: "bypassPermissions",
 		allowDangerouslySkipPermissions: true,
 	}

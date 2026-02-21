@@ -94,7 +94,14 @@ export async function evaluateDescription(description: string): Promise<Clarific
 			parent_tool_use_id: null,
 			message: {
 				role: "user" as const,
-				content: `Evaluate the following application description and determine how clear and complete it is for building a reactive Electric SQL + TanStack DB application.
+				content: `Evaluate the following application description and determine how clear and complete it is for building a reactive local-first application using Electric SQL and TanStack DB.
+
+About Electric SQL:
+Electric is a sync engine for local-first apps. It syncs data between Postgres and local devices using Shapes (subsets of database tables). Apps built with Electric get:
+- Real-time sync: changes in Postgres instantly appear on all connected clients
+- Optimistic mutations: writes happen locally first, then sync to Postgres
+- Offline support: the app works without a network connection and syncs when reconnected
+- Multi-user collaboration: multiple users see each other's changes in real-time
 
 Description:
 """
@@ -109,17 +116,20 @@ Respond with ONLY a JSON object (no markdown code fences, no other text) in this
 }
 
 Scoring guidelines:
-- 90-100: Very clear description with specific entities, relationships, and features
-- 70-89: Reasonably clear, minor ambiguities that can be inferred
-- 50-69: Missing key details about data model, features, or user interactions
-- 0-49: Very vague or incomplete, needs significant clarification
+- 80-100: Clear enough to start building. The user wants a specific type of app (e.g. "a todo app", "a kanban board", "a chat app"). Even short descriptions like "a todo list" score 80+ because the data model and interactions are well-understood.
+- 50-79: Somewhat clear but missing important context. The description mentions a domain but is ambiguous about what the app actually does.
+- 0-49: Too vague to proceed. E.g. "make me an app" or "something with data".
 
-If confidence >= 70, return an empty questions array.
-If confidence < 70, ask 2-5 specific questions that would help clarify the app requirements. Focus on:
+Be generous with scoring. If you can reasonably infer the data model and features from common knowledge of the app type, score 80+. Simple, well-known app types (todo list, notes app, chat, kanban, etc.) should always score 80+.
+
+If confidence >= 50, return an empty questions array.
+If confidence < 50, ask 2-4 specific questions. At least one question should be about how the app should leverage Electric's real-time sync capabilities, e.g.:
+- Should changes sync in real-time between multiple users?
+- Should the app work offline and sync when reconnected?
+- Are there specific data views that should update live (e.g. dashboards, feeds)?
+Other questions can focus on:
 - What are the main entities/data objects?
-- What are the key user interactions?
-- What are the relationships between entities?
-- Are there specific features or UI patterns expected?`,
+- What are the key user interactions?`,
 			},
 		}
 	}
@@ -156,7 +166,7 @@ If confidence < 70, ask 2-5 specific questions that would help clarify the app r
 	} catch {
 		// If parsing fails, assume low confidence
 		return {
-			confidence: 50,
+			confidence: 30,
 			summary: "",
 			questions: ["Could you describe in more detail what your application should do?"],
 		}

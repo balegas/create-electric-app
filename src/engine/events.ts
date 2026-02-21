@@ -1,4 +1,4 @@
-export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "debug"
+export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "verbose"
 
 /**
  * Events emitted by the engine orchestrator.
@@ -26,8 +26,19 @@ export type EngineEvent =
 	  }
 	| { type: "plan_ready"; plan: string; ts: string }
 	| { type: "continue_needed"; reason: "max_turns" | "max_budget"; ts: string }
+	| { type: "cost_update"; totalCostUsd: number; ts: string }
 	| { type: "phase_complete"; phase: string; success: boolean; errors: string[]; ts: string }
 	| { type: "session_complete"; success: boolean; ts: string }
+	| { type: "app_ready"; port?: number; ts: string }
+	| { type: "git_checkpoint"; commitHash: string; message: string; ts: string }
+	| {
+			type: "infra_config_prompt"
+			projectName: string
+			/** GitHub accounts available for repo creation (empty if gh not authenticated) */
+			ghAccounts: { login: string; type: "user" | "org" }[]
+			ts: string
+	  }
+	| { type: "gate_resolved"; gate: string; summary?: string; ts: string }
 
 export function ts(): string {
 	return new Date().toISOString()

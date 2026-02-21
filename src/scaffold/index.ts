@@ -2,6 +2,7 @@ import { execSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { gitInit } from "../git/index.js"
 import type { ProgressReporter } from "../progress/reporter.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -25,7 +26,12 @@ export interface ScaffoldResult {
  */
 export async function scaffold(
 	projectDir: string,
-	opts?: { skipInstall?: boolean; projectName?: string; reporter?: ProgressReporter },
+	opts?: {
+		skipInstall?: boolean
+		skipGit?: boolean
+		projectName?: string
+		reporter?: ProgressReporter
+	},
 ): Promise<ScaffoldResult> {
 	const errors: string[] = []
 	const reporter = opts?.reporter
@@ -36,50 +42,57 @@ export async function scaffold(
 		fs.mkdirSync(projectDir, { recursive: true })
 	}
 	try {
-		reporter?.log("debug", "Cloning KPB template via gitpick...")
+		reporter?.log("verbose", "Cloning KPB template via gitpick...")
 		execSync(`npx gitpick KyleAMathews/kpb ${projectDir} -o`, {
 			stdio: "pipe",
 			timeout: 120_000,
 		})
-		reporter?.log("debug", "KPB template cloned")
+		reporter?.log("verbose", "KPB template cloned")
 	} catch (e: unknown) {
 		const msg = e instanceof Error ? e.message : "gitpick failed"
 		throw new Error(`Failed to clone KPB template: ${msg}`)
 	}
 
 	// Step 2: Copy template overlay files
-	reporter?.log("debug", "Copying template overlay files...")
+	reporter?.log("verbose", "Copying template overlay files...")
 	copyTemplateFiles(templateDir, projectDir)
-	reporter?.log("debug", "Template overlay complete")
+	reporter?.log("verbose", "Template overlay complete")
 
 	// Step 3: Merge dependencies and rename project
-	reporter?.log("debug", "Merging dependencies into package.json...")
+	reporter?.log("verbose", "Merging dependencies into package.json...")
 	mergeDependencies(projectDir, opts?.projectName)
 
 	// Step 4: Delete stale lockfile (we changed deps, lockfile is now invalid)
 	const lockPath = path.join(projectDir, "pnpm-lock.yaml")
 	if (fs.existsSync(lockPath)) {
 		fs.unlinkSync(lockPath)
-		reporter?.log("debug", "Removed stale pnpm-lock.yaml")
+		reporter?.log("verbose", "Removed stale pnpm-lock.yaml")
 	}
 
 	// Step 5: Patch vite.config.ts
-	reporter?.log("debug", "Patching vite.config.ts...")
+	reporter?.log("verbose", "Patching vite.config.ts...")
 	patchViteConfig(projectDir)
 
 	// Step 6: Patch root route for shellComponent
 	patchRootRoute(projectDir)
 
 	// Step 6b: Fix public-dir CSS imports that break Rollup production builds
-	reporter?.log("debug", "Patching public CSS imports...")
+	reporter?.log("verbose", "Patching public CSS imports...")
 	patchPublicCssImports(projectDir)
 
-	// Step 7: Copy .env.example -> .env
+	// Step 7: Copy .env.example -> .env and ensure VITE_PORT is set
 	const envExample = path.join(projectDir, ".env.example")
 	const envFile = path.join(projectDir, ".env")
 	if (fs.existsSync(envExample) && !fs.existsSync(envFile)) {
 		fs.copyFileSync(envExample, envFile)
-		reporter?.log("debug", "Copied .env.example to .env")
+		reporter?.log("verbose", "Copied .env.example to .env")
+	}
+	// Ensure VITE_PORT is in .env (default 5174 for local Caddy mode)
+	if (fs.existsSync(envFile)) {
+		const envContent = fs.readFileSync(envFile, "utf-8")
+		if (!envContent.includes("VITE_PORT")) {
+			fs.appendFileSync(envFile, "\nVITE_PORT=5174\n")
+		}
 	}
 
 	// Step 8: Create _agent/ working memory directory
@@ -87,7 +100,7 @@ export async function scaffold(
 	fs.mkdirSync(agentDir, { recursive: true })
 	fs.writeFileSync(path.join(agentDir, "errors.md"), "# Error Log\n\n", "utf-8")
 	fs.writeFileSync(path.join(agentDir, "session.md"), "# Session State\n\n", "utf-8")
-	reporter?.log("debug", "Created _agent/ working memory directory")
+	reporter?.log("verbose", "Created _agent/ working memory directory")
 
 	// Step 9: Patch .gitignore
 	patchGitignore(projectDir)
@@ -99,23 +112,36 @@ export async function scaffold(
 		try {
 			const installer = detectPackageManager(projectDir)
 			const ignoreWs = installer === "pnpm" ? " --ignore-workspace" : ""
-			reporter?.log("debug", `Running ${installer} install...`)
+			reporter?.log("verbose", `Running ${installer} install...`)
 			execSync(`${installer} install${ignoreWs}`, {
 				cwd: projectDir,
 				stdio: "pipe",
 				timeout: 180_000,
 			})
-			reporter?.log("debug", "Dependencies installed successfully")
+			reporter?.log("verbose", "Dependencies installed successfully")
 		} catch (e: unknown) {
 			const stdout = (e as Record<string, Buffer | string>)?.stdout?.toString() || ""
 			const stderr = (e as Record<string, Buffer | string>)?.stderr?.toString() || ""
 			const combined = `${stdout}\n${stderr}`.trim()
-			if (reporter?.debugMode) {
+			if (reporter?.verboseMode) {
 				errors.push(`Package install failed:\n${combined}`)
 			} else {
 				errors.push(`Package install failed: ${combined.slice(0, 500)}`)
 			}
 			skippedInstall = true
+		}
+	}
+
+	// Step 11: Initialize git repo with initial commit (unless skipped)
+	if (!opts?.skipGit) {
+		reporter?.log("build", "Initializing git repository...")
+		try {
+			const commitOutput = gitInit(projectDir, opts?.projectName)
+			reporter?.log("done", `Git initialized: ${commitOutput}`)
+		} catch (e) {
+			const msg = `Git init failed: ${e instanceof Error ? e.message : "unknown"}`
+			reporter?.log("error", msg)
+			errors.push(msg)
 		}
 	}
 
@@ -173,6 +199,9 @@ const ADDED_SCRIPTS: Record<string, string> = {
 	generate: "drizzle-kit generate",
 	migrate: "drizzle-kit migrate",
 	"db:push": "drizzle-kit push",
+	"dev:start": "nohup pnpm dev > /tmp/dev-server.log 2>&1 & echo $! > /tmp/dev-server.pid",
+	"dev:stop": "kill $(cat /tmp/dev-server.pid 2>/dev/null) 2>/dev/null; rm -f /tmp/dev-server.pid",
+	"dev:restart": "pnpm dev:stop && pnpm dev:start",
 	test: "vitest run",
 	"test:watch": "vitest",
 	"test:integration": "vitest run tests/integration",
@@ -202,13 +231,31 @@ function patchViteConfig(projectDir: string): void {
 
 	let content = fs.readFileSync(vitePath, "utf-8")
 
-	// Change port to 5174 so Caddy can proxy on 5173
-	content = content.replace(/port:\s*5173/, "port: 5174")
+	// Make port configurable via VITE_PORT env var (default 5174 for Caddy local mode,
+	// sandbox sets VITE_PORT=5173 so the Docker port binding works)
+	content = content.replace(/port:\s*5173/, "port: parseInt(process.env.VITE_PORT || '5174')")
 
-	// Bind to all interfaces so Caddy in Docker can reach the dev server
-	// via host.docker.internal
+	// Bind to all interfaces so Caddy/Docker can reach the dev server
 	if (!content.includes("host:")) {
-		content = content.replace(/port:\s*5174,?/, "port: 5174,\n\t\thost: true,")
+		content = content.replace(
+			/port:\s*parseInt\(process\.env\.VITE_PORT \|\| '5174'\),?/,
+			"port: parseInt(process.env.VITE_PORT || '5174'),\n\t\thost: true,",
+		)
+	}
+
+	// Add proxy for Electric shape API — works with both Caddy (external) and
+	// sandbox (no Caddy, Electric on localhost:3000) setups
+	if (!content.includes("proxy:")) {
+		const proxyBlock = [
+			"\t\tproxy: {",
+			"\t\t\t'/v1/shape': {",
+			"\t\t\t\ttarget: process.env.ELECTRIC_URL || 'http://localhost:3000',",
+			"\t\t\t\tchangeOrigin: true,",
+			"\t\t\t},",
+			"\t\t},",
+		].join("\n")
+		// Insert proxy after the host: true line
+		content = content.replace(/(host:\s*true,?)/, `$1\n${proxyBlock}`)
 	}
 
 	fs.writeFileSync(vitePath, content, "utf-8")

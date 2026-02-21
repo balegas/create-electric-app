@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
@@ -52,6 +53,11 @@ function buildEnhancedDescription(
 			}
 		}
 	}
+	// Extra free-text answer beyond the numbered questions
+	const extra = answers[questions.length]
+	if (extra) {
+		enhanced += `\n\nExtra context from the user:\n${extra}`
+	}
 	return enhanced
 }
 
@@ -60,10 +66,9 @@ function buildEnhancedDescription(
  */
 function createMessageForwarder(
 	callbacks: OrchestratorCallbacks,
-	reporter: ProgressReporter,
 ): (msg: Record<string, unknown>) => void {
 	return (msg) => {
-		const events = sdkMessageToEvents(msg, reporter.debugMode)
+		const events = sdkMessageToEvents(msg)
 		for (const event of events) {
 			callbacks.onEvent(event)
 		}
@@ -77,14 +82,18 @@ export async function runNew(opts: {
 	description: string
 	projectName?: string
 	baseDir?: string
-	debug?: boolean
+	verbose?: boolean
 	autoApprove?: boolean
+	initGit?: boolean
 	callbacks: OrchestratorCallbacks
 	abortController?: AbortController
-}): Promise<{ sessionId?: string }> {
+	/** If provided, create a GitHub repo and push the scaffold before planning */
+	gitRepoName?: string
+	gitRepoVisibility?: "public" | "private"
+}): Promise<{ sessionId?: string; projectDir?: string }> {
 	const { callbacks } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
-	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
+	const reporter = createReporterFromCallbacks(callbacks, opts.verbose)
 
 	// Step 0: Evaluate confidence, clarify if needed, and infer project name
 	// Run evaluation and name inference in parallel to save time
@@ -100,7 +109,7 @@ export async function runNew(opts: {
 		])
 		if (!inferredName) inferredName = earlyName
 
-		if (evaluation.confidence < 70) {
+		if (evaluation.confidence < 50) {
 			emit({
 				type: "log",
 				level: "plan",
@@ -153,7 +162,8 @@ export async function runNew(opts: {
 		message: "Scaffolding project from KPB template...",
 		ts: ts(),
 	})
-	const scaffoldResult = await scaffold(projectDir, { projectName, reporter })
+	const skipGit = opts.initGit === false
+	const scaffoldResult = await scaffold(projectDir, { projectName, reporter, skipGit })
 	if (scaffoldResult.errors.length > 0) {
 		for (const err of scaffoldResult.errors) {
 			emit({ type: "log", level: "error", message: err, ts: ts() })
@@ -186,12 +196,43 @@ export async function runNew(opts: {
 			errors: ["Playbook validation failed"],
 			ts: ts(),
 		})
-		return {}
+		return { projectDir }
+	}
+
+	// Step 1c: Create GitHub repo and push scaffold (if repo config provided)
+	if (opts.gitRepoName) {
+		emit({
+			type: "log",
+			level: "task",
+			message: "Creating GitHub repo and pushing scaffold...",
+			ts: ts(),
+		})
+		gitAutoCommit(projectDir, "chore: initial scaffold", emit)
+		try {
+			const vis = opts.gitRepoVisibility || "private"
+			execSync(`gh repo create "${opts.gitRepoName}" --${vis} --source . --remote origin --push`, {
+				cwd: projectDir,
+				stdio: "pipe",
+				timeout: 60_000,
+				env: { ...process.env },
+			})
+			emit({
+				type: "log",
+				level: "done",
+				message: `GitHub repo created: ${opts.gitRepoName} (${vis})`,
+				ts: ts(),
+			})
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "unknown error"
+			emit({ type: "log", level: "error", message: `Repo creation failed: ${msg}`, ts: ts() })
+			emit({ type: "session_complete", success: false, ts: ts() })
+			return { projectDir }
+		}
 	}
 
 	// Step 2: Plan
 	emit({ type: "log", level: "plan", message: "Running planner agent...", ts: ts() })
-	const messageForwarder = createMessageForwarder(callbacks, reporter)
+	const messageForwarder = createMessageForwarder(callbacks)
 	let plan = await runPlanner(
 		description,
 		projectDir,
@@ -231,7 +272,7 @@ export async function runNew(opts: {
 				success: false,
 				ts: ts(),
 			})
-			return {}
+			return { projectDir }
 		}
 	}
 
@@ -276,7 +317,7 @@ export async function runNew(opts: {
 				ts: ts(),
 			})
 			emit({ type: "session_complete", success: true, ts: ts() })
-			return { sessionId: result.sessionId }
+			return { sessionId: result.sessionId, projectDir }
 		}
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
 		result = await runCoder(
@@ -290,6 +331,18 @@ export async function runNew(opts: {
 	}
 
 	if (result.success) {
+		// Auto-commit after successful generation
+		emit({ type: "log", level: "task", message: "Creating git commit...", ts: ts() })
+		const commitResult = gitAutoCommit(projectDir, "feat: initial app generation", emit)
+		if (commitResult) {
+			emit({
+				type: "git_checkpoint",
+				commitHash: commitResult,
+				message: "feat: initial app generation",
+				ts: ts(),
+			})
+		}
+
 		emit({
 			type: "log",
 			level: "done",
@@ -320,7 +373,7 @@ export async function runNew(opts: {
 		ts: ts(),
 	})
 	emit({ type: "session_complete", success: result.success, ts: ts() })
-	return { sessionId: result.sessionId }
+	return { sessionId: result.sessionId, projectDir }
 }
 
 /**
@@ -329,29 +382,32 @@ export async function runNew(opts: {
 export async function runIterate(opts: {
 	projectDir: string
 	userRequest: string
-	debug?: boolean
+	verbose?: boolean
 	callbacks: OrchestratorCallbacks
 	abortController?: AbortController
 	resumeSessionId?: string
 }): Promise<{ success: boolean; errors: string[]; sessionId?: string }> {
 	const { callbacks, projectDir, userRequest } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
-	const reporter = createReporterFromCallbacks(callbacks, opts.debug)
-	const messageForwarder = createMessageForwarder(callbacks, reporter)
+	const reporter = createReporterFromCallbacks(callbacks, opts.verbose)
+	const messageForwarder = createMessageForwarder(callbacks)
 
 	const iterationPrompt = `The user wants the following change to the existing app:
 
 ${userRequest}
 
 Instructions:
-1. Read PLAN.md and the current codebase to understand the existing app
-2. Read "electric-app-guardrails" playbook FIRST for critical integration rules
-3. Use list_playbooks to discover relevant skills, then read only what you need for this change
-4. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
-5. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
-6. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
-7. Mark tasks as done in PLAN.md after completing them
-8. Run the build tool ONCE after all changes are complete — not after each file
+1. Consult ARCHITECTURE.md (injected into your context as <app-architecture>) to understand the app structure — do NOT scan the filesystem
+2. Read PLAN.md to see what was built and previous iterations
+3. Read "electric-app-guardrails" playbook FIRST for critical integration rules
+4. Use list_playbooks to discover relevant skills, then read only what you need for this change
+5. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
+6. Read ONLY the specific source files you need to modify (consult ARCHITECTURE.md for exact paths)
+7. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
+8. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
+9. Mark tasks as done in PLAN.md after completing them
+10. Update ARCHITECTURE.md to reflect any changes (new entities, routes, components, styles, or contexts)
+11. Run the build tool ONCE after all changes are complete — not after each file
 
 Do NOT just write a plan — implement the changes directly.`
 
@@ -389,6 +445,19 @@ Do NOT just write a plan — implement the changes directly.`
 	}
 
 	if (result.success) {
+		// Auto-commit after successful iteration
+		emit({ type: "log", level: "task", message: "Creating git commit...", ts: ts() })
+		const commitMsg = `feat: ${userRequest.slice(0, 70)}`
+		const commitResult = gitAutoCommit(projectDir, commitMsg, emit)
+		if (commitResult) {
+			emit({
+				type: "git_checkpoint",
+				commitHash: commitResult,
+				message: commitMsg,
+				ts: ts(),
+			})
+		}
+
 		emit({ type: "log", level: "done", message: "Changes applied successfully", ts: ts() })
 	} else {
 		emit({
@@ -403,12 +472,45 @@ Do NOT just write a plan — implement the changes directly.`
 }
 
 /**
+ * Stage all changes and commit. Returns the commit hash, or null if there were no changes.
+ */
+function gitAutoCommit(
+	projectDir: string,
+	message: string,
+	emit: (event: EngineEvent) => void | Promise<void>,
+): string | null {
+	try {
+		execSync("git add -A", { cwd: projectDir, stdio: "pipe" })
+		try {
+			execSync("git diff --cached --quiet", { cwd: projectDir, stdio: "pipe" })
+			emit({ type: "log", level: "done", message: "No changes to commit", ts: ts() })
+			return null
+		} catch {
+			// There are staged changes — proceed
+		}
+		const safeMsg = message.replace(/"/g, '\\"')
+		execSync(`git commit -m "${safeMsg}"`, { cwd: projectDir, stdio: "pipe" })
+		const hash = execSync("git rev-parse HEAD", {
+			cwd: projectDir,
+			encoding: "utf-8",
+			stdio: "pipe",
+		}).trim()
+		emit({ type: "log", level: "done", message: `Committed: ${message}`, ts: ts() })
+		return hash
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : "unknown error"
+		emit({ type: "log", level: "error", message: `Git commit failed: ${msg}`, ts: ts() })
+		return null
+	}
+}
+
+/**
  * Create a ProgressReporter that works for both CLI and web by forwarding to the engine callback.
  * The reporter is used by scaffold and other components that need it directly.
  */
 function createReporterFromCallbacks(
 	_callbacks: OrchestratorCallbacks,
-	debug?: boolean,
+	verbose?: boolean,
 ): ProgressReporter {
-	return createProgressReporter({ debug })
+	return createProgressReporter({ verbose })
 }

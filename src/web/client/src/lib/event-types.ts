@@ -1,4 +1,4 @@
-export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "debug"
+export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | "error" | "verbose"
 
 export type EngineEvent =
 	| { type: "log"; level: LogLevel; message: string; ts: string }
@@ -22,8 +22,18 @@ export type EngineEvent =
 	  }
 	| { type: "plan_ready"; plan: string; ts: string }
 	| { type: "continue_needed"; reason: "max_turns" | "max_budget"; ts: string }
+	| { type: "cost_update"; totalCostUsd: number; ts: string }
 	| { type: "phase_complete"; phase: string; success: boolean; errors: string[]; ts: string }
 	| { type: "session_complete"; success: boolean; ts: string }
+	| { type: "app_ready"; port?: number; ts: string }
+	| { type: "git_checkpoint"; commitHash: string; message: string; ts: string }
+	| {
+			type: "infra_config_prompt"
+			projectName: string
+			ghAccounts: { login: string; type: "user" | "org" }[]
+			ts: string
+	  }
+	| { type: "gate_resolved"; gate: string; summary?: string; ts: string }
 
 export type ConsoleEntry =
 	| { kind: "log"; level: LogLevel; message: string; ts: string }
@@ -37,12 +47,17 @@ export type ConsoleEntry =
 			ts: string
 	  }
 	| { kind: "text"; text: string; ts: string }
+	| { kind: "thinking"; text: string; ts: string }
 	| {
 			kind: "gate"
 			event: Extract<
 				EngineEvent,
-				{ type: "clarification_needed" | "plan_ready" | "continue_needed" }
+				{
+					type: "clarification_needed" | "plan_ready" | "continue_needed" | "infra_config_prompt"
+				}
 			>
 			resolved: boolean
+			/** Short summary of the decision, shown when collapsed */
+			resolvedSummary?: string
 			ts: string
 	  }
