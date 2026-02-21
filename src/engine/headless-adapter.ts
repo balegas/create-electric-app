@@ -36,6 +36,8 @@ class StdinReader {
 	private configReject: ((err: Error) => void) | null = null
 	private gotConfig = false
 	private rl: readline.Interface
+	/** Buffer for commands that arrive before waitForCommand() is called */
+	private commandQueue: unknown[] = []
 
 	constructor() {
 		// Buffer stdin so data isn't lost before readline attaches
@@ -66,12 +68,15 @@ class StdinReader {
 					return
 				}
 
-				// Check if this is a new command (iterate)
+				// Check if this is a new command (iterate/git)
 				if (msg.command) {
 					const entry = this.pending.get("command")
 					if (entry) {
 						this.pending.delete("command")
 						entry.resolve(msg)
+					} else {
+						// Buffer commands that arrive before waitForCommand() is called
+						this.commandQueue.push(msg)
 					}
 					return
 				}
@@ -122,6 +127,10 @@ class StdinReader {
 
 	/** Wait for the next "command" line (used for iterate after initial run). */
 	waitForCommand(): Promise<HeadlessConfig> {
+		// Drain buffered commands first (may arrive before waitForCommand is called)
+		if (this.commandQueue.length > 0) {
+			return Promise.resolve(this.commandQueue.shift() as HeadlessConfig)
+		}
 		return this.waitFor<HeadlessConfig>("command")
 	}
 
