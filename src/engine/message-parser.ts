@@ -74,6 +74,11 @@ export function sdkMessageToEvents(message: Record<string, unknown>): EngineEven
 		const sub = String(message.subtype)
 		const cost = message.total_cost_usd as number | undefined
 		const costStr = `(cost: $${cost?.toFixed(4) || "?"})`
+
+		if (cost !== undefined) {
+			events.push({ type: "cost_update", totalCostUsd: cost, ts: ts() })
+		}
+
 		if (sub === "success") {
 			events.push({
 				type: "log",

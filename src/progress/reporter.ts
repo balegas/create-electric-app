@@ -53,7 +53,7 @@ export function processAgentMessage(
 				if (reporter.verboseMode) {
 					reporter.log("verbose", text)
 				} else if (text.length > 10) {
-					reporter.log("task", text.slice(0, 200))
+					reporter.log("task", text)
 				}
 			} else if ("thinking" in block && block.thinking && reporter.verboseMode) {
 				const thinking = block.thinking as string

@@ -1,12 +1,9 @@
 #!/usr/bin/env node
 
+import "dotenv/config"
 import { Command } from "commander"
-import { downCommand } from "./cli/down.js"
-import { iterateCommand } from "./cli/iterate.js"
-import { newCommand } from "./cli/new.js"
+import { headlessCommand } from "./cli/headless.js"
 import { serveCommand } from "./cli/serve.js"
-import { statusCommand } from "./cli/status.js"
-import { upCommand } from "./cli/up.js"
 
 const program = new Command()
 
@@ -19,45 +16,10 @@ program
 	.option("--verbose", "Enable verbose logging")
 
 program
-	.command("new")
-	.description("Create a new Electric app from a natural-language description")
-	.option("-n, --name <name>", "Project name (derived from description if not provided)")
-	.option("--no-approve", "Skip plan approval prompt and start building immediately")
-	.action(async (opts: { name?: string; approve?: boolean }) => {
-		const verbose = program.opts().verbose ?? false
-		await newCommand({ ...opts, verbose })
-	})
-
-program
-	.command("iterate")
-	.description("Enter conversational iteration mode for an existing project")
+	.command("headless")
+	.description("Run in headless mode with NDJSON stdin/stdout protocol")
 	.action(async () => {
-		const verbose = program.opts().verbose ?? false
-		await iterateCommand({ verbose })
-	})
-
-program
-	.command("status")
-	.description("Show the current project status and progress")
-	.action(async () => {
-		const verbose = program.opts().verbose ?? false
-		await statusCommand({ verbose })
-	})
-
-program
-	.command("up")
-	.description("Start Docker services, run migrations, and launch the dev server")
-	.action(async () => {
-		const verbose = program.opts().verbose ?? false
-		await upCommand({ verbose })
-	})
-
-program
-	.command("down")
-	.description("Stop Docker services and dev server")
-	.action(async () => {
-		const verbose = program.opts().verbose ?? false
-		await downCommand({ verbose })
+		await headlessCommand()
 	})
 
 program

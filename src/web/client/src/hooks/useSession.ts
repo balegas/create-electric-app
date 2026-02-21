@@ -1,5 +1,6 @@
 import { stream } from "@durable-streams/client"
 import { useCallback, useEffect, useRef, useState } from "react"
+import toast from "react-hot-toast"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 
 const STREAMS_BASE = "http://127.0.0.1:4437"
@@ -8,8 +9,12 @@ export function useSession(sessionId: string | null) {
 	const [entries, setEntries] = useState<ConsoleEntry[]>([])
 	const [isLive, setIsLive] = useState(false)
 	const [isComplete, setIsComplete] = useState(false)
+	const [appReady, setAppReady] = useState(false)
+	const [totalCost, setTotalCost] = useState(0)
 	const cancelRef = useRef<(() => void) | null>(null)
 	const offsetRef = useRef<string>("-1")
+	const toastShownRef = useRef(false)
+	const liveRef = useRef(false)
 
 	const processEvent = useCallback((event: EngineEvent) => {
 		setEntries((prev) => {
@@ -37,7 +42,6 @@ export function useSession(sessionId: string | null) {
 					]
 
 				case "tool_result": {
-					// Find and update the matching tool entry
 					const updated = [...prev]
 					for (let i = updated.length - 1; i >= 0; i--) {
 						const entry = updated[i]
@@ -58,12 +62,32 @@ export function useSession(sessionId: string | null) {
 				case "clarification_needed":
 				case "plan_ready":
 				case "continue_needed":
+				case "publish_prompt":
+				case "checkpoint_prompt":
+				case "infra_config_prompt":
 					return [...prev, { kind: "gate" as const, event, resolved: false, ts: event.ts }]
 
-				case "session_complete":
-					return prev
+				case "gate_resolved": {
+					// Mark the most recent unresolved gate as resolved
+					const updated = [...prev]
+					for (let i = updated.length - 1; i >= 0; i--) {
+						const entry = updated[i]
+						if (entry.kind === "gate" && !entry.resolved) {
+							updated[i] = {
+								...entry,
+								resolved: true,
+								resolvedSummary: event.summary || entry.resolvedSummary,
+							}
+							break
+						}
+					}
+					return updated
+				}
 
+				case "cost_update":
+				case "session_complete":
 				case "phase_complete":
+				case "app_ready":
 					return prev
 
 				default:
@@ -71,19 +95,37 @@ export function useSession(sessionId: string | null) {
 			}
 		})
 
+		if (event.type === "cost_update") {
+			setTotalCost((prev) => prev + event.totalCostUsd)
+		}
+		if (event.type === "app_ready") {
+			setAppReady(true)
+		}
 		if (event.type === "session_complete") {
 			setIsComplete(true)
+			// Only toast for live events (not replayed catch-up), and only once per session
+			if (liveRef.current && !toastShownRef.current) {
+				toastShownRef.current = true
+				if (event.success) {
+					toast.success("Session completed successfully")
+				} else {
+					toast.error("Session completed with errors")
+				}
+			}
 		}
 	}, [])
 
 	useEffect(() => {
 		if (!sessionId) return
 
-		// Reset state — always replay from the beginning so we get the full history
 		setEntries([])
 		setIsLive(false)
 		setIsComplete(false)
+		setAppReady(false)
+		setTotalCost(0)
 		offsetRef.current = "-1"
+		toastShownRef.current = false
+		liveRef.current = false
 
 		let cancelled = false
 
@@ -102,6 +144,7 @@ export function useSession(sessionId: string | null) {
 				}
 
 				setIsLive(true)
+				let firstBatch = true
 
 				res.subscribeJson(async (batch) => {
 					if (cancelled) return
@@ -109,9 +152,13 @@ export function useSession(sessionId: string | null) {
 						processEvent(item)
 					}
 					offsetRef.current = batch.offset
+					// Mark live after processing the first (catch-up) batch
+					if (firstBatch) {
+						firstBatch = false
+						liveRef.current = true
+					}
 				})
 			} catch {
-				// Stream may not exist yet, retry after a delay
 				if (!cancelled) {
 					setTimeout(connect, 1000)
 				}
@@ -129,16 +176,16 @@ export function useSession(sessionId: string | null) {
 		}
 	}, [sessionId, processEvent])
 
-	const markGateResolved = useCallback((index: number) => {
+	const markGateResolved = useCallback((index: number, summary?: string) => {
 		setEntries((prev) => {
 			const updated = [...prev]
 			const entry = updated[index]
 			if (entry?.kind === "gate") {
-				updated[index] = { ...entry, resolved: true }
+				updated[index] = { ...entry, resolved: true, resolvedSummary: summary }
 			}
 			return updated
 		})
 	}, [])
 
-	return { entries, isLive, isComplete, markGateResolved }
+	return { entries, isLive, isComplete, appReady, totalCost, markGateResolved }
 }

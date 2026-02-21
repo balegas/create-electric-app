@@ -41,23 +41,49 @@ export function bridgeContainerToStream(
 				streamHandle.append(JSON.stringify(event)).catch(() => {
 					// Stream may be closed, swallow error
 				})
+
+				// Notify on session_complete (agent may send multiple across iterations)
+				if (event.type === "session_complete") {
+					onComplete((event as EngineEvent & { success?: boolean }).success !== false)
+				}
 			}
 		} catch {
 			// Ignore malformed lines
 		}
 	})
 
-	// Capture stderr for debugging
+	// Capture stderr — classify infra/dev-server messages as info, actual errors as error
 	if (containerProcess.stderr) {
+		const infraPattern =
+			/\b(Creating|Created|Running|Started|Waiting|Healthy|Pulling|Pulled|Starting|Stopping|Stopped|Removing|Removed|Building|Built|Network|Volume)\b/i
+		const devServerPattern = /\bVITE\b|^\s*>|➜|vite\s+(dev|build)|HMR|\[vite\]/i
+		const viteReadyPattern = /VITE\s+v[\d.]+\s+ready/i
+
 		containerProcess.stderr.on("data", (data: Buffer) => {
 			const msg = data.toString().trim()
-			if (msg) {
+			if (!msg) return
+
+			const isInfra = infraPattern.test(msg)
+			const isDevServer = devServerPattern.test(msg)
+			const level = isInfra || isDevServer ? "info" : "error"
+
+			streamHandle
+				.append(
+					JSON.stringify({
+						type: "log",
+						level,
+						message: `[container] ${msg}`,
+						ts: new Date().toISOString(),
+					}),
+				)
+				.catch(() => {})
+
+			// Emit app_ready when Vite reports it's listening
+			if (viteReadyPattern.test(msg)) {
 				streamHandle
 					.append(
 						JSON.stringify({
-							type: "log",
-							level: "error",
-							message: `[container] ${msg}`,
+							type: "app_ready",
 							ts: new Date().toISOString(),
 						}),
 					)

@@ -45,3 +45,33 @@ export const guardrailInject: HookCallback = async () => {
 		},
 	}
 }
+
+/**
+ * Create a SessionStart hook that injects both guardrails AND ARCHITECTURE.md.
+ * ARCHITECTURE.md provides the coder with immediate structural knowledge of the app,
+ * saving 3-5 turns of file scanning on iterations.
+ */
+export function createSessionStartHook(projectDir: string): HookCallback {
+	return async () => {
+		const parts: string[] = []
+
+		const guardrails = loadGuardrails()
+		if (guardrails) {
+			parts.push(`<electric-app-guardrails>\n${guardrails}\n</electric-app-guardrails>`)
+		}
+
+		const archPath = path.join(projectDir, "ARCHITECTURE.md")
+		if (fs.existsSync(archPath)) {
+			const arch = fs.readFileSync(archPath, "utf-8")
+			parts.push(`<app-architecture>\n${arch}\n</app-architecture>`)
+		}
+
+		if (parts.length === 0) return {}
+		return {
+			hookSpecificOutput: {
+				hookEventName: "SessionStart" as const,
+				additionalContext: parts.join("\n\n"),
+			},
+		}
+	}
+}

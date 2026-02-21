@@ -2,6 +2,7 @@ import { execSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { gitInit } from "../git/index.js"
 import type { ProgressReporter } from "../progress/reporter.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -25,7 +26,12 @@ export interface ScaffoldResult {
  */
 export async function scaffold(
 	projectDir: string,
-	opts?: { skipInstall?: boolean; projectName?: string; reporter?: ProgressReporter },
+	opts?: {
+		skipInstall?: boolean
+		skipGit?: boolean
+		projectName?: string
+		reporter?: ProgressReporter
+	},
 ): Promise<ScaffoldResult> {
 	const errors: string[] = []
 	const reporter = opts?.reporter
@@ -74,12 +80,19 @@ export async function scaffold(
 	reporter?.log("verbose", "Patching public CSS imports...")
 	patchPublicCssImports(projectDir)
 
-	// Step 7: Copy .env.example -> .env
+	// Step 7: Copy .env.example -> .env and ensure VITE_PORT is set
 	const envExample = path.join(projectDir, ".env.example")
 	const envFile = path.join(projectDir, ".env")
 	if (fs.existsSync(envExample) && !fs.existsSync(envFile)) {
 		fs.copyFileSync(envExample, envFile)
 		reporter?.log("verbose", "Copied .env.example to .env")
+	}
+	// Ensure VITE_PORT is in .env (default 5174 for local Caddy mode)
+	if (fs.existsSync(envFile)) {
+		const envContent = fs.readFileSync(envFile, "utf-8")
+		if (!envContent.includes("VITE_PORT")) {
+			fs.appendFileSync(envFile, "\nVITE_PORT=5174\n")
+		}
 	}
 
 	// Step 8: Create _agent/ working memory directory
@@ -116,6 +129,19 @@ export async function scaffold(
 				errors.push(`Package install failed: ${combined.slice(0, 500)}`)
 			}
 			skippedInstall = true
+		}
+	}
+
+	// Step 11: Initialize git repo with initial commit (unless skipped)
+	if (!opts?.skipGit) {
+		reporter?.log("build", "Initializing git repository...")
+		try {
+			const commitOutput = gitInit(projectDir, opts?.projectName)
+			reporter?.log("done", `Git initialized: ${commitOutput}`)
+		} catch (e) {
+			const msg = `Git init failed: ${e instanceof Error ? e.message : "unknown"}`
+			reporter?.log("error", msg)
+			errors.push(msg)
 		}
 	}
 
@@ -173,6 +199,9 @@ const ADDED_SCRIPTS: Record<string, string> = {
 	generate: "drizzle-kit generate",
 	migrate: "drizzle-kit migrate",
 	"db:push": "drizzle-kit push",
+	"dev:start": "nohup pnpm dev > /tmp/dev-server.log 2>&1 & echo $! > /tmp/dev-server.pid",
+	"dev:stop": "kill $(cat /tmp/dev-server.pid 2>/dev/null) 2>/dev/null; rm -f /tmp/dev-server.pid",
+	"dev:restart": "pnpm dev:stop && pnpm dev:start",
 	test: "vitest run",
 	"test:watch": "vitest",
 	"test:integration": "vitest run tests/integration",
@@ -202,13 +231,16 @@ function patchViteConfig(projectDir: string): void {
 
 	let content = fs.readFileSync(vitePath, "utf-8")
 
-	// Change port to 5174 so Caddy can proxy on 5173
-	content = content.replace(/port:\s*5173/, "port: 5174")
+	// Make port configurable via VITE_PORT env var (default 5174 for Caddy local mode,
+	// sandbox sets VITE_PORT=5173 so the Docker port binding works)
+	content = content.replace(/port:\s*5173/, "port: parseInt(process.env.VITE_PORT || '5174')")
 
-	// Bind to all interfaces so Caddy in Docker can reach the dev server
-	// via host.docker.internal
+	// Bind to all interfaces so Caddy/Docker can reach the dev server
 	if (!content.includes("host:")) {
-		content = content.replace(/port:\s*5174,?/, "port: 5174,\n\t\thost: true,")
+		content = content.replace(
+			/port:\s*parseInt\(process\.env\.VITE_PORT \|\| '5174'\),?/,
+			"port: parseInt(process.env.VITE_PORT || '5174'),\n\t\thost: true,",
+		)
 	}
 
 	// Add proxy for Electric shape API — works with both Caddy (external) and

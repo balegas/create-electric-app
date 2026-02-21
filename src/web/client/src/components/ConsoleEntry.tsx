@@ -1,4 +1,5 @@
 import type { ConsoleEntry as ConsoleEntryType } from "../lib/event-types"
+import { Markdown } from "./Markdown"
 
 const LEVEL_LABELS: Record<string, string> = {
 	plan: "[plan]",
@@ -55,15 +56,14 @@ export function ConsoleThinkingEntry({
 	duration: string | null
 }) {
 	return (
-		<details className="thinking-collapsible">
+		<details className="thinking-inline">
 			<summary>
-				<span className="arrow">&#9654;</span>
 				<span className="thinking-label">Thinking</span>
 				<span className="thinking-preview">{entry.text.slice(0, 100)}...</span>
 				<Duration value={duration} />
 			</summary>
 			<div className="thinking-body">
-				<pre>{entry.text}</pre>
+				<Markdown inline>{entry.text}</Markdown>
 			</div>
 		</details>
 	)
@@ -81,7 +81,7 @@ export function ConsoleTextEntry({
 	if (entry.text.length <= COLLAPSE_THRESHOLD) {
 		return (
 			<div className="assistant-text">
-				<span>{entry.text}</span>
+				<Markdown inline>{entry.text}</Markdown>
 				<Duration value={duration} />
 			</div>
 		)
@@ -90,12 +90,11 @@ export function ConsoleTextEntry({
 	return (
 		<details className="assistant-text-collapsible">
 			<summary>
-				<span className="arrow">&#9654;</span>
 				<span className="assistant-text-preview">{entry.text.slice(0, 120)}...</span>
 				<Duration value={duration} />
 			</summary>
 			<div className="assistant-text-body">
-				<pre>{entry.text}</pre>
+				<Markdown>{entry.text}</Markdown>
 			</div>
 		</details>
 	)

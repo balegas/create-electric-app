@@ -22,8 +22,20 @@ export type EngineEvent =
 	  }
 	| { type: "plan_ready"; plan: string; ts: string }
 	| { type: "continue_needed"; reason: "max_turns" | "max_budget"; ts: string }
+	| { type: "cost_update"; totalCostUsd: number; ts: string }
 	| { type: "phase_complete"; phase: string; success: boolean; errors: string[]; ts: string }
 	| { type: "session_complete"; success: boolean; ts: string }
+	| { type: "app_ready"; port?: number; ts: string }
+	| { type: "git_checkpoint"; commitHash: string; message: string; ts: string }
+	| {
+			type: "publish_prompt"
+			defaultRepoName: string
+			accounts: { login: string; type: "user" | "org" }[]
+			ts: string
+	  }
+	| { type: "checkpoint_prompt"; ts: string }
+	| { type: "infra_config_prompt"; projectName: string; ts: string }
+	| { type: "gate_resolved"; gate: string; summary?: string; ts: string }
 
 export type ConsoleEntry =
 	| { kind: "log"; level: LogLevel; message: string; ts: string }
@@ -42,8 +54,18 @@ export type ConsoleEntry =
 			kind: "gate"
 			event: Extract<
 				EngineEvent,
-				{ type: "clarification_needed" | "plan_ready" | "continue_needed" }
+				{
+					type:
+						| "clarification_needed"
+						| "plan_ready"
+						| "continue_needed"
+						| "publish_prompt"
+						| "checkpoint_prompt"
+						| "infra_config_prompt"
+				}
 			>
 			resolved: boolean
+			/** Short summary of the decision, shown when collapsed */
+			resolvedSummary?: string
 			ts: string
 	  }

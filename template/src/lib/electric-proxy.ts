@@ -1,6 +1,12 @@
 /**
  * Electric shape proxy helpers.
  * Used by API routes to forward shape requests to the Electric service.
+ *
+ * Supports both local Electric (Docker) and Electric Cloud.
+ * For Electric Cloud, set these environment variables:
+ *   ELECTRIC_URL=https://api.electric-sql.cloud
+ *   ELECTRIC_SOURCE_ID=<your-source-id>
+ *   ELECTRIC_SECRET=<your-secret>
  */
 
 export function prepareElectricUrl(
@@ -18,6 +24,12 @@ export function prepareElectricUrl(
 
 	// Set the table name
 	url.searchParams.set("table", tableName)
+
+	// Add Electric Cloud auth if configured (server-side only, never exposed to browser)
+	if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SECRET) {
+		url.searchParams.set("source_id", process.env.ELECTRIC_SOURCE_ID)
+		url.searchParams.set("secret", process.env.ELECTRIC_SECRET)
+	}
 
 	return url.toString()
 }

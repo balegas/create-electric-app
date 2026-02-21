@@ -3,13 +3,15 @@ import type { EngineEvent } from "./events.js"
 import type { OrchestratorCallbacks } from "./orchestrator.js"
 
 export interface HeadlessConfig {
-	command: "new" | "iterate"
+	command: "new" | "iterate" | "git"
 	description?: string
 	projectName?: string
 	baseDir?: string
 	projectDir?: string
 	request?: string
 	resumeSessionId?: string
+	initGit?: boolean
+	gitTask?: string
 }
 
 /**
@@ -59,6 +61,16 @@ class StdinReader {
 					return
 				}
 
+				// Check if this is a new command (iterate)
+				if (msg.command) {
+					const entry = this.pending.get("command")
+					if (entry) {
+						this.pending.delete("command")
+						entry.resolve(msg)
+					}
+					return
+				}
+
 				// Subsequent lines are gate responses
 				const gate = msg.gate as string | undefined
 				if (!gate) return
@@ -103,6 +115,11 @@ class StdinReader {
 		})
 	}
 
+	/** Wait for the next "command" line (used for iterate after initial run). */
+	waitForCommand(): Promise<HeadlessConfig> {
+		return this.waitFor<HeadlessConfig>("command")
+	}
+
 	close(): void {
 		this.rl.close()
 	}
@@ -119,6 +136,7 @@ class StdinReader {
  */
 export function createHeadlessAdapter(): {
 	readConfig: () => Promise<HeadlessConfig>
+	waitForCommand: () => Promise<HeadlessConfig>
 	callbacks: OrchestratorCallbacks
 	close: () => void
 } {
@@ -154,6 +172,7 @@ export function createHeadlessAdapter(): {
 
 	return {
 		readConfig: () => reader.readConfig(),
+		waitForCommand: () => reader.waitForCommand(),
 		callbacks,
 		close: () => reader.close(),
 	}

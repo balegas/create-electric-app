@@ -33,11 +33,11 @@ export async function runPlanner(
 				role: "user" as const,
 				content: `Create a detailed implementation plan for this app: "${appDescription}"
 
-Steps (exactly 3 tool calls, then output):
-1. list_playbooks — see what's available
-2. read_playbook("electric-quickstart")
-3. read_playbook("tanstack-db")
-4. Output the PLAN.md with complete Drizzle pgTable() definitions for ALL entities
+Steps:
+1. list_playbooks — discover available playbook skills and their descriptions
+2. read_playbook("electric-app-guardrails") — critical integration rules
+3. Read 1-2 more playbooks relevant to this app (based on what list_playbooks returned)
+4. Output the complete PLAN.md with Drizzle pgTable() definitions for ALL entities
 
 The plan must include read_playbook instructions in each phase so the coder reads the right playbook before coding that phase (see system prompt for format).`,
 			},
@@ -45,9 +45,9 @@ The plan must include read_playbook instructions in each phase so the coder read
 	}
 
 	const queryOptions: Record<string, unknown> = {
-		model: "claude-opus-4-6",
+		model: "claude-sonnet-4-6",
 		systemPrompt: plannerPrompt,
-		maxThinkingTokens: 10000,
+		maxThinkingTokens: 4096,
 		allowedTools: [
 			"WebSearch",
 			"mcp__electric-agent-tools__read_playbook",

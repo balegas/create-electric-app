@@ -1,0 +1,237 @@
+/* Gate prompts */
+.gate-prompt {
+	margin: 8px 0;
+	padding: 16px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--bg-surface);
+}
+
+.gate-prompt h3 {
+	font-family: var(--font-mono);
+	font-size: 14px;
+	font-weight: 600;
+	margin-bottom: 8px;
+	color: var(--brand-1);
+}
+
+.gate-prompt .gate-summary {
+	color: var(--text-muted);
+	font-size: 13px;
+	font-family: var(--font-mono);
+	margin-bottom: 12px;
+}
+
+/* Plan gate — unwrapped, inline with console */
+.gate-plan {
+	margin: 8px 0;
+}
+
+.gate-plan-body {
+	padding: 4px 0;
+}
+
+.gate-plan-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+	padding: 12px 0;
+	border-top: 1px solid var(--border);
+}
+
+/* Clarification gate */
+.gate-prompt .question {
+	margin-bottom: 8px;
+}
+
+.gate-prompt .question label {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 12px;
+	color: var(--text-muted);
+	margin-bottom: 4px;
+}
+
+.gate-prompt .question input,
+.gate-prompt .question select {
+	width: 100%;
+	padding: 6px 10px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	font-family: var(--font-mono);
+	font-size: 13px;
+}
+
+.gate-prompt .question input:focus,
+.gate-prompt .question textarea:focus,
+.gate-prompt .question select:focus {
+	outline: none;
+	border-color: var(--brand-2);
+}
+
+.gate-prompt .question textarea {
+	width: 100%;
+	padding: 6px 10px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	resize: vertical;
+}
+
+/* Gate action buttons */
+.gate-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.gate-btn {
+	padding: 6px 16px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s;
+}
+
+.gate-btn:hover {
+	background: var(--bg-hover);
+}
+
+.gate-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.gate-btn-primary {
+	background: transparent;
+	border-color: var(--brand-3);
+	color: var(--brand-1);
+	font-weight: 600;
+}
+
+.gate-btn-primary:hover {
+	background: var(--brand-2);
+	border-color: var(--brand-2);
+	color: #fff;
+}
+
+.gate-btn-danger {
+	border-color: var(--red);
+	color: var(--red);
+}
+
+.gate-btn-danger:hover {
+	background: rgba(248, 81, 73, 0.1);
+}
+
+/* Continue gate — compact banner */
+.gate-continue {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 4px 0;
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--bg-surface);
+	font-family: var(--font-mono);
+	font-size: 13px;
+}
+
+.gate-continue-text {
+	color: var(--text-muted);
+	flex: 1;
+}
+
+.gate-continue .gate-btn {
+	padding: 4px 12px;
+	font-size: 12px;
+}
+
+/* Radio group for publish visibility etc. */
+.gate-radio-group {
+	display: flex;
+	gap: 16px;
+	margin-top: 4px;
+}
+
+.gate-radio {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--text);
+	cursor: pointer;
+	line-height: 1;
+}
+
+.gate-radio input[type="radio"] {
+	width: auto;
+	margin: 0;
+	vertical-align: middle;
+	accent-color: var(--brand-2);
+}
+
+/* Resolved gate — expandable details */
+.gate-resolved-details {
+	margin: 0;
+	padding: 0;
+}
+
+.gate-resolved-details summary {
+	display: flex;
+	align-items: center;
+	gap: 0;
+	padding: 3px 0;
+	cursor: pointer;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	user-select: none;
+	list-style: none;
+	line-height: 1.6;
+}
+
+.gate-resolved-details summary::-webkit-details-marker {
+	display: none;
+}
+
+.gate-resolved-details summary:hover .gate-resolved-label {
+	text-decoration: underline;
+	color: var(--text-muted);
+}
+
+.gate-resolved-label {
+	color: var(--text-subtle);
+}
+
+.gate-resolved-details summary .prefix {
+	font-weight: 600;
+	margin-right: 6px;
+}
+
+.gate-resolved-body {
+	padding: 4px 0 4px 16px;
+	border-left: 2px solid var(--border);
+	margin: 2px 0 4px 6px;
+}
+
+.gate-resolved-body pre {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+}

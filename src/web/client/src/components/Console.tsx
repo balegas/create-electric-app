@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
 import {
 	ConsoleLogEntry,
@@ -12,7 +12,7 @@ import { ToolExecution } from "./ToolExecution"
 interface ConsoleProps {
 	sessionId: string
 	entries: ConsoleEntry[]
-	onGateResolved: (index: number) => void
+	onGateResolved: (index: number, summary?: string) => void
 }
 
 function getEntryTs(entry: ConsoleEntry): string | undefined {
@@ -30,14 +30,30 @@ function formatDuration(ms: number): string {
 }
 
 export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
+	const containerRef = useRef<HTMLDivElement>(null)
 	const bottomRef = useRef<HTMLDivElement>(null)
+	const [isAtBottom, setIsAtBottom] = useState(true)
 	const entriesLength = entries.length
 
-	useEffect(() => {
+	const scrollToBottom = useCallback(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-	}, [entriesLength])
+	}, [])
 
-	// Pre-compute durations: time since the previous entry with a timestamp
+	const handleScroll = useCallback(() => {
+		const el = containerRef.current
+		if (!el) return
+		const threshold = 80
+		const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+		setIsAtBottom(atBottom)
+	}, [])
+
+	useEffect(() => {
+		if (isAtBottom) {
+			bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+		}
+	}, [entriesLength, isAtBottom])
+
+	// Pre-compute durations
 	const durations: (string | null)[] = []
 	let prevTs: string | null = null
 	for (const entry of entries) {
@@ -54,7 +70,7 @@ export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
 	}
 
 	return (
-		<div className="console">
+		<div className="console" ref={containerRef} onScroll={handleScroll}>
 			{entries.map((entry, i) => {
 				const duration = durations[i]
 				switch (entry.kind) {
@@ -90,6 +106,11 @@ export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
 				}
 			})}
 			<div ref={bottomRef} />
+			{!isAtBottom && (
+				<button type="button" className="jump-to-bottom" onClick={scrollToBottom}>
+					Jump to latest
+				</button>
+			)}
 		</div>
 	)
 }

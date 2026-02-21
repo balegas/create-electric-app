@@ -185,6 +185,43 @@ collection.insert/update/delete ──► validates ALL fields client-side
 Returns { txid } for optimistic update correlation
 ```
 
+## GitHub Integration
+
+Every generated project is initialized as a local git repo automatically. GitHub integration is optional — you can checkpoint locally without ever connecting to GitHub.
+
+### Flows
+
+**New project (no GitHub):**
+1. Describe your app → agent scaffolds + generates code → local git repo created with initial commit
+2. **Checkpoint** — commit all current changes locally (works without GitHub)
+3. **Publish** — prompts for a repo name and visibility (public/private), creates a new GitHub repo on your account, and pushes the code (requires GitHub PAT)
+4. **Open PR** — creates a pull request from the feature branch (appears after publishing)
+
+**Resume from GitHub:**
+1. From the home page, click **Resume from GitHub** → pick a repo from your account
+2. The repo is cloned locally, and if a `PLAN.md` is detected, the agent enters iterate mode with context
+
+### GitHub Personal Access Token (PAT)
+
+A **classic** GitHub PAT is required for publish, PR, resume, and repo listing. Checkpoint (local commit) works without it.
+
+**Required scopes:**
+- **`repo`** — create repos, push code, create PRs
+- **`read:user`** — verify token and read your GitHub username
+
+Create a token at: https://github.com/settings/tokens/new?scopes=repo,read:user
+
+Enter the token in the web UI **Settings** panel under **GitHub → Personal Access Token**. The token is validated on save via `gh auth login`.
+
+### Git Operations
+
+| Action | What it does | Requires GitHub PAT? |
+|--------|-------------|---------------------|
+| **Checkpoint** | `git add -A` + `git commit` with auto-generated or custom message | No |
+| **Publish** | Creates a GitHub repo via `gh repo create`, pushes on a feature branch | Yes |
+| **Open PR** | Pushes latest commits and creates a PR via `gh pr create` | Yes |
+| **Resume from GitHub** | Clones a repo via `gh repo clone`, creates a new session | Yes |
+
 ## Guardrail Hooks
 
 The coder agent runs with guardrail hooks that catch common mistakes before they reach the codebase:
@@ -341,6 +378,7 @@ src/
 │   ├── server.ts             # MCP tool server wrapper
 │   ├── build.ts              # Build tool (pnpm build + check + test)
 │   └── playbook.ts           # Playbook reading tools
+├── git/                      # Git + GitHub CLI wrappers (checkpoint, publish, PR, clone)
 ├── hooks/                    # Agent SDK guardrail hooks (6 hooks)
 ├── scaffold/                 # KPB clone + template overlay + dep merge
 ├── working-memory/           # Session state + error log persistence
@@ -376,6 +414,7 @@ template/                     # Files overlaid onto scaffold
 - Node.js >= 20
 - Docker (for generated projects and sandbox mode)
 - `ANTHROPIC_API_KEY` environment variable, or `claude login` on macOS
+- [GitHub CLI (`gh`)](https://cli.github.com/) — required for GitHub integration (publish, PR, resume)
 
 ## Stack
 

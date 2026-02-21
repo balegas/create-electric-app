@@ -1,4 +1,5 @@
 import { startStreamServer, stopStreamServer } from "../web/infra.js"
+import { DockerSandboxProvider } from "../web/sandbox/index.js"
 import { startWebServer } from "../web/server.js"
 
 export async function serveCommand(opts: {
@@ -6,17 +7,16 @@ export async function serveCommand(opts: {
 	streamsPort?: number
 	dataDir?: string
 	open?: boolean
-	sandbox?: boolean
 }): Promise<void> {
 	const port = opts.port ?? 4400
 	const streamsPort = opts.streamsPort ?? 4437
 	const dataDir = opts.dataDir ?? ".electric-agent"
-	const sandbox = opts.sandbox ?? false
 
 	// Start durable streams server
 	await startStreamServer({ port: streamsPort, dataDir })
 
-	// Start web API + static file server
+	// Start web API + static file server with Docker sandbox
+	const sandbox = new DockerSandboxProvider()
 	await startWebServer({ port, streamsPort, dataDir, sandbox })
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
