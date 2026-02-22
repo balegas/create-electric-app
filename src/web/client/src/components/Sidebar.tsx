@@ -47,11 +47,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 	return (
 		<aside className="sidebar">
 			<div className="sidebar-header">
-				<svg
-					className="sidebar-icon"
-					viewBox="0 0 192 192"
-					aria-label="Electric"
-				>
+				<svg className="sidebar-icon" viewBox="0 0 192 192" aria-label="Electric">
 					<title>Electric</title>
 					<path
 						d="M106.992 16.1244C107.711 15.4029 108.683 15 109.692 15H170L84.0082 101.089C83.2888 101.811 82.3171 102.213 81.3081 102.213H21L106.992 16.1244Z"

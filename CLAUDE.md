@@ -43,10 +43,13 @@ npm run push:sandbox:daytona     # build linux/amd64 + push to Daytona + create 
 
 Before committing, always run:
 
-1. `npx tsc --noEmit` — type-check passes
-2. `npm run check` — Biome lint + format passes (or `npm run check:fix` to auto-fix)
-3. `npm run build` — full build succeeds (TypeScript + Vite)
-4. `npm test` — tests pass
+1. `npm run check:fix` — auto-fix Biome lint + format issues (covers all files under `src/`, including `src/web/client/`)
+2. `npm run check` — verify no remaining lint or format errors (this is what CI runs)
+3. `npx tsc --noEmit` — type-check passes
+4. `npm run build` — full build succeeds (TypeScript + Vite)
+5. `npm test` — tests pass
+
+**Important**: `npm run check` / `check:fix` runs Biome on **all** of `src/`, including the web client (`src/web/client/**`). CI will fail if any file has formatting or lint issues, so always run `check:fix` before committing.
 
 ## Architecture
 
