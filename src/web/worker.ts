@@ -30,15 +30,9 @@ interface Env {
 	SANDBOX_SNAPSHOT: string
 	// Legacy proxy fallback
 	API_BACKEND_URL: string
-	// NOTE: ANTHROPIC_API_KEY and GH_TOKEN are NOT in Env.
-	// They are user-provided at runtime via the Settings UI
-	// and stored in KV ("settings" key). Never deploy them as secrets.
-}
-
-/** User-provided credentials stored in KV, never in Env/secrets. */
-interface UserSettings {
-	anthropicApiKey?: string
-	ghToken?: string
+	// NOTE: ANTHROPIC_API_KEY and GH_TOKEN are NOT here.
+	// Users provide their own credentials — those flow directly
+	// into the sandbox as env vars, never through the Worker.
 }
 
 interface SessionInfo {
@@ -182,21 +176,6 @@ async function kvListSessions(kv: KVNamespace): Promise<SessionInfo[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers — KV user settings (API keys provided at runtime, NOT deployed)
-// ---------------------------------------------------------------------------
-
-const SETTINGS_KEY = "user:settings"
-
-async function kvGetSettings(kv: KVNamespace): Promise<UserSettings> {
-	const raw = await kv.get(SETTINGS_KEY)
-	return raw ? (JSON.parse(raw) as UserSettings) : {}
-}
-
-async function kvPutSettings(kv: KVNamespace, settings: UserSettings): Promise<void> {
-	await kv.put(SETTINGS_KEY, JSON.stringify(settings))
-}
-
-// ---------------------------------------------------------------------------
 // Helpers — simple project name derivation (no LLM call)
 // ---------------------------------------------------------------------------
 
@@ -280,123 +259,6 @@ async function provisionElectricResources(): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Helpers — GitHub API (pure fetch, Worker-safe)
-// ---------------------------------------------------------------------------
-
-interface GhAccount {
-	login: string
-	type: "user" | "org"
-}
-
-interface GhRepo {
-	nameWithOwner: string
-	url: string
-	updatedAt: string
-}
-
-interface GhBranch {
-	name: string
-	isDefault: boolean
-}
-
-async function ghApi(path: string, token: string, opts?: RequestInit): Promise<Response> {
-	return fetch(`https://api.github.com${path}`, {
-		...opts,
-		headers: {
-			Authorization: `Bearer ${token}`,
-			Accept: "application/vnd.github+json",
-			"User-Agent": "create-electric-app",
-			...(opts?.headers ?? {}),
-		},
-	})
-}
-
-async function ghListAccounts(token: string): Promise<GhAccount[]> {
-	const accounts: GhAccount[] = []
-	try {
-		const resp = await ghApi("/user", token)
-		if (resp.ok) {
-			const user = (await resp.json()) as { login: string }
-			accounts.push({ login: user.login, type: "user" })
-		}
-	} catch {
-		// ignore
-	}
-	try {
-		const resp = await ghApi("/user/orgs", token)
-		if (resp.ok) {
-			const orgs = (await resp.json()) as { login: string }[]
-			for (const org of orgs) {
-				accounts.push({ login: org.login, type: "org" })
-			}
-		}
-	} catch {
-		// ignore
-	}
-	return accounts
-}
-
-async function ghListRepos(token: string, limit = 50): Promise<GhRepo[]> {
-	try {
-		const resp = await ghApi(
-			`/user/repos?sort=updated&per_page=${limit}&affiliation=owner,collaborator,organization_member`,
-			token,
-		)
-		if (!resp.ok) return []
-		const repos = (await resp.json()) as {
-			full_name: string
-			html_url: string
-			updated_at: string
-		}[]
-		return repos.map((r) => ({
-			nameWithOwner: r.full_name,
-			url: r.html_url,
-			updatedAt: r.updated_at,
-		}))
-	} catch {
-		return []
-	}
-}
-
-async function ghListBranches(token: string, repoFullName: string): Promise<GhBranch[]> {
-	try {
-		const [repoResp, branchResp] = await Promise.all([
-			ghApi(`/repos/${repoFullName}`, token),
-			ghApi(`/repos/${repoFullName}/branches?per_page=100`, token),
-		])
-		const defaultBranch = repoResp.ok
-			? ((await repoResp.json()) as { default_branch: string }).default_branch
-			: "main"
-		if (!branchResp.ok) return []
-		const branches = (await branchResp.json()) as { name: string }[]
-		return branches.map((b) => ({
-			name: b.name,
-			isDefault: b.name === defaultBranch,
-		}))
-	} catch {
-		return []
-	}
-}
-
-async function ghValidateToken(
-	token: string,
-): Promise<{ valid: boolean; username?: string; error?: string }> {
-	try {
-		const resp = await ghApi("/user", token)
-		if (!resp.ok) {
-			return { valid: false, error: `GitHub API: ${resp.status}` }
-		}
-		const user = (await resp.json()) as { login: string }
-		return { valid: true, username: user.login }
-	} catch (e) {
-		return {
-			valid: false,
-			error: e instanceof Error ? e.message : "Validation failed",
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Helpers — git op detection
 // ---------------------------------------------------------------------------
 
@@ -463,39 +325,17 @@ const app = new Hono<{ Bindings: Env }>()
 app.use("*", cors({ origin: "*" }))
 
 // --- Settings ---
-// API keys are user-provided at runtime and stored in KV.
-// They are NEVER deployed as CF secrets or Env bindings.
+// The Worker does NOT handle user credentials (ANTHROPIC_API_KEY, GH_TOKEN).
+// Users provide their own — those flow directly into the sandbox as env vars.
 
-app.get("/api/settings", async (c) => {
-	const settings = await kvGetSettings(c.env.SESSIONS)
-	return c.json({
-		hasApiKey: !!settings.anthropicApiKey,
-		hasGhToken: !!settings.ghToken,
-	})
+app.get("/api/settings", (c) => {
+	// Credentials are user-provided and flow into the sandbox, not the Worker.
+	// Always report false — the client Settings UI is not used in Worker mode.
+	return c.json({ hasApiKey: false, hasGhToken: false })
 })
 
-app.put("/api/settings", async (c) => {
-	const body = (await c.req.json()) as {
-		anthropicApiKey?: string
-		githubPat?: string
-	}
-	const settings = await kvGetSettings(c.env.SESSIONS)
-
-	if (body.anthropicApiKey) {
-		settings.anthropicApiKey = body.anthropicApiKey
-	}
-
-	if (body.githubPat) {
-		const result = await ghValidateToken(body.githubPat)
-		if (!result.valid) {
-			return c.json({ error: result.error || "Invalid GitHub token" }, 400)
-		}
-		settings.ghToken = body.githubPat
-		await kvPutSettings(c.env.SESSIONS, settings)
-		return c.json({ ok: true, ghUsername: result.username })
-	}
-
-	await kvPutSettings(c.env.SESSIONS, settings)
+app.put("/api/settings", (c) => {
+	// No-op: credentials flow into the sandbox, not the Worker.
 	return c.json({ ok: true })
 })
 
@@ -573,18 +413,11 @@ app.post("/api/sessions", async (c) => {
 		ts: ts(),
 	})
 
-	// Gather GitHub accounts for the setup gate (token from KV, not Env)
-	let ghAccounts: GhAccount[] = []
-	const settings = await kvGetSettings(c.env.SESSIONS)
-	if (settings.ghToken) {
-		ghAccounts = await ghListAccounts(settings.ghToken)
-	}
-
-	// Emit the infra config gate
+	// Emit the infra config gate (no GH accounts — credentials are user-provided in sandbox)
 	await dsAppend(conn, {
 		type: "infra_config_prompt",
 		projectName,
-		ghAccounts,
+		ghAccounts: [],
 		ts: ts(),
 	})
 
@@ -853,28 +686,11 @@ app.get("/api/sessions/:id/files", async (c) => {
 
 app.get("/api/sessions/:id/file-content", () => sandboxNotImplemented())
 
-app.get("/api/github/accounts", async (c) => {
-	const { ghToken } = await kvGetSettings(c.env.SESSIONS)
-	if (!ghToken) return c.json({ accounts: [] })
-	const accounts = await ghListAccounts(ghToken)
-	return c.json({ accounts })
-})
-
-app.get("/api/github/repos", async (c) => {
-	const { ghToken } = await kvGetSettings(c.env.SESSIONS)
-	if (!ghToken) return c.json({ repos: [] })
-	const repos = await ghListRepos(ghToken)
-	return c.json({ repos })
-})
-
-app.get("/api/github/repos/:owner/:repo/branches", async (c) => {
-	const { ghToken } = await kvGetSettings(c.env.SESSIONS)
-	if (!ghToken) return c.json({ branches: [] })
-	const owner = c.req.param("owner")
-	const repo = c.req.param("repo")
-	const branches = await ghListBranches(ghToken, `${owner}/${repo}`)
-	return c.json({ branches })
-})
+// GitHub routes return empty — credentials are user-provided and flow into the sandbox.
+// The sandbox handles all GitHub operations (commit, push, PR) directly.
+app.get("/api/github/accounts", (c) => c.json({ accounts: [] }))
+app.get("/api/github/repos", (c) => c.json({ repos: [] }))
+app.get("/api/github/repos/:owner/:repo/branches", (c) => c.json({ branches: [] }))
 
 // --- Resume from repo (sandbox-dependent) ---
 
