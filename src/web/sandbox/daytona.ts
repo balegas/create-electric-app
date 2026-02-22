@@ -81,7 +81,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			envVars.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN
 		}
 
-		const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN
+		const ghToken = opts?.ghToken || process.env.GH_TOKEN || process.env.GITHUB_TOKEN
 		if (ghToken) {
 			envVars.GH_TOKEN = ghToken
 		}
@@ -347,7 +347,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 	async createFromRepo(
 		sessionId: string,
 		repoUrl: string,
-		opts?: { branch?: string; apiKey?: string },
+		opts?: { branch?: string; apiKey?: string; ghToken?: string },
 	): Promise<SandboxHandle> {
 		const repoName =
 			repoUrl
@@ -357,6 +357,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 
 		const handle = await this.create(sessionId, {
 			apiKey: opts?.apiKey,
+			ghToken: opts?.ghToken,
 			projectName: repoName,
 		})
 		const sandbox = this.getSandbox(handle)

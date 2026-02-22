@@ -80,6 +80,7 @@ function generateComposeFile(
 	infra: InfraConfig = { mode: "local" },
 	streamEnv: Record<string, string> = {},
 	deferAgentStart = false,
+	ghToken?: string,
 ): string {
 	const isCloud = infra.mode === "cloud"
 
@@ -96,9 +97,9 @@ function generateComposeFile(
 	if (auth) {
 		agentEnv.push(`${auth[0]}=${auth[1]}`)
 	}
-	const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN
-	if (ghToken) {
-		agentEnv.push(`GH_TOKEN=${ghToken}`)
+	const resolvedGhToken = ghToken || process.env.GH_TOKEN || process.env.GITHUB_TOKEN
+	if (resolvedGhToken) {
+		agentEnv.push(`GH_TOKEN=${resolvedGhToken}`)
 	}
 
 	// Add stream env vars for hosted Durable Streams communication
@@ -252,7 +253,14 @@ export class DockerSandboxProvider implements SandboxProvider {
 		const auth = resolveAuthEnv(opts)
 		fs.writeFileSync(
 			composePath,
-			generateComposeFile(port, auth, infra, opts?.streamEnv ?? {}, opts?.deferAgentStart),
+			generateComposeFile(
+				port,
+				auth,
+				infra,
+				opts?.streamEnv ?? {},
+				opts?.deferAgentStart,
+				opts?.ghToken,
+			),
 			"utf-8",
 		)
 		console.log(`[docker] Compose file written: ${composePath}`)
@@ -575,7 +583,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 	async createFromRepo(
 		sessionId: string,
 		repoUrl: string,
-		opts?: { branch?: string; apiKey?: string },
+		opts?: { branch?: string; apiKey?: string; ghToken?: string },
 	): Promise<SandboxHandle> {
 		const repoName =
 			repoUrl
@@ -585,6 +593,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 
 		const handle = await this.create(sessionId, {
 			apiKey: opts?.apiKey,
+			ghToken: opts?.ghToken,
 			projectName: repoName,
 		})
 		const state = this.getState(handle)

@@ -1,0 +1,126 @@
+name: Deploy Web UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/web/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/deploy-web.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/web/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/deploy-web.yml"
+
+concurrency:
+  group: deploy-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build:web
+
+      - name: Create Cloudflare Pages project (if needed)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create create-electric-app --production-branch=main
+        continue-on-error: true
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist/web/client --project-name=create-electric-app --branch=${{ github.head_ref || 'main' }}
+
+      - name: Smoke-test deployment health
+        run: |
+          URL="${{ steps.deploy.outputs.deployment-url }}"
+          if [ -z "$URL" ]; then
+            echo "No deployment URL — skipping health check"
+            exit 0
+          fi
+
+          echo "Checking $URL/api/health ..."
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /tmp/health.json -w "%{http_code}" "$URL/api/health") || true
+            echo "  Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "503" ]; then
+              cat /tmp/health.json
+              echo ""
+              if [ "$STATUS" = "200" ]; then
+                echo "Health check passed"
+                exit 0
+              else
+                echo "Health check returned 503 — some bindings are misconfigured"
+                cat /tmp/health.json
+                exit 1
+              fi
+            fi
+            sleep 5
+          done
+          echo "Health endpoint unreachable after 5 attempts"
+          exit 1
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployUrl = '${{ steps.deploy.outputs.deployment-url }}';
+            if (!deployUrl) return;
+
+            const body = `### Cloudflare Pages Preview\n\n` +
+              `**Preview URL:** ${deployUrl}\n` +
+              `**Worker health:** ${deployUrl}/api/health`;
+
+            // Find existing bot comment to update
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(
+              (c) => c.user.type === 'Bot' && c.body.includes('Cloudflare Pages Preview')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

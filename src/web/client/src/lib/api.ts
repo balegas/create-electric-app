@@ -1,4 +1,16 @@
+import { getApiKey, getGhToken } from "./credentials"
+
 const API_BASE = "/api"
+
+/** Return user-provided credentials (if set) for inclusion in request bodies. */
+function credentialFields(): { apiKey?: string; ghToken?: string } {
+	const fields: { apiKey?: string; ghToken?: string } = {}
+	const apiKey = getApiKey()
+	const ghToken = getGhToken()
+	if (apiKey) fields.apiKey = apiKey
+	if (ghToken) fields.ghToken = ghToken
+	return fields
+}
 
 async function request<T>(path: string, opts?: { method?: string; body?: unknown }): Promise<T> {
 	const res = await fetch(`${API_BASE}${path}`, {
@@ -69,7 +81,7 @@ export function getSession(id: string) {
 export function createSession(description: string, name?: string) {
 	return request<{ sessionId: string; streamUrl: string; appPort?: number }>("/sessions", {
 		method: "POST",
-		body: { description, name },
+		body: { description, name, ...credentialFields() },
 	})
 }
 
@@ -132,19 +144,6 @@ export function provisionElectric() {
 	return request<ProvisionResult>("/provision-electric", { method: "POST" })
 }
 
-// --- Settings ---
-
-export function getSettings() {
-	return request<{ hasApiKey: boolean; hasGhToken: boolean }>("/settings")
-}
-
-export function updateSettings(settings: { anthropicApiKey?: string; githubPat?: string }) {
-	return request<{ ok: boolean; ghUsername?: string }>("/settings", {
-		method: "PUT",
-		body: settings,
-	})
-}
-
 // --- Git/GitHub ---
 
 export function getGitStatus(sessionId: string) {
@@ -162,6 +161,6 @@ export function listBranches(repoFullName: string) {
 export function resumeFromGithub(repoUrl: string, branch?: string) {
 	return request<{ sessionId: string; streamUrl: string; hasPlan: boolean }>("/sessions/resume", {
 		method: "POST",
-		body: { repoUrl, branch },
+		body: { repoUrl, branch, ...credentialFields() },
 	})
 }

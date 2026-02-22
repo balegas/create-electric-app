@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
-import { deleteSession, getSettings, listSessions, type SessionInfo } from "../lib/api"
+import { deleteSession, listSessions, type SessionInfo } from "../lib/api"
+import { hasApiKey as checkHasApiKey, hasGhToken as checkHasGhToken } from "../lib/credentials"
 
 interface AppContextValue {
 	sessions: SessionInfo[]
@@ -73,13 +74,11 @@ export function AppShell() {
 	}, [])
 
 	const refreshSettings = useCallback(() => {
-		getSettings()
-			.then((data) => {
-				setHasApiKey(data.hasApiKey)
-				setHasGhToken(data.hasGhToken)
-				if (!data.hasApiKey) setShowSettings(true)
-			})
-			.catch(() => {})
+		const apiKey = checkHasApiKey()
+		const ghToken = checkHasGhToken()
+		setHasApiKey(apiKey)
+		setHasGhToken(ghToken)
+		if (!apiKey) setShowSettings(true)
 	}, [])
 
 	useEffect(() => {

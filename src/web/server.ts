@@ -1,7 +1,5 @@
-import { execFileSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
-import { homedir } from "node:os"
 import path from "node:path"
 import { DurableStream } from "@durable-streams/client"
 import { serve } from "@hono/node-server"
@@ -11,13 +9,7 @@ import { cors } from "hono/cors"
 import { inferProjectName } from "../agents/clarifier.js"
 import { ts } from "../engine/events.js"
 import { resolveProjectDir } from "../engine/orchestrator.js"
-import {
-	ghListAccounts,
-	ghListBranches,
-	ghListRepos,
-	isGhAuthenticated,
-	validateGhToken,
-} from "../git/index.js"
+import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "../git/index.js"
 import { DaytonaSessionBridge } from "./bridge/daytona.js"
 import { DockerStdioBridge } from "./bridge/docker-stdio.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
@@ -58,18 +50,6 @@ interface ServerConfig {
 
 /** Active session bridges — one per running session */
 const bridges = new Map<string, SessionBridge>()
-
-/** Check if the Claude CLI is installed and authenticated (OAuth) */
-function hasClaudeCliAuth(): boolean {
-	try {
-		const configDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(homedir(), ".claude")
-		if (!fs.existsSync(configDir)) return false
-		execFileSync("claude", ["--version"], { stdio: "ignore", timeout: 3000 })
-		return true
-	} catch {
-		return false
-	}
-}
 
 function parseRepoNameFromUrl(url: string | null): string | null {
 	if (!url) return null
@@ -183,32 +163,6 @@ export function createApp(config: ServerConfig) {
 
 	// --- API Routes ---
 
-	// Settings
-	app.get("/api/settings", (c) => {
-		const hasApiKey = !!process.env.ANTHROPIC_API_KEY || hasClaudeCliAuth()
-		if (!process.env.GH_TOKEN && process.env.GITHUB_TOKEN) {
-			process.env.GH_TOKEN = process.env.GITHUB_TOKEN
-		}
-		const hasGhToken = !!process.env.GH_TOKEN || isGhAuthenticated()
-		return c.json({ hasApiKey, hasGhToken })
-	})
-
-	app.put("/api/settings", async (c) => {
-		const body = (await c.req.json()) as { anthropicApiKey?: string; githubPat?: string }
-		if (body.anthropicApiKey) {
-			process.env.ANTHROPIC_API_KEY = body.anthropicApiKey
-		}
-		if (body.githubPat) {
-			const result = validateGhToken(body.githubPat)
-			if (!result.valid) {
-				return c.json({ error: result.error || "Invalid GitHub token" }, 400)
-			}
-			process.env.GH_TOKEN = body.githubPat
-			return c.json({ ok: true, ghUsername: result.username })
-		}
-		return c.json({ ok: true })
-	})
-
 	// Provision Electric Cloud resources via the Claim API
 	app.post("/api/provision-electric", async (c) => {
 		try {
@@ -247,6 +201,8 @@ export function createApp(config: ServerConfig) {
 			description: string
 			name?: string
 			baseDir?: string
+			apiKey?: string
+			ghToken?: string
 		}
 
 		if (!body.description) {
@@ -382,6 +338,8 @@ export function createApp(config: ServerConfig) {
 				infra,
 				streamEnv,
 				deferAgentStart: config.bridgeMode === "stdio",
+				apiKey: body.apiKey,
+				ghToken: body.ghToken,
 			})
 			console.log(
 				`[session:${sessionId}] Sandbox created: projectDir=${handle.projectDir} port=${handle.port} previewUrl=${handle.previewUrl ?? "none"}`,
@@ -968,6 +926,8 @@ export function createApp(config: ServerConfig) {
 		const body = (await c.req.json()) as {
 			repoUrl: string
 			branch?: string
+			apiKey?: string
+			ghToken?: string
 		}
 		if (!body.repoUrl) {
 			return c.json({ error: "repoUrl is required" }, 400)
@@ -995,6 +955,8 @@ export function createApp(config: ServerConfig) {
 		try {
 			const handle = await config.sandbox.createFromRepo(sessionId, body.repoUrl, {
 				branch: body.branch,
+				apiKey: body.apiKey,
+				ghToken: body.ghToken,
 			})
 
 			// Get git state from cloned repo inside the container

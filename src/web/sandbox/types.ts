@@ -53,6 +53,7 @@ export type InfraConfig =
 
 export interface CreateSandboxOpts {
 	apiKey?: string
+	ghToken?: string
 	projectName?: string
 	infra?: InfraConfig
 	/** Stream env vars to inject into the sandbox for --stream mode */
@@ -107,6 +108,6 @@ export interface SandboxProvider {
 	createFromRepo(
 		sessionId: string,
 		repoUrl: string,
-		opts?: { branch?: string; apiKey?: string },
+		opts?: { branch?: string; apiKey?: string; ghToken?: string },
 	): Promise<SandboxHandle>
 }

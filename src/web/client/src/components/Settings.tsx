@@ -1,6 +1,6 @@
 import { useCallback, useId, useState } from "react"
 import { createPortal } from "react-dom"
-import { updateSettings } from "../lib/api"
+import { setApiKey as saveApiKey, setGhToken as saveGhToken } from "../lib/credentials"
 
 interface SettingsProps {
 	hasApiKey: boolean
@@ -15,40 +15,20 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 	const ghInputId = useId()
 	const [apiKey, setApiKey] = useState("")
 	const [ghPat, setGhPat] = useState("")
-	const [saving, setSaving] = useState(false)
-	const [savingGh, setSavingGh] = useState(false)
-	const [error, setError] = useState<string | null>(null)
-	const [ghError, setGhError] = useState<string | null>(null)
 	const [copied, setCopied] = useState(false)
 
-	const handleSaveApiKey = useCallback(async () => {
+	const handleSaveApiKey = useCallback(() => {
 		if (!apiKey.trim()) return
-		setSaving(true)
-		setError(null)
-		try {
-			await updateSettings({ anthropicApiKey: apiKey.trim() })
-			setApiKey("")
-			onKeySaved()
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to save")
-		} finally {
-			setSaving(false)
-		}
+		saveApiKey(apiKey.trim())
+		setApiKey("")
+		onKeySaved()
 	}, [apiKey, onKeySaved])
 
-	const handleSaveGhPat = useCallback(async () => {
+	const handleSaveGhPat = useCallback(() => {
 		if (!ghPat.trim()) return
-		setSavingGh(true)
-		setGhError(null)
-		try {
-			await updateSettings({ githubPat: ghPat.trim() })
-			setGhPat("")
-			onKeySaved()
-		} catch (err) {
-			setGhError(err instanceof Error ? err.message : "Failed to validate token")
-		} finally {
-			setSavingGh(false)
-		}
+		saveGhToken(ghPat.trim())
+		setGhPat("")
+		onKeySaved()
 	}, [ghPat, onKeySaved])
 
 	const handleKeyDown = useCallback(
@@ -100,18 +80,16 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 							onChange={(e) => setApiKey(e.target.value)}
 							onKeyDown={handleKeyDown}
 							placeholder={hasApiKey ? "Enter new key to override..." : "sk-ant-..."}
-							disabled={saving}
 						/>
 						<button
 							type="button"
 							onClick={handleSaveApiKey}
-							disabled={saving || !apiKey.trim()}
+							disabled={!apiKey.trim()}
 							className="primary"
 						>
-							{saving ? "Saving..." : "Save"}
+							Save
 						</button>
 					</div>
-					{error && <div className="settings-error">{error}</div>}
 				</div>
 
 				{/* GitHub PAT */}
@@ -134,15 +112,14 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 							onChange={(e) => setGhPat(e.target.value)}
 							onKeyDown={handleGhKeyDown}
 							placeholder={hasGhToken ? "Enter new token to override..." : "ghp_..."}
-							disabled={savingGh}
 						/>
 						<button
 							type="button"
 							onClick={handleSaveGhPat}
-							disabled={savingGh || !ghPat.trim()}
+							disabled={!ghPat.trim()}
 							className="primary"
 						>
-							{savingGh ? "Validating..." : "Save"}
+							Save
 						</button>
 					</div>
 					<div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
@@ -156,7 +133,6 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 							github.com/settings/tokens
 						</a>
 					</div>
-					{ghError && <div className="settings-error">{ghError}</div>}
 				</div>
 
 				{onCopyLog && (

@@ -1,0 +1,29 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "create-electric-app"
+compatibility_date = "2024-12-30"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist/web/client"
+
+# KV namespace for session storage + user-provided settings
+# Create with: wrangler kv namespace create SESSIONS
+# Then replace the id below
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "SESSIONS_KV_NAMESPACE_ID"       # replace after `wrangler kv namespace create SESSIONS`
+
+# Server-infra secrets (safe to deploy — not user credentials):
+#   wrangler pages secret put DS_URL
+#   wrangler pages secret put DS_SERVICE_ID
+#   wrangler pages secret put DS_SECRET
+#   wrangler pages secret put DAYTONA_API_KEY
+#   wrangler pages secret put DAYTONA_API_URL
+#   wrangler pages secret put DAYTONA_TARGET
+#   wrangler pages secret put SANDBOX_SNAPSHOT
+#
+# IMPORTANT: Do NOT deploy ANTHROPIC_API_KEY or GH_TOKEN as secrets.
+# These are user-provided at runtime via the Settings UI and stored
+# in KV. Deploying them as CF secrets would leak internal credentials
+# to every request.
+
+[vars]
+API_BACKEND_URL = "https://electric-agent.fly.dev"
