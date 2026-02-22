@@ -79,6 +79,7 @@ function generateComposeFile(
 	auth: [string, string] | null,
 	infra: InfraConfig = { mode: "local" },
 	streamEnv: Record<string, string> = {},
+	deferAgentStart = false,
 ): string {
 	const isCloud = infra.mode === "cloud"
 
@@ -107,6 +108,12 @@ function generateComposeFile(
 
 	const agentEnvYaml = agentEnv.map((e) => `      - ${e}`).join("\n")
 
+	// When deferAgentStart is true, keep the container alive without starting the agent.
+	// The bridge will start the agent via `docker exec -i`.
+	const agentCommand = deferAgentStart
+		? '["tail", "-f", "/dev/null"]'
+		: '["electric-agent", "headless"]'
+
 	if (isCloud) {
 		return `services:
   agent:
@@ -117,7 +124,8 @@ function generateComposeFile(
 ${agentEnvYaml}
     volumes:
       - workspace:/home/agent/workspace
-    command: ["electric-agent", "headless"]
+    stdin_open: true
+    command: ${agentCommand}
 
 volumes:
   workspace:
@@ -158,7 +166,8 @@ ${agentEnvYaml}
     depends_on:
       electric:
         condition: service_started
-    command: ["electric-agent", "headless"]
+    stdin_open: true
+    command: ${agentCommand}
 
 volumes:
   workspace:
@@ -241,7 +250,11 @@ export class DockerSandboxProvider implements SandboxProvider {
 		const composeDir = fs.mkdtempSync(path.join(os.tmpdir(), `${project}-`))
 		const composePath = path.join(composeDir, "docker-compose.yml")
 		const auth = resolveAuthEnv(opts)
-		fs.writeFileSync(composePath, generateComposeFile(port, auth, infra, opts?.streamEnv), "utf-8")
+		fs.writeFileSync(
+			composePath,
+			generateComposeFile(port, auth, infra, opts?.streamEnv ?? {}, opts?.deferAgentStart),
+			"utf-8",
+		)
 		console.log(`[docker] Compose file written: ${composePath}`)
 
 		if (infra.mode === "local") {
@@ -334,6 +347,13 @@ export class DockerSandboxProvider implements SandboxProvider {
 		this.activeContainers.set(handle.sessionId, newHandle)
 
 		return newHandle
+	}
+
+	/** Get the Docker container ID for a session's agent service */
+	getContainerId(sessionId: string): string | null {
+		const state = this.internalState.get(sessionId)
+		if (!state) return null
+		return getAgentContainerId(state)
 	}
 
 	get(sessionId: string): SandboxHandle | undefined {

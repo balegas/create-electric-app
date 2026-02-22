@@ -30,7 +30,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 		this.client = new Daytona({
 			apiKey: this.apiKey,
 			apiUrl: this.apiUrl,
-			target: opts?.target ?? process.env.DAYTONA_TARGET ?? "us",
+			target: opts?.target ?? process.env.DAYTONA_TARGET ?? "eu",
 		})
 	}
 
@@ -43,20 +43,9 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 	private async resolveSnapshot(): Promise<string> {
 		if (this.cachedSnapshot) return this.cachedSnapshot
 
-		const dockerHubUser = process.env.DOCKER_HUB_USER
-		const dockerHubToken = process.env.DOCKER_HUB_TOKEN
-		if (!dockerHubUser || !dockerHubToken) {
-			throw new Error(
-				"DOCKER_HUB_USER and DOCKER_HUB_TOKEN environment variables are required " +
-					"for Daytona sandbox creation. See README for Docker Hub setup instructions.",
-			)
-		}
-
 		const snapshotName = await ensureSnapshot(this.client, {
-			daytonaApiKey: this.apiKey,
-			daytonaApiUrl: this.apiUrl,
-			dockerHubUser,
-			dockerHubToken,
+			apiKey: this.apiKey,
+			apiUrl: this.apiUrl,
 			localImage: SANDBOX_IMAGE,
 		})
 
@@ -97,10 +86,9 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			envVars.GH_TOKEN = ghToken
 		}
 
-		// Add stream env vars for hosted Durable Streams communication
-		if (opts?.streamEnv) {
-			Object.assign(envVars, opts.streamEnv)
-		}
+		// Note: stream env vars are NOT passed to Daytona sandboxes.
+		// The DaytonaSessionBridge communicates via the session API (stdin/stdout),
+		// so the agent doesn't need direct access to Durable Streams.
 
 		// Ensure a Daytona snapshot exists (push image + create snapshot if needed)
 		const snapshotName = await this.resolveSnapshot()
@@ -108,6 +96,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 		console.log(
 			`[daytona] Creating sandbox from snapshot "${snapshotName}" with ${Object.keys(envVars).length} env vars...`,
 		)
+		console.log("[daytona] Waiting for sandbox to be ready (this may take up to 2 minutes)...")
 		const sandbox = await this.client.create(
 			{
 				snapshot: snapshotName,
@@ -134,6 +123,10 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 		this.handles.set(sessionId, handle)
 		this.sandboxes.set(sessionId, sandbox)
 
+		// Agent is NOT started here — the DaytonaSessionBridge starts it
+		// via the session API (createSession + executeSessionCommand)
+		console.log("[daytona] Sandbox ready (agent will be started by bridge)")
+
 		return handle
 	}
 
@@ -154,19 +147,21 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 	async restartAgent(handle: SandboxHandle): Promise<SandboxHandle> {
 		const sandbox = this.getSandbox(handle)
 
-		// Kill any running agent process, then restart
+		// Kill any running agent process — the bridge will restart it
 		try {
 			await sandbox.process.executeCommand("pkill -f 'electric-agent headless' || true")
 		} catch {
 			// Process may not be running
 		}
 
-		// Start headless agent in background
-		await sandbox.process.executeCommand("nohup electric-agent headless > /tmp/agent.log 2>&1 &")
-
 		const newHandle: SandboxHandle = { ...handle }
 		this.handles.set(handle.sessionId, newHandle)
 		return newHandle
+	}
+
+	/** Get the underlying Daytona SDK Sandbox object for bridge communication */
+	getSandboxObject(sessionId: string): Sandbox | undefined {
+		return this.sandboxes.get(sessionId)
 	}
 
 	get(sessionId: string): SandboxHandle | undefined {

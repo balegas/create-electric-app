@@ -38,6 +38,14 @@ export type InfraConfig =
 			sourceId: string
 			secret: string
 	  }
+	| {
+			mode: "claim"
+			databaseUrl: string
+			electricUrl: string
+			sourceId: string
+			secret: string
+			claimId: string
+	  }
 
 // ---------------------------------------------------------------------------
 // Create options
@@ -49,6 +57,11 @@ export interface CreateSandboxOpts {
 	infra?: InfraConfig
 	/** Stream env vars to inject into the sandbox for --stream mode */
 	streamEnv?: Record<string, string>
+	/**
+	 * If true, the sandbox should NOT auto-start the headless agent.
+	 * The bridge will start it via stdin/stdout (session API or docker exec).
+	 */
+	deferAgentStart?: boolean
 }
 
 // ---------------------------------------------------------------------------

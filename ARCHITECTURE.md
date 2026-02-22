@@ -211,10 +211,12 @@ Reads container stdout line-by-line, parses as `EngineEvent` JSON, appends to `D
 - **Auth**: tries `ANTHROPIC_API_KEY` → `CLAUDE_CODE_OAUTH_TOKEN` → macOS Keychain
 
 **Daytona** (`DaytonaSandboxProvider`):
-- **create()**: `daytona.create({ image, envVars, labels })` → get preview URL
+- **create()**: `resolveSnapshot()` → `daytona.create({ snapshot, envVars, labels })` → get preview URL
+- **Snapshot flow** (`daytona-registry.ts`): On first sandbox creation, `ensureSnapshot()` checks if a snapshot exists. If not, it gets transient push credentials via `DockerRegistryApi.getTransientPushAccess()`, pushes the local image, and creates a snapshot. Subsequent creates in the same server session reuse the cached snapshot name.
+- **Image build**: `push:sandbox:daytona` script builds linux/amd64 (Daytona requires x86), pushes to transient registry, creates snapshot — all in one command
 - **File access**: `sandbox.process.executeCommand()` / `sandbox.fs.downloadFile()`
 - **Preview**: `sandbox.getPreviewLink(port)` for accessible URLs
-- Requires `DAYTONA_API_KEY`, `DAYTONA_API_URL`, `DAYTONA_TARGET` env vars
+- Requires `DAYTONA_API_KEY` env var. Optional: `DAYTONA_API_URL` (default: `https://app.daytona.io/api`), `DAYTONA_TARGET` (default: `eu`)
 
 ### React Client (`src/web/client/`)
 

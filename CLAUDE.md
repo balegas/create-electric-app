@@ -30,10 +30,14 @@ node dist/index.js headless      # headless NDJSON mode (used inside Docker cont
 ### Docker sandbox
 
 ```bash
-npm run build:sandbox            # docker build -f Dockerfile.sandbox -t electric-agent-sandbox .
+npm run build:sandbox            # native build (for local Docker on macOS/ARM)
+npm run push:sandbox:daytona     # build linux/amd64 + push to Daytona + create snapshot
 ```
 
-The sandbox image must be rebuilt after code changes for them to take effect in containers.
+- `build:sandbox` builds a **native** image for local Docker (fast on Apple Silicon).
+- `push:sandbox:daytona` builds a **linux/amd64** image (Daytona requires x86), pushes it to Daytona's transient registry, and creates a snapshot. Requires `DAYTONA_API_KEY`.
+- The sandbox image uses a **multi-stage Alpine build** to minimize size (~940MB vs ~1.6GB with Debian).
+- Code changes require rebuilding the image for them to take effect in containers.
 
 ## Verification Checklist
 
@@ -99,6 +103,9 @@ src/
     ├── sandbox/                 # Container management
     │   ├── types.ts             # SandboxProvider interface + types
     │   ├── docker.ts            # DockerSandboxProvider implementation
+    │   ├── daytona.ts           # DaytonaSandboxProvider (cloud, snapshot-based)
+    │   ├── daytona-registry.ts  # Transient registry push + snapshot lifecycle
+    │   ├── daytona-push.ts      # CLI: build amd64 + push + create snapshot
     │   └── index.ts             # Re-exports
     └── client/                  # React SPA (built with Vite)
         ├── index.html
@@ -181,7 +188,9 @@ src/
 ## Common Gotchas
 
 - **EngineEvent sync**: Forgetting to update client-side `event-types.ts` when changing `events.ts` causes silent type mismatches at runtime.
-- **Sandbox image staleness**: Code changes require rebuilding the Docker image (`npm run build:sandbox`). Easy to forget.
+- **Sandbox image staleness**: Code changes require rebuilding the Docker image (`npm run build:sandbox` for local, `npm run push:sandbox:daytona` for Daytona). Easy to forget.
+- **Sandbox platform**: `build:sandbox` builds native (ARM on Mac), `push:sandbox:daytona` builds linux/amd64. Daytona will fail with "no matching manifest for linux/amd64" if you push an ARM image.
+- **Daytona snapshot caching**: `DaytonaSandboxProvider` caches the snapshot name in-memory after first resolve. Restart the server to pick up a new snapshot after re-pushing.
 - **Gate categories**: Server-side gates (`checkpoint`, `publish`, `infra_config`, `repo_setup`) resolve in-process. Container-forwarded gates (`clarification`, `approval`, `continue`, `revision`) are written to container stdin. Adding a new gate requires choosing the right category and updating the `serverGates` set in `server.ts`.
 - **Hook denial format**: Must return `{ hookSpecificOutput: { permissionDecision: "deny" } }` — not just a boolean.
 - **`initGit` in scaffold**: The scaffold's `skipGit` option controls whether git init runs during scaffolding. In headless/sandbox mode, git is initialized early in `headless.ts` before `runNew()`.

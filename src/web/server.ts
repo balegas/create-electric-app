@@ -18,9 +18,14 @@ import {
 	isGhAuthenticated,
 	validateGhToken,
 } from "../git/index.js"
+import { DaytonaSessionBridge } from "./bridge/daytona.js"
+import { DockerStdioBridge } from "./bridge/docker-stdio.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
+import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
+import type { DaytonaSandboxProvider as DaytonaSandboxProviderType } from "./sandbox/daytona.js"
+import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import {
 	addSession,
@@ -37,12 +42,16 @@ import {
 	type StreamConnectionInfo,
 } from "./streams.js"
 
+type BridgeMode = "stream" | "stdio"
+
 interface ServerConfig {
 	port: number
 	dataDir: string
 	sandbox: SandboxProvider
 	/** Hosted stream config — required */
 	streamConfig: StreamConfig
+	/** Bridge mode: "stream" (hosted DS, default) or "stdio" (stdin/stdout via SDK/Docker) */
+	bridgeMode: BridgeMode
 }
 
 /** Active session bridges — one per running session */
@@ -79,6 +88,36 @@ function getOrCreateBridge(config: ServerConfig, sessionId: string): SessionBrid
 		bridge = new HostedStreamBridge(sessionId, conn)
 		bridges.set(sessionId, bridge)
 	}
+	return bridge
+}
+
+/**
+ * Create a stdio-based bridge for a session after the sandbox has been created.
+ * Replaces any existing hosted bridge for the session.
+ */
+function createStdioBridge(config: ServerConfig, sessionId: string): SessionBridge {
+	const conn = sessionStream(config, sessionId)
+	let bridge: SessionBridge
+
+	if (config.sandbox.runtime === "daytona") {
+		const daytonaProvider = config.sandbox as DaytonaSandboxProviderType
+		const sandbox = daytonaProvider.getSandboxObject(sessionId)
+		if (!sandbox) {
+			throw new Error(`No Daytona sandbox object for session ${sessionId}`)
+		}
+		bridge = new DaytonaSessionBridge(sessionId, conn, sandbox)
+	} else {
+		const dockerProvider = config.sandbox as DockerSandboxProviderType
+		const containerId = dockerProvider.getContainerId(sessionId)
+		if (!containerId) {
+			throw new Error(`No Docker container found for session ${sessionId}`)
+		}
+		bridge = new DockerStdioBridge(sessionId, conn, containerId)
+	}
+
+	// Replace any existing bridge
+	closeBridge(sessionId)
+	bridges.set(sessionId, bridge)
 	return bridge
 }
 
@@ -161,6 +200,25 @@ export function createApp(config: ServerConfig) {
 		return c.json({ ok: true })
 	})
 
+	// Provision Electric Cloud resources via the Claim API
+	app.post("/api/provision-electric", async (c) => {
+		try {
+			const result = await provisionElectricResources()
+			return c.json({
+				sourceId: result.source_id,
+				secret: result.secret,
+				databaseUrl: result.DATABASE_URL,
+				electricUrl: DEFAULT_ELECTRIC_URL,
+				claimId: result.claimId,
+				claimUrl: getClaimUrl(result.claimId),
+			})
+		} catch (err) {
+			const message = err instanceof Error ? err.message : "Provisioning failed"
+			console.error("[provision-electric] Error:", message)
+			return c.json({ error: message }, 500)
+		}
+	})
+
 	// List all sessions
 	app.get("/api/sessions", (c) => {
 		const index = readSessionIndex(config.dataDir)
@@ -207,8 +265,8 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "Failed to create event stream" }, 500)
 		}
 
-		// Create and start the session bridge
-		const bridge = getOrCreateBridge(config, sessionId)
+		// Create the initial session bridge (may be replaced with stdio bridge after sandbox creation)
+		let bridge: SessionBridge = getOrCreateBridge(config, sessionId)
 
 		// Record session
 		const sandboxProjectDir = `/home/agent/workspace/${projectName}`
@@ -250,24 +308,30 @@ export function createApp(config: ServerConfig) {
 			} | null = null
 
 			console.log(`[session:${sessionId}] Waiting for infra_config gate...`)
+			let claimId: string | undefined
 			try {
 				const gateValue = await createGate<
 					InfraConfig & {
 						repoAccount?: string
 						repoName?: string
 						repoVisibility?: "public" | "private"
+						claimId?: string
 					}
 				>(sessionId, "infra_config")
 
 				console.log(`[session:${sessionId}] Infra gate resolved: mode=${gateValue.mode}`)
 
-				if (gateValue.mode === "cloud") {
+				if (gateValue.mode === "cloud" || gateValue.mode === "claim") {
+					// Normalize claim → cloud for the sandbox layer (same env vars)
 					infra = {
 						mode: "cloud",
 						databaseUrl: gateValue.databaseUrl,
 						electricUrl: gateValue.electricUrl,
 						sourceId: gateValue.sourceId,
 						secret: gateValue.secret,
+					}
+					if (gateValue.mode === "claim") {
+						claimId = gateValue.claimId
 					}
 				} else {
 					infra = { mode: "local" }
@@ -297,15 +361,18 @@ export function createApp(config: ServerConfig) {
 				infra = { mode: "local" }
 			}
 
-			// 2. Create sandbox with stream env vars
-			const streamEnv = getStreamEnvVars(sessionId, config.streamConfig)
+			// 2. Create sandbox
+			// Only pass stream env vars when using hosted stream bridge (not stdio)
+			const streamEnv =
+				config.bridgeMode === "stdio" ? undefined : getStreamEnvVars(sessionId, config.streamConfig)
 			console.log(
-				`[session:${sessionId}] Creating sandbox: runtime=${config.sandbox.runtime} project=${projectName}`,
+				`[session:${sessionId}] Creating sandbox: runtime=${config.sandbox.runtime} project=${projectName} bridgeMode=${config.bridgeMode}`,
 			)
 			const handle = await config.sandbox.create(sessionId, {
 				projectName,
 				infra,
 				streamEnv,
+				deferAgentStart: config.bridgeMode === "stdio",
 			})
 			console.log(
 				`[session:${sessionId}] Sandbox created: projectDir=${handle.projectDir} port=${handle.port} previewUrl=${handle.previewUrl ?? "none"}`,
@@ -314,9 +381,16 @@ export function createApp(config: ServerConfig) {
 				appPort: handle.port,
 				sandboxProjectDir: handle.projectDir,
 				previewUrl: handle.previewUrl,
+				...(claimId ? { claimId } : {}),
 			})
 
-			// 3. Log repo config
+			// 3. If stdio bridge mode, create the stdio bridge now that the sandbox exists
+			if (config.bridgeMode === "stdio") {
+				console.log(`[session:${sessionId}] Creating stdio bridge...`)
+				bridge = createStdioBridge(config, sessionId)
+			}
+
+			// 4. Log repo config
 			if (repoConfig) {
 				await bridge.emit({
 					type: "log",
@@ -326,7 +400,7 @@ export function createApp(config: ServerConfig) {
 				})
 			}
 
-			// 4. Start listening for agent events via the bridge
+			// 5. Start listening for agent events via the bridge
 			bridge.onComplete(async (success) => {
 				const updates: Partial<SessionInfo> = {
 					status: success ? "complete" : "error",
@@ -511,13 +585,14 @@ export function createApp(config: ServerConfig) {
 		let value: unknown
 		switch (gate) {
 			case "infra_config":
-				if (body.mode === "cloud") {
+				if (body.mode === "cloud" || body.mode === "claim") {
 					value = {
-						mode: "cloud",
+						mode: body.mode,
 						databaseUrl: body.databaseUrl,
 						electricUrl: body.electricUrl,
 						sourceId: body.sourceId,
 						secret: body.secret,
+						claimId: body.claimId,
 						repoAccount: body.repoAccount,
 						repoName: body.repoName,
 						repoVisibility: body.repoVisibility,
@@ -980,12 +1055,14 @@ export async function startWebServer(opts: {
 	dataDir?: string
 	sandbox: SandboxProvider
 	streamConfig: StreamConfig
+	bridgeMode?: BridgeMode
 }): Promise<void> {
 	const config: ServerConfig = {
 		port: opts.port ?? 4400,
 		dataDir: opts.dataDir ?? path.resolve(process.cwd(), ".electric-agent"),
 		sandbox: opts.sandbox,
 		streamConfig: opts.streamConfig,
+		bridgeMode: opts.bridgeMode ?? "stream",
 	}
 
 	fs.mkdirSync(config.dataDir, { recursive: true })

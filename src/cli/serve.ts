@@ -40,14 +40,14 @@ export async function serveCommand(opts: {
 			apiUrl: process.env.DAYTONA_API_URL,
 			target: process.env.DAYTONA_TARGET,
 		})
-		console.log(`[serve] Sandbox runtime: Daytona (target: ${process.env.DAYTONA_TARGET ?? "us"})`)
+		console.log(`[serve] Sandbox runtime: Daytona (target: ${process.env.DAYTONA_TARGET ?? "eu"})`)
 
 		// Check snapshot status (non-blocking)
 		const { Daytona } = await import("@daytonaio/sdk")
 		const daytona = new Daytona({
 			apiKey: process.env.DAYTONA_API_KEY,
 			apiUrl: process.env.DAYTONA_API_URL,
-			target: process.env.DAYTONA_TARGET ?? "us",
+			target: process.env.DAYTONA_TARGET ?? "eu",
 		})
 		const snapshotImage = process.env.SANDBOX_IMAGE || "electric-agent-sandbox"
 		const status = await getSnapshotStatus(daytona, snapshotImage)
@@ -64,7 +64,23 @@ export async function serveCommand(opts: {
 		console.log("[serve] Sandbox runtime: Docker (default)")
 	}
 
-	await startWebServer({ port, dataDir, sandbox, streamConfig })
+	// Determine bridge mode:
+	//   BRIDGE_MODE=stdio  → always stdin/stdout (required for Daytona without internet)
+	//   BRIDGE_MODE=stream → always hosted Durable Streams (default for Docker)
+	//   (unset)            → "stdio" for Daytona, "stream" for Docker
+	const bridgeModeEnv = process.env.BRIDGE_MODE?.toLowerCase()
+	let bridgeMode: "stream" | "stdio"
+	if (bridgeModeEnv === "stdio") {
+		bridgeMode = "stdio"
+	} else if (bridgeModeEnv === "stream") {
+		bridgeMode = "stream"
+	} else {
+		// Default: Daytona uses stdio (required), Docker uses stream (backward compat)
+		bridgeMode = sandbox.runtime === "daytona" ? "stdio" : "stream"
+	}
+	console.log(`[serve] Bridge mode: ${bridgeMode}`)
+
+	await startWebServer({ port, dataDir, sandbox, streamConfig, bridgeMode })
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
 

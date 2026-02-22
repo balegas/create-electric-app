@@ -1,11 +1,23 @@
-FROM node:22-slim
+# ---------------------------------------------------------------------------
+# Stage 1: Build electric-agent
+# ---------------------------------------------------------------------------
+FROM node:22-alpine AS builder
+
+WORKDIR /opt/electric-agent
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY . .
+RUN npm run build:server
+# Remove dev dependencies after build
+RUN npm prune --production
+
+# ---------------------------------------------------------------------------
+# Stage 2: Runtime image (minimal)
+# ---------------------------------------------------------------------------
+FROM node:22-alpine
 
 # Install system deps needed by scaffolding and generated projects
-RUN apt-get update && apt-get install -y git curl gpg && \
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list && \
-    apt-get update && apt-get install -y gh && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache git curl github-cli bash
 
 # Install Claude CLI (required by the agent SDK)
 RUN npm install -g @anthropic-ai/claude-code
@@ -13,18 +25,18 @@ RUN npm install -g @anthropic-ai/claude-code
 # Install pnpm (used by generated projects)
 RUN npm install -g pnpm
 
-# Copy and build electric-agent
+# Copy built electric-agent (production deps only)
 WORKDIR /opt/electric-agent
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
-COPY . .
-RUN npm run build:server
+COPY --from=builder /opt/electric-agent/dist ./dist
+COPY --from=builder /opt/electric-agent/node_modules ./node_modules
+COPY --from=builder /opt/electric-agent/package.json ./package.json
+COPY --from=builder /opt/electric-agent/playbooks ./playbooks
 
 # Link the CLI globally so `electric-agent` is on PATH
 RUN npm link
 
 # Create non-root user (Claude CLI blocks --dangerously-skip-permissions as root)
-RUN useradd -m -s /bin/bash agent && \
+RUN adduser -D -s /bin/bash agent && \
     mkdir -p /home/agent/workspace && \
     chown -R agent:agent /home/agent
 

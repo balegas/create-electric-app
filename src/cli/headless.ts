@@ -2,34 +2,36 @@ import { execSync } from "node:child_process"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
 import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
+import { createStdioAdapter } from "../engine/stdio-adapter.js"
 import { createStreamAdapter } from "../engine/stream-adapter.js"
 
 /**
  * Handler for `electric-agent headless`.
  *
- * Communicates via a hosted Durable Stream. Reads commands and gate
- * responses from the stream, writes agent events back.
- *
- * Required env vars: DS_URL, DS_SERVICE_ID, DS_SECRET, SESSION_ID
+ * Communicates via either:
+ * 1. Hosted Durable Stream (if DS_URL + DS_SERVICE_ID + DS_SECRET + SESSION_ID are set)
+ * 2. stdin/stdout NDJSON (fallback — used in Daytona sandboxes without internet)
  */
 export async function headlessCommand(): Promise<void> {
-	// Construct stream URL from env vars
 	const dsUrl = process.env.DS_URL
 	const dsServiceId = process.env.DS_SERVICE_ID
 	const dsSecret = process.env.DS_SECRET
 	const sessionId = process.env.SESSION_ID
 
-	if (!dsUrl || !dsServiceId || !dsSecret || !sessionId) {
-		process.stderr.write(
-			"Error: DS_URL, DS_SERVICE_ID, DS_SECRET, and SESSION_ID environment variables are required\n",
-		)
-		process.exitCode = 1
-		return
-	}
+	const useStream = !!(dsUrl && dsServiceId && dsSecret && sessionId)
 
-	const streamUrl = `${dsUrl}/v1/stream/${dsServiceId}/session/${sessionId}`
-	const adapter = createStreamAdapter(streamUrl, dsSecret)
-	await adapter.startListening()
+	let adapter: ReturnType<typeof createStreamAdapter> | ReturnType<typeof createStdioAdapter>
+
+	if (useStream) {
+		process.stderr.write("[headless] Using stream adapter (Durable Streams)\n")
+		const streamUrl = `${dsUrl}/v1/stream/${dsServiceId}/session/${sessionId}`
+		const streamAdapter = createStreamAdapter(streamUrl, dsSecret)
+		await streamAdapter.startListening()
+		adapter = streamAdapter
+	} else {
+		process.stderr.write("[headless] Using stdio adapter (stdin/stdout NDJSON)\n")
+		adapter = createStdioAdapter()
+	}
 
 	const { readConfig, waitForCommand, callbacks, close } = adapter
 
