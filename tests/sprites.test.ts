@@ -98,9 +98,11 @@ describe("SpritesSandboxProvider — interface", () => {
 // SpritesSandboxProvider — integration tests (require FLY_API_TOKEN)
 // ---------------------------------------------------------------------------
 
-describe("SpritesSandboxProvider — integration", { skip: !process.env.SPRITES_TEST_TOKEN?.trim() }, () => {
+const spritesToken = process.env.SPRITES_TEST_TOKEN?.trim() || process.env.FLY_API_TOKEN?.trim()
+
+describe("SpritesSandboxProvider — integration", { skip: !spritesToken }, () => {
 	it("create → exec → destroy", async () => {
-		const provider = new SpritesSandboxProvider({ token: process.env.SPRITES_TEST_TOKEN })
+		const provider = new SpritesSandboxProvider({ token: spritesToken })
 		const handle = await provider.create("test-sprites-integration", {
 			projectName: "test-project",
 		})

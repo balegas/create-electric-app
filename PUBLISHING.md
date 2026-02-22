@@ -46,7 +46,7 @@ The `files` field in `package.json` controls what gets published:
 
 ## Sprites Bootstrap
 
-The Sprites sandbox provider installs `electric-agent` globally via:
+The Sprites sandbox provider installs the CLI globally via:
 
 ```bash
 npm install -g electric-agent
