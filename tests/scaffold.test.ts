@@ -18,6 +18,7 @@ describe("scaffold", () => {
 	it("clones KPB and overlays template files", async () => {
 		const result = await scaffold(TEST_DIR, {
 			skipInstall: true,
+			skipGit: true,
 			projectName: "test-app",
 		})
 
@@ -143,12 +144,15 @@ describe("scaffold", () => {
 		)
 	})
 
-	it("patches root route with ssr: false", () => {
+	it("does NOT inject ssr: false into root route (root must always SSR)", () => {
 		const rootRoute = fs.readFileSync(
 			path.join(TEST_DIR, "src/routes/__root.tsx"),
 			"utf-8",
 		)
-		assert.ok(rootRoute.includes("ssr: false"), "ssr: false injected into root route")
+		// patchRootRoute is intentionally a no-op — disabling SSR in the root
+		// route prevents the HTML shell from rendering (blank page). The coder
+		// agent adds ssr: false to individual leaf routes instead.
+		assert.ok(!rootRoute.includes("ssr: false"), "root route should NOT have ssr: false")
 	})
 
 	it("patches .gitignore with Electric entries", () => {
