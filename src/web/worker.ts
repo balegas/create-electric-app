@@ -324,6 +324,35 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.use("*", cors({ origin: "*" }))
 
+// --- Health check ---
+
+app.get("/api/health", async (c) => {
+	const checks: Record<string, "ok" | "error"> = {}
+	let healthy = true
+
+	// KV binding
+	try {
+		await c.env.SESSIONS.get("__health_check__")
+		checks.kv = "ok"
+	} catch {
+		checks.kv = "error"
+		healthy = false
+	}
+
+	// Durable Streams config
+	if (c.env.DS_URL && c.env.DS_SERVICE_ID && c.env.DS_SECRET) {
+		checks.ds_config = "ok"
+	} else {
+		checks.ds_config = "error"
+		healthy = false
+	}
+
+	// Daytona config (optional — warn but don't fail health)
+	checks.daytona_config = c.env.DAYTONA_API_KEY ? "ok" : "error"
+
+	return c.json({ healthy, checks }, healthy ? 200 : 503)
+})
+
 // --- Electric provisioning ---
 
 app.post("/api/provision-electric", async (c) => {
