@@ -185,6 +185,24 @@ src/
 1. Add to `src/web/server.ts` in `createApp()`
 2. Add client wrapper in `src/web/client/src/lib/api.ts`
 
+## CI / GitHub Actions Secrets
+
+The following secrets are configured on the GitHub repository (set via `gh secret set`):
+
+| Secret | Purpose |
+|---|---|
+| `DOCKER_HUB_USER` | Docker Hub username |
+| `DOCKER_HUB_TOKEN` | Docker Hub access token |
+| `DAYTONA_API_KEY` | Daytona cloud sandbox API key |
+| `DAYTONA_API_URL` | Daytona API endpoint |
+| `DS_URL` | Durable Streams (Electric) API URL |
+| `DS_SERVICE_ID` | Durable Streams service ID |
+| `DS_SECRET` | Durable Streams JWT secret |
+| `GH_TOKEN` | GitHub PAT (used by agents for git operations) |
+| `FLY_API_TOKEN` | Fly.io deploy token |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
+
 ## Common Gotchas
 
 - **EngineEvent sync**: Forgetting to update client-side `event-types.ts` when changing `events.ts` causes silent type mismatches at runtime.
