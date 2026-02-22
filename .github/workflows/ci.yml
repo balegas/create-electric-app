@@ -72,6 +72,21 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  publish-preview:
+    name: Publish Preview Package
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint, build-server, build-web, test]
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx pkg-pr-new publish --bin
+
   build-sandbox:
     name: Build Sandbox Image
     runs-on: ubuntu-latest
