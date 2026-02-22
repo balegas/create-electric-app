@@ -121,14 +121,22 @@ export function useSession(sessionId: string | null) {
 
 		let cancelled = false
 		let eventSource: EventSource | null = null
+		let retryCount = 0
+		const MAX_RETRIES = 10
 
 		function connect() {
 			if (cancelled) return
+			if (retryCount >= MAX_RETRIES) {
+				console.warn(`[sse] Giving up on session ${sessionId} after ${MAX_RETRIES} retries`)
+				setIsLive(false)
+				return
+			}
 
 			eventSource = new EventSource(`/api/sessions/${sessionId}/events`)
 
 			eventSource.onopen = () => {
 				if (!cancelled) {
+					retryCount = 0 // Reset on successful connection
 					setIsLive(true)
 					// Mark live after connection — first batch of events is catch-up
 					setTimeout(() => {
@@ -150,8 +158,10 @@ export function useSession(sessionId: string | null) {
 			eventSource.onerror = () => {
 				if (cancelled) return
 				eventSource?.close()
-				// Reconnect after 1 second
-				setTimeout(connect, 1000)
+				retryCount++
+				// Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 30s
+				const delay = Math.min(1000 * 2 ** (retryCount - 1), 30_000)
+				setTimeout(connect, delay)
 			}
 		}
 

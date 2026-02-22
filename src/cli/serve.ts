@@ -1,4 +1,5 @@
 import { DaytonaSandboxProvider } from "../web/sandbox/daytona.js"
+import { getSnapshotStatus } from "../web/sandbox/daytona-registry.js"
 import { DockerSandboxProvider } from "../web/sandbox/docker.js"
 import type { SandboxProvider } from "../web/sandbox/types.js"
 import { startWebServer } from "../web/server.js"
@@ -40,6 +41,24 @@ export async function serveCommand(opts: {
 			target: process.env.DAYTONA_TARGET,
 		})
 		console.log(`[serve] Sandbox runtime: Daytona (target: ${process.env.DAYTONA_TARGET ?? "us"})`)
+
+		// Check snapshot status (non-blocking)
+		const { Daytona } = await import("@daytonaio/sdk")
+		const daytona = new Daytona({
+			apiKey: process.env.DAYTONA_API_KEY,
+			apiUrl: process.env.DAYTONA_API_URL,
+			target: process.env.DAYTONA_TARGET ?? "us",
+		})
+		const snapshotImage = process.env.SANDBOX_IMAGE || "electric-agent-sandbox"
+		const status = await getSnapshotStatus(daytona, snapshotImage)
+		if (status.exists) {
+			console.log(`[serve] Snapshot "${snapshotImage}": ${status.state}`)
+		} else {
+			console.log(
+				`[serve] Snapshot "${snapshotImage}" not found — will be created on first sandbox creation`,
+			)
+			console.log(`[serve] To pre-push: npm run push:sandbox:daytona`)
+		}
 	} else {
 		sandbox = new DockerSandboxProvider()
 		console.log("[serve] Sandbox runtime: Docker (default)")

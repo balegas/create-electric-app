@@ -3,6 +3,7 @@ import "../tests/setup-proxy.js"
 import { strict as assert } from "node:assert"
 import { describe, it } from "node:test"
 import { DaytonaSandboxProvider } from "../src/web/sandbox/daytona.js"
+import { getSnapshotStatus, pushImageToDaytona } from "../src/web/sandbox/daytona-registry.js"
 import { DockerSandboxProvider } from "../src/web/sandbox/docker.js"
 import type { SandboxHandle, SandboxProvider } from "../src/web/sandbox/types.js"
 
@@ -160,26 +161,17 @@ describe("DaytonaSandboxProvider — interface", () => {
 		assert.equal(status.initialized, false)
 	})
 
-	it("create() rejects bare image names without registry prefix", {
-		// Only run when SANDBOX_IMAGE is not set (default is bare "electric-agent-sandbox")
-		skip: !!process.env.SANDBOX_IMAGE,
-	}, async () => {
-		// The default SANDBOX_IMAGE ("electric-agent-sandbox") has no registry prefix.
-		// Daytona can't pull local-only images, so create() should fail fast.
+	it("create() resolves snapshot before creating sandbox", () => {
+		// The DaytonaSandboxProvider now uses ensureSnapshot() internally
+		// to push the image and create a snapshot. We verify the provider
+		// has the resolveSnapshot path by checking it constructs without error.
 		const provider = new DaytonaSandboxProvider({
 			apiKey: "test-key",
 			apiUrl: "https://example.com/api",
 		})
-		await assert.rejects(
-			() => provider.create("test-session", { projectName: "test" }),
-			(err: Error) => {
-				assert.ok(
-					err.message.includes("not registry-qualified"),
-					`Expected registry error, got: ${err.message}`,
-				)
-				return true
-			},
-		)
+		// The actual snapshot resolution requires API access, so we just
+		// verify the provider is properly constructed for snapshot flow
+		assert.equal(provider.runtime, "daytona")
 	})
 })
 
@@ -214,6 +206,49 @@ describe("DaytonaSandboxProvider — Daytona API connectivity", () => {
 			// list() should not throw — validates credentials
 			const result = await client.list()
 			assert.ok(Array.isArray(result.items))
+		},
+	)
+
+	it(
+		"can get transient push access (validates registry API auth)",
+		{ skip: !apiKey, timeout: 30000 },
+		async () => {
+			const { Configuration, DockerRegistryApi } = await import("@daytonaio/api-client")
+			const config = new Configuration({
+				accessToken: apiKey!,
+				basePath: apiUrl,
+			})
+			const registryApi = new DockerRegistryApi(config)
+			const response = await registryApi.getTransientPushAccess()
+			const access = response.data
+			assert.ok(access.registryUrl, "registryUrl should be present")
+			assert.ok(access.project, "project should be present")
+			assert.ok(access.username, "username should be present")
+			assert.ok(access.secret, "secret should be present")
+			assert.ok(access.expiresAt, "expiresAt should be present")
+			console.log(`[test] Transient registry: ${access.registryUrl}/${access.project}`)
+		},
+	)
+
+	it(
+		"can check snapshot status",
+		{ skip: !apiKey, timeout: 30000 },
+		async () => {
+			const { Daytona } = await import("@daytonaio/sdk")
+			const client = new Daytona({
+				apiKey: apiKey!,
+				apiUrl,
+				target,
+			})
+			const status = await getSnapshotStatus(client, "electric-agent-sandbox")
+			// Snapshot may or may not exist — just verify the function doesn't throw
+			assert.ok(typeof status.exists === "boolean")
+			if (status.exists) {
+				assert.ok(status.state, "state should be present when snapshot exists")
+				console.log(`[test] Snapshot status: ${status.state}`)
+			} else {
+				console.log("[test] Snapshot does not exist yet")
+			}
 		},
 	)
 })

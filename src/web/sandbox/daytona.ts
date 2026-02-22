@@ -1,4 +1,5 @@
 import { Daytona, type Sandbox } from "@daytonaio/sdk"
+import { ensureSnapshot } from "./daytona-registry.js"
 import type {
 	CreateSandboxOpts,
 	GitStatus,
@@ -19,11 +20,16 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 	private client: Daytona
 	private handles = new Map<string, SandboxHandle>()
 	private sandboxes = new Map<string, Sandbox>()
+	private apiKey: string
+	private apiUrl?: string
+	private cachedSnapshot: string | null = null
 
 	constructor(opts?: { apiKey?: string; apiUrl?: string; target?: string }) {
+		this.apiKey = opts?.apiKey ?? process.env.DAYTONA_API_KEY ?? ""
+		this.apiUrl = opts?.apiUrl ?? process.env.DAYTONA_API_URL
 		this.client = new Daytona({
-			apiKey: opts?.apiKey ?? process.env.DAYTONA_API_KEY,
-			apiUrl: opts?.apiUrl ?? process.env.DAYTONA_API_URL,
+			apiKey: this.apiKey,
+			apiUrl: this.apiUrl,
 			target: opts?.target ?? process.env.DAYTONA_TARGET ?? "us",
 		})
 	}
@@ -32,6 +38,19 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 		const sb = this.sandboxes.get(handle.sessionId)
 		if (!sb) throw new Error(`No Daytona sandbox for session ${handle.sessionId}`)
 		return sb
+	}
+
+	private async resolveSnapshot(): Promise<string> {
+		if (this.cachedSnapshot) return this.cachedSnapshot
+
+		const snapshotName = await ensureSnapshot(this.client, {
+			apiKey: this.apiKey,
+			apiUrl: this.apiUrl,
+			localImage: SANDBOX_IMAGE,
+		})
+
+		this.cachedSnapshot = snapshotName
+		return snapshotName
 	}
 
 	async create(sessionId: string, opts?: CreateSandboxOpts): Promise<SandboxHandle> {
@@ -72,19 +91,15 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			Object.assign(envVars, opts.streamEnv)
 		}
 
-		// Validate image is registry-qualified (Daytona can't pull bare local image names)
-		if (!SANDBOX_IMAGE.includes("/")) {
-			throw new Error(
-				`SANDBOX_IMAGE "${SANDBOX_IMAGE}" is not registry-qualified. ` +
-					`Daytona requires a pullable image (e.g. "username/electric-agent-sandbox"). ` +
-					`Set DOCKER_HUB_USER and run: npm run push:sandbox`,
-			)
-		}
+		// Ensure a Daytona snapshot exists (push image + create snapshot if needed)
+		const snapshotName = await this.resolveSnapshot()
 
-		console.log(`[daytona] Creating sandbox with ${Object.keys(envVars).length} env vars...`)
+		console.log(
+			`[daytona] Creating sandbox from snapshot "${snapshotName}" with ${Object.keys(envVars).length} env vars...`,
+		)
 		const sandbox = await this.client.create(
 			{
-				image: SANDBOX_IMAGE,
+				snapshot: snapshotName,
 				envVars,
 				labels: { sessionId, projectName },
 			},
