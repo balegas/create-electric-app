@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc && npm run build:web",
     "build:server": "tsc",
-    "build:web": "vite build --config src/web/client/vite.config.ts",
+    "build:web": "vite build --config src/web/client/vite.config.ts && npm run build:worker",
+    "build:worker": "esbuild src/web/worker.ts --bundle --format=esm --outfile=dist/web/client/_worker.js",
     "dev": "tsc --watch",
     "dev:web": "vite --config src/web/client/vite.config.ts",
     "check": "biome check src/",
