@@ -3,8 +3,20 @@ name: Deploy Web UI
 on:
   push:
     branches: [main]
+    paths:
+      - "src/web/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/deploy-web.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "src/web/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/deploy-web.yml"
 
 concurrency:
   group: deploy-web-${{ github.ref }}
@@ -83,7 +95,9 @@ jobs:
             const deployUrl = '${{ steps.deploy.outputs.deployment-url }}';
             if (!deployUrl) return;
 
-            const body = `### Cloudflare Pages Preview\n\n🔗 **Preview URL:** ${deployUrl}`;
+            const body = `### Cloudflare Pages Preview\n\n` +
+              `**Preview URL:** ${deployUrl}\n` +
+              `**Worker health:** ${deployUrl}/api/health`;
 
             // Find existing bot comment to update
             const { data: comments } = await github.rest.issues.listComments({
