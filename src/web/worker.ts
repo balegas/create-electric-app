@@ -19,20 +19,26 @@ import { cors } from "hono/cors"
 interface Env {
 	SESSIONS: KVNamespace
 	ASSETS: { fetch: typeof fetch }
-	// Durable Streams
+	// Durable Streams (server-infra secrets — safe to deploy)
 	DS_URL: string
 	DS_SERVICE_ID: string
 	DS_SECRET: string
-	// Auth
-	ANTHROPIC_API_KEY: string
-	GH_TOKEN: string
-	// Sandbox (Daytona) — not wired yet
+	// Sandbox infra (server-infra secrets — safe to deploy)
 	DAYTONA_API_KEY: string
 	DAYTONA_API_URL: string
 	DAYTONA_TARGET: string
 	SANDBOX_SNAPSHOT: string
 	// Legacy proxy fallback
 	API_BACKEND_URL: string
+	// NOTE: ANTHROPIC_API_KEY and GH_TOKEN are NOT in Env.
+	// They are user-provided at runtime via the Settings UI
+	// and stored in KV ("settings" key). Never deploy them as secrets.
+}
+
+/** User-provided credentials stored in KV, never in Env/secrets. */
+interface UserSettings {
+	anthropicApiKey?: string
+	ghToken?: string
 }
 
 interface SessionInfo {
@@ -173,6 +179,21 @@ async function kvListSessions(kv: KVNamespace): Promise<SessionInfo[]> {
 	// Sort by creation date descending
 	sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 	return sessions
+}
+
+// ---------------------------------------------------------------------------
+// Helpers — KV user settings (API keys provided at runtime, NOT deployed)
+// ---------------------------------------------------------------------------
+
+const SETTINGS_KEY = "user:settings"
+
+async function kvGetSettings(kv: KVNamespace): Promise<UserSettings> {
+	const raw = await kv.get(SETTINGS_KEY)
+	return raw ? (JSON.parse(raw) as UserSettings) : {}
+}
+
+async function kvPutSettings(kv: KVNamespace, settings: UserSettings): Promise<void> {
+	await kv.put(SETTINGS_KEY, JSON.stringify(settings))
 }
 
 // ---------------------------------------------------------------------------
@@ -442,29 +463,39 @@ const app = new Hono<{ Bindings: Env }>()
 app.use("*", cors({ origin: "*" }))
 
 // --- Settings ---
+// API keys are user-provided at runtime and stored in KV.
+// They are NEVER deployed as CF secrets or Env bindings.
 
 app.get("/api/settings", async (c) => {
-	const hasApiKey = !!c.env.ANTHROPIC_API_KEY
-	const hasGhToken = !!c.env.GH_TOKEN
-	return c.json({ hasApiKey, hasGhToken })
+	const settings = await kvGetSettings(c.env.SESSIONS)
+	return c.json({
+		hasApiKey: !!settings.anthropicApiKey,
+		hasGhToken: !!settings.ghToken,
+	})
 })
 
 app.put("/api/settings", async (c) => {
-	// In Workers, env vars are immutable at runtime.
-	// API keys must be configured via wrangler secrets.
-	// We still validate the GH token if provided.
 	const body = (await c.req.json()) as {
 		anthropicApiKey?: string
 		githubPat?: string
 	}
+	const settings = await kvGetSettings(c.env.SESSIONS)
+
+	if (body.anthropicApiKey) {
+		settings.anthropicApiKey = body.anthropicApiKey
+	}
+
 	if (body.githubPat) {
 		const result = await ghValidateToken(body.githubPat)
 		if (!result.valid) {
 			return c.json({ error: result.error || "Invalid GitHub token" }, 400)
 		}
-		// NOTE: cannot persist in Workers — tokens must be set as secrets
+		settings.ghToken = body.githubPat
+		await kvPutSettings(c.env.SESSIONS, settings)
 		return c.json({ ok: true, ghUsername: result.username })
 	}
+
+	await kvPutSettings(c.env.SESSIONS, settings)
 	return c.json({ ok: true })
 })
 
@@ -542,10 +573,11 @@ app.post("/api/sessions", async (c) => {
 		ts: ts(),
 	})
 
-	// Gather GitHub accounts for the setup gate
+	// Gather GitHub accounts for the setup gate (token from KV, not Env)
 	let ghAccounts: GhAccount[] = []
-	if (c.env.GH_TOKEN) {
-		ghAccounts = await ghListAccounts(c.env.GH_TOKEN)
+	const settings = await kvGetSettings(c.env.SESSIONS)
+	if (settings.ghToken) {
+		ghAccounts = await ghListAccounts(settings.ghToken)
 	}
 
 	// Emit the infra config gate
@@ -822,22 +854,25 @@ app.get("/api/sessions/:id/files", async (c) => {
 app.get("/api/sessions/:id/file-content", () => sandboxNotImplemented())
 
 app.get("/api/github/accounts", async (c) => {
-	if (!c.env.GH_TOKEN) return c.json({ accounts: [] })
-	const accounts = await ghListAccounts(c.env.GH_TOKEN)
+	const { ghToken } = await kvGetSettings(c.env.SESSIONS)
+	if (!ghToken) return c.json({ accounts: [] })
+	const accounts = await ghListAccounts(ghToken)
 	return c.json({ accounts })
 })
 
 app.get("/api/github/repos", async (c) => {
-	if (!c.env.GH_TOKEN) return c.json({ repos: [] })
-	const repos = await ghListRepos(c.env.GH_TOKEN)
+	const { ghToken } = await kvGetSettings(c.env.SESSIONS)
+	if (!ghToken) return c.json({ repos: [] })
+	const repos = await ghListRepos(ghToken)
 	return c.json({ repos })
 })
 
 app.get("/api/github/repos/:owner/:repo/branches", async (c) => {
-	if (!c.env.GH_TOKEN) return c.json({ branches: [] })
+	const { ghToken } = await kvGetSettings(c.env.SESSIONS)
+	if (!ghToken) return c.json({ branches: [] })
 	const owner = c.req.param("owner")
 	const repo = c.req.param("repo")
-	const branches = await ghListBranches(c.env.GH_TOKEN, `${owner}/${repo}`)
+	const branches = await ghListBranches(ghToken, `${owner}/${repo}`)
 	return c.json({ branches })
 })
 
