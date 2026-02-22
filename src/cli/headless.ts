@@ -1,21 +1,39 @@
-import { type ChildProcess, execSync, spawn } from "node:child_process"
+import { execSync } from "node:child_process"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
-import { createHeadlessAdapter, type HeadlessConfig } from "../engine/headless-adapter.js"
 import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
+import { createStdioAdapter } from "../engine/stdio-adapter.js"
+import { createStreamAdapter } from "../engine/stream-adapter.js"
 
 /**
  * Handler for `electric-agent headless`.
  *
- * Uses a single stdin reader: first line is JSON config,
- * subsequent lines are either gate responses or new commands.
- *
- * After the initial "new" command completes, the dev server starts
- * in the background and the process keeps listening for "iterate"
- * commands. Vite HMR picks up code changes automatically.
+ * Communicates via either:
+ * 1. Hosted Durable Stream (if DS_URL + DS_SERVICE_ID + DS_SECRET + SESSION_ID are set)
+ * 2. stdin/stdout NDJSON (fallback — used in Daytona sandboxes without internet)
  */
 export async function headlessCommand(): Promise<void> {
-	const { readConfig, waitForCommand, callbacks, close } = createHeadlessAdapter()
+	const dsUrl = process.env.DS_URL
+	const dsServiceId = process.env.DS_SERVICE_ID
+	const dsSecret = process.env.DS_SECRET
+	const sessionId = process.env.SESSION_ID
+
+	const useStream = !!(dsUrl && dsServiceId && dsSecret && sessionId)
+
+	let adapter: ReturnType<typeof createStreamAdapter> | ReturnType<typeof createStdioAdapter>
+
+	if (useStream) {
+		process.stderr.write("[headless] Using stream adapter (Durable Streams)\n")
+		const streamUrl = `${dsUrl}/v1/stream/${dsServiceId}/session/${sessionId}`
+		const streamAdapter = createStreamAdapter(streamUrl, dsSecret)
+		await streamAdapter.startListening()
+		adapter = streamAdapter
+	} else {
+		process.stderr.write("[headless] Using stdio adapter (stdin/stdout NDJSON)\n")
+		adapter = createStdioAdapter()
+	}
+
+	const { readConfig, waitForCommand, callbacks, close } = adapter
 
 	let config: Awaited<ReturnType<typeof readConfig>>
 	try {
@@ -29,7 +47,6 @@ export async function headlessCommand(): Promise<void> {
 	}
 
 	let projectDir: string | undefined
-	let devServer: ChildProcess | undefined
 
 	try {
 		if (config.command === "new") {
@@ -95,9 +112,9 @@ export async function headlessCommand(): Promise<void> {
 
 			projectDir = result.projectDir
 
-			// In sandbox mode, run migrations and start the dev server in the background
+			// In sandbox mode, run migrations and start the dev server
 			if (process.env.SANDBOX_MODE === "1" && projectDir) {
-				devServer = await startSandboxDevServer(projectDir, callbacks.onEvent)
+				await startSandboxDevServer(projectDir, callbacks.onEvent)
 			}
 		} else if (config.command === "iterate") {
 			if (!config.projectDir) {
@@ -157,19 +174,32 @@ export async function headlessCommand(): Promise<void> {
 
 	// Keep listening for iterate commands (Vite HMR picks up changes live)
 	if (process.env.SANDBOX_MODE === "1") {
-		await listenForIterations(projectDir, devServer, waitForCommand, callbacks)
+		await listenForIterations(projectDir, waitForCommand, callbacks)
 	}
 
 	close()
 }
 
+/** HeadlessConfig type for git operations */
+interface HeadlessConfig {
+	command: string
+	projectDir?: string
+	request?: string
+	resumeSessionId?: string
+	gitOp?: "commit" | "push" | "create-repo" | "create-pr"
+	gitMessage?: string
+	gitRepoName?: string
+	gitRepoVisibility?: "public" | "private"
+	gitPrTitle?: string
+	gitPrBody?: string
+}
+
 /**
- * Listen for iterate commands on stdin and run them.
+ * Listen for iterate commands and run them.
  * The dev server stays running — Vite HMR handles live reloads.
  */
 async function listenForIterations(
 	projectDir: string | undefined,
-	devServer: ChildProcess | undefined,
 	waitForCommand: () => Promise<{
 		command: string
 		projectDir?: string
@@ -183,7 +213,7 @@ async function listenForIterations(
 		try {
 			cmd = await waitForCommand()
 		} catch {
-			// Stdin closed — exit gracefully
+			// Stream closed — exit gracefully
 			break
 		}
 
@@ -253,11 +283,6 @@ async function listenForIterations(
 			})
 			callbacks.onEvent({ type: "session_complete", success: false, ts: ts() })
 		}
-	}
-
-	// Clean up dev server when stdin closes
-	if (devServer && !devServer.killed) {
-		devServer.kill()
 	}
 }
 
@@ -411,14 +436,13 @@ function runMigrations(
 /**
  * After generation completes in sandbox mode:
  * 1. Run drizzle-kit migrate
- * 2. Start pnpm dev via the dev:start script (creates PID file for dev:stop)
- *
- * Returns the wrapper child process (dev server runs in background via nohup).
+ * 2. Start pnpm dev via the dev:start script
+ * 3. Emit app_ready event
  */
 async function startSandboxDevServer(
 	projectDir: string,
 	emit: (event: EngineEvent) => void | Promise<void>,
-): Promise<ChildProcess> {
+): Promise<void> {
 	// Step 1: Run migrations
 	runMigrations(projectDir, emit)
 
@@ -437,15 +461,6 @@ async function startSandboxDevServer(
 		env: { ...process.env },
 	})
 
-	// Tail the dev server log so output reaches the container bridge via stderr
-	const logTail = spawn("tail", ["-f", "/tmp/dev-server.log"], {
-		cwd: projectDir,
-		stdio: ["ignore", "pipe", "pipe"],
-	})
-
-	logTail.stdout?.on("data", (data: Buffer) => {
-		process.stderr.write(data)
-	})
-
-	return logTail
+	// Step 3: Emit app_ready — the dev server is running in the background
+	emit({ type: "app_ready", port: 5173, ts: ts() })
 }

@@ -17,7 +17,7 @@ program
 
 program
 	.command("headless")
-	.description("Run in headless mode with NDJSON stdin/stdout protocol")
+	.description("Run in headless mode communicating via hosted Durable Streams")
 	.action(async () => {
 		await headlessCommand()
 	})
@@ -26,18 +26,14 @@ program
 	.command("serve")
 	.description("Start the web UI server")
 	.option("-p, --port <number>", "Web server port", "4400")
-	.option("--streams-port <number>", "Durable streams server port", "4437")
 	.option("--data-dir <path>", "Data directory for persistence", ".electric-agent")
 	.option("--open", "Open browser on start")
-	.action(
-		async (opts: { port?: string; streamsPort?: string; dataDir?: string; open?: boolean }) => {
-			await serveCommand({
-				port: opts.port ? parseInt(opts.port, 10) : undefined,
-				streamsPort: opts.streamsPort ? parseInt(opts.streamsPort, 10) : undefined,
-				dataDir: opts.dataDir,
-				open: opts.open,
-			})
-		},
-	)
+	.action(async (opts: { port?: string; dataDir?: string; open?: boolean }) => {
+		await serveCommand({
+			port: opts.port ? parseInt(opts.port, 10) : undefined,
+			dataDir: opts.dataDir,
+			open: opts.open,
+		})
+	})
 
 program.parse()

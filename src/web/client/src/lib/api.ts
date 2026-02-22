@@ -117,6 +117,21 @@ export function stopApp(sessionId: string) {
 	})
 }
 
+// --- Electric Claim API ---
+
+export interface ProvisionResult {
+	sourceId: string
+	secret: string
+	databaseUrl: string
+	electricUrl: string
+	claimId: string
+	claimUrl: string
+}
+
+export function provisionElectric() {
+	return request<ProvisionResult>("/provision-electric", { method: "POST" })
+}
+
 // --- Settings ---
 
 export function getSettings() {
@@ -142,18 +157,6 @@ export function listGithubRepos() {
 
 export function listBranches(repoFullName: string) {
 	return request<{ branches: GhBranch[] }>(`/github/repos/${repoFullName}/branches`)
-}
-
-// --- Files ---
-
-export function listFiles(sessionId: string) {
-	return request<{ files: string[]; prefix: string }>(`/sessions/${sessionId}/files`)
-}
-
-export function readFileContent(sessionId: string, filePath: string) {
-	return request<{ content: string }>(
-		`/sessions/${sessionId}/file-content?path=${encodeURIComponent(filePath)}`,
-	)
 }
 
 export function resumeFromGithub(repoUrl: string, branch?: string) {

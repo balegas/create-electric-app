@@ -7,19 +7,26 @@ interface SidebarProps {
 	onToggle: () => void
 }
 
-function HamburgerIcon() {
+function CollapseIcon({ collapsed }: { collapsed: boolean }) {
 	return (
 		<svg
 			viewBox="0 0 16 16"
 			fill="none"
 			stroke="currentColor"
 			strokeWidth="1.5"
-			aria-label="Toggle sidebar"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-label={collapsed ? "Expand menu" : "Collapse menu"}
 		>
-			<title>Toggle sidebar</title>
-			<line x1="2" y1="4" x2="14" y2="4" />
-			<line x1="2" y1="8" x2="14" y2="8" />
-			<line x1="2" y1="12" x2="14" y2="12" />
+			<title>{collapsed ? "Expand menu" : "Collapse menu"}</title>
+			{/* Sidebar panel icon — left panel with arrow */}
+			<rect x="2" y="2" width="12" height="12" rx="2" />
+			<line x1="6" y1="2" x2="6" y2="14" />
+			{collapsed ? (
+				<polyline points="9 6.5 11.5 8 9 9.5" />
+			) : (
+				<polyline points="11.5 6.5 9 8 11.5 9.5" />
+			)}
 		</svg>
 	)
 }
@@ -44,8 +51,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 					className="sidebar-icon"
 					viewBox="0 0 192 192"
 					aria-label="Electric"
-					onClick={collapsed ? onToggle : undefined}
-					style={collapsed ? { cursor: "pointer" } : undefined}
 				>
 					<title>Electric</title>
 					<path
@@ -58,8 +63,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 					/>
 				</svg>
 				<span className="sidebar-brand">Electric Agent</span>
-				<button type="button" className="sidebar-toggle" onClick={onToggle}>
-					<HamburgerIcon />
+				<button
+					type="button"
+					className="sidebar-settings-btn"
+					onClick={() => setShowSettings((v) => !v)}
+					title="Settings"
+				>
+					&#x2699;
 				</button>
 			</div>
 
@@ -84,13 +94,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 				))}
 			</div>
 
-			<div className="sidebar-footer">
-				<button
-					type="button"
-					className="sidebar-footer-btn"
-					onClick={() => setShowSettings((v) => !v)}
-				>
-					{collapsed ? "\u2699" : "\u2699 Settings"}
+			<div className="sidebar-collapse">
+				<button type="button" className="sidebar-collapse-btn" onClick={onToggle}>
+					<CollapseIcon collapsed={collapsed} />
+					<span className="sidebar-collapse-label">
+						{collapsed ? "Expand menu" : "Collapse menu"}
+					</span>
 				</button>
 			</div>
 		</aside>

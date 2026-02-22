@@ -14,6 +14,10 @@ export interface SessionInfo {
 	lastCoderSessionId?: string
 	/** Host port mapped to the sandbox's dev server */
 	appPort?: number
+	/** Preview URL for cloud sandboxes (Daytona) */
+	previewUrl?: string
+	/** Claim ID from the Electric Claim API — used for "claim into your account" */
+	claimId?: string
 	/** Git state — populated after scaffold or publish */
 	git?: {
 		branch: string

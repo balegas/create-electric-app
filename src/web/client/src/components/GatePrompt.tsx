@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { respondToGate } from "../lib/api"
+import { type ProvisionResult, provisionElectric, respondToGate } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
 import { Markdown } from "./Markdown"
@@ -186,12 +186,19 @@ function InfraConfigGate({
 	event: Extract<EngineEvent, { type: "infra_config_prompt" }>
 	onResolved: (summary: string) => void
 }) {
-	const [mode, setMode] = useState<"local" | "cloud">("local")
+	const [mode, setMode] = useState<"local" | "cloud" | "claim">("local")
 	const [databaseUrl, setDatabaseUrl] = useState("")
 	const [electricUrl, setElectricUrl] = useState("https://api.electric-sql.cloud")
 	const [sourceId, setSourceId] = useState("")
 	const [secret, setSecret] = useState("")
+	const [claimId, setClaimId] = useState("")
+	const [claimUrl, setClaimUrl] = useState("")
 	const [submitting, setSubmitting] = useState(false)
+
+	// Claim API provisioning state
+	const [provisioning, setProvisioning] = useState(false)
+	const [provisioned, setProvisioned] = useState(false)
+	const [provisionError, setProvisionError] = useState<string | null>(null)
 
 	// Repo setup fields
 	const hasGh = event.ghAccounts.length > 0
@@ -200,19 +207,46 @@ function InfraConfigGate({
 	const [repoVisibility, setRepoVisibility] = useState<"public" | "private">("private")
 	const [setupRepo, setSetupRepo] = useState(hasGh)
 
+	async function handleProvision() {
+		setProvisioning(true)
+		setProvisionError(null)
+		try {
+			const result: ProvisionResult = await provisionElectric()
+			setDatabaseUrl(result.databaseUrl)
+			setElectricUrl(result.electricUrl)
+			setSourceId(result.sourceId)
+			setSecret(result.secret)
+			setClaimId(result.claimId)
+			setClaimUrl(result.claimUrl)
+			setProvisioned(true)
+		} catch (err) {
+			setProvisionError(err instanceof Error ? err.message : "Provisioning failed")
+		} finally {
+			setProvisioning(false)
+		}
+	}
+
 	async function handleSubmit() {
 		setSubmitting(true)
 		const parts: string[] = []
 		try {
 			const payload: Record<string, unknown> = {}
 
-			if (mode === "cloud") {
+			if (mode === "claim") {
+				payload.mode = "claim"
+				payload.databaseUrl = databaseUrl
+				payload.electricUrl = electricUrl
+				payload.sourceId = sourceId
+				payload.secret = secret
+				payload.claimId = claimId
+				parts.push(`Quick Start (Cloud) — claim: ${claimUrl}`)
+			} else if (mode === "cloud") {
 				payload.mode = "cloud"
 				payload.databaseUrl = databaseUrl
 				payload.electricUrl = electricUrl
 				payload.sourceId = sourceId
 				payload.secret = secret
-				parts.push(`Electric Cloud`)
+				parts.push("Electric Cloud")
 			} else {
 				payload.mode = "local"
 				parts.push("Local Docker")
@@ -234,6 +268,7 @@ function InfraConfigGate({
 	}
 
 	const cloudValid = databaseUrl.trim() && sourceId.trim() && secret.trim()
+	const claimValid = provisioned && databaseUrl.trim() && sourceId.trim() && secret.trim()
 	const repoValid = !setupRepo || (repoAccount && repoName.trim())
 
 	return (
@@ -243,6 +278,16 @@ function InfraConfigGate({
 			<p className="gate-summary">Infrastructure</p>
 			<div className="question">
 				<div className="gate-radio-group">
+					<label className="gate-radio">
+						<input
+							type="radio"
+							name="infra-mode"
+							checked={mode === "claim"}
+							onChange={() => setMode("claim")}
+							disabled={submitting}
+						/>
+						Quick Start (Cloud)
+					</label>
 					<label className="gate-radio">
 						<input
 							type="radio"
@@ -261,10 +306,80 @@ function InfraConfigGate({
 							onChange={() => setMode("cloud")}
 							disabled={submitting}
 						/>
-						Electric Cloud
+						Electric Cloud (BYO)
 					</label>
 				</div>
 			</div>
+			{mode === "claim" && (
+				<div className="question">
+					{!provisioned ? (
+						<>
+							<p style={{ fontSize: "0.85em", opacity: 0.7, margin: "0 0 8px" }}>
+								Automatically provision a Neon Postgres database and Electric Cloud source.
+								Resources are available for 72 hours.
+							</p>
+							<button
+								className="gate-btn gate-btn-primary"
+								onClick={handleProvision}
+								disabled={provisioning || submitting}
+								style={{ marginBottom: 8 }}
+							>
+								{provisioning ? "Provisioning..." : "Provision Resources"}
+							</button>
+							{provisioning && (
+								<p style={{ fontSize: "0.85em", opacity: 0.7 }}>This may take 30-60 seconds...</p>
+							)}
+							{provisionError && (
+								<p style={{ color: "var(--color-error, #e55)", fontSize: "0.85em" }}>
+									{provisionError}
+								</p>
+							)}
+						</>
+					) : (
+						<div style={{ fontSize: "0.85em" }}>
+							<p style={{ color: "var(--color-done, #4c4)", margin: "0 0 6px" }}>
+								Resources provisioned successfully (72h TTL).
+							</p>
+							<div
+								style={{
+									background: "rgba(255,255,255,0.04)",
+									border: "1px solid rgba(255,255,255,0.1)",
+									borderRadius: 6,
+									padding: "8px 10px",
+									margin: "6px 0",
+									fontFamily: "monospace",
+									fontSize: "0.9em",
+									lineHeight: 1.6,
+									wordBreak: "break-all",
+								}}
+							>
+								<div>
+									<strong>Database URL:</strong> {databaseUrl}
+								</div>
+								<div>
+									<strong>Source ID:</strong> {sourceId}
+								</div>
+								<div>
+									<strong>Electric URL:</strong> {electricUrl}
+								</div>
+							</div>
+							{claimUrl && (
+								<p style={{ margin: "8px 0 0" }}>
+									Claim into your account:{" "}
+									<a
+										href={claimUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										style={{ wordBreak: "break-all" }}
+									>
+										{claimUrl}
+									</a>
+								</p>
+							)}
+						</div>
+					)}
+				</div>
+			)}
 			{mode === "cloud" && (
 				<>
 					<div className="question">
@@ -390,7 +505,12 @@ function InfraConfigGate({
 				<button
 					className="gate-btn gate-btn-primary"
 					onClick={handleSubmit}
-					disabled={submitting || (mode === "cloud" && !cloudValid) || !repoValid}
+					disabled={
+						submitting ||
+						(mode === "cloud" && !cloudValid) ||
+						(mode === "claim" && !claimValid) ||
+						!repoValid
+					}
 				>
 					{submitting ? "Configuring..." : "Start"}
 				</button>

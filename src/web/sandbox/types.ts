@@ -1,14 +1,16 @@
-import type { ChildProcess } from "node:child_process"
-
 // ---------------------------------------------------------------------------
 // Sandbox handle — returned by create/restartAgent
 // ---------------------------------------------------------------------------
 
+export type SandboxRuntime = "docker" | "daytona" | "sprites"
+
 export interface SandboxHandle {
 	sessionId: string
-	process: ChildProcess
+	runtime: SandboxRuntime
 	port: number
 	projectDir: string
+	/** Preview URL for cloud runtimes (Daytona) */
+	previewUrl?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -36,39 +38,70 @@ export type InfraConfig =
 			sourceId: string
 			secret: string
 	  }
+	| {
+			mode: "claim"
+			databaseUrl: string
+			electricUrl: string
+			sourceId: string
+			secret: string
+			claimId: string
+	  }
+
+// ---------------------------------------------------------------------------
+// Create options
+// ---------------------------------------------------------------------------
+
+export interface CreateSandboxOpts {
+	apiKey?: string
+	projectName?: string
+	infra?: InfraConfig
+	/** Stream env vars to inject into the sandbox for --stream mode */
+	streamEnv?: Record<string, string>
+	/**
+	 * If true, the sandbox should NOT auto-start the headless agent.
+	 * The bridge will start it via stdin/stdout (session API or docker exec).
+	 */
+	deferAgentStart?: boolean
+}
 
 // ---------------------------------------------------------------------------
 // Provider interface
+//
+// Communication (commands, gate responses) flows through SessionBridge,
+// NOT through the sandbox provider. The provider is pure CRUD + operations.
 // ---------------------------------------------------------------------------
 
 export interface SandboxProvider {
-	// Lifecycle
-	create(
-		sessionId: string,
-		opts?: { apiKey?: string; projectName?: string; infra?: InfraConfig },
-	): Promise<SandboxHandle>
-	destroy(handle: SandboxHandle): void
-	restartAgent(sessionId: string): Promise<SandboxHandle>
-	get(sessionId: string): SandboxHandle | undefined
+	/** The runtime type this provider manages */
+	readonly runtime: SandboxRuntime
 
-	// Communication (NDJSON protocol)
-	sendCommand(handle: SandboxHandle, config: Record<string, unknown>): void
-	sendGateResponse(handle: SandboxHandle, gate: string, value: Record<string, unknown>): void
+	// Lifecycle
+	create(sessionId: string, opts?: CreateSandboxOpts): Promise<SandboxHandle>
+	destroy(handle: SandboxHandle): Promise<void>
+	restartAgent(handle: SandboxHandle): Promise<SandboxHandle>
+	get(sessionId: string): SandboxHandle | undefined
+	list(): SandboxHandle[]
+
+	/** Check if the sandbox is still alive and responsive */
+	isAlive(handle: SandboxHandle): boolean
 
 	// File access
-	listFiles(handle: SandboxHandle, dir: string): string[]
-	readFile(handle: SandboxHandle, filePath: string): string | null
+	listFiles(handle: SandboxHandle, dir: string): Promise<string[]>
+	readFile(handle: SandboxHandle, filePath: string): Promise<string | null>
 
 	// App lifecycle
 	startApp(handle: SandboxHandle): Promise<boolean>
 	stopApp(handle: SandboxHandle): Promise<boolean>
-	isAppRunning(handle: SandboxHandle): boolean
+	isAppRunning(handle: SandboxHandle): Promise<boolean>
 
-	// Execute a shell command inside the container
-	exec(handle: SandboxHandle, command: string): string
+	// Execute a shell command inside the sandbox
+	exec(handle: SandboxHandle, command: string): Promise<string>
 
 	// Git (read-only — mutations go through the git agent inside the container)
-	gitStatus(handle: SandboxHandle, projectDir: string): GitStatus
+	gitStatus(handle: SandboxHandle, projectDir: string): Promise<GitStatus>
+
+	/** Get a preview URL for a port (cloud runtimes only) */
+	getPreviewUrl?(handle: SandboxHandle, port: number): Promise<string | null>
 
 	// Resume from repo
 	createFromRepo(

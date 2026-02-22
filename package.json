@@ -1,5 +1,5 @@
 {
-  "name": "create-electric-app",
+  "name": "electric-agent",
   "version": "0.1.0",
   "description": "CLI tool that turns natural-language app descriptions into running reactive Electric SQL + TanStack DB applications",
   "type": "module",
@@ -16,16 +16,34 @@
     "check:fix": "biome check --write src/",
     "start": "node dist/index.js",
     "serve": "node dist/index.js serve",
-    "test": "node --import tsx --test tests/*.test.ts",
-    "build:sandbox": "docker build -f Dockerfile.sandbox -t electric-agent-sandbox ."
+    "test": "node --import tsx --test tests/sandbox.test.ts tests/scaffold.test.ts tests/streams.test.ts tests/bridge.test.ts",
+    "test:e2e:docker": "node --import tsx --test tests/e2e-docker.test.ts",
+    "build:sandbox": "docker build -f Dockerfile.sandbox -t electric-agent-sandbox .",
+    "build:test-sandbox": "docker build -f Dockerfile.test-sandbox -t electric-agent-test-sandbox .",
+    "push:sandbox": "docker build -f Dockerfile.sandbox -t ${DOCKER_HUB_USER}/electric-agent-sandbox . && docker push ${DOCKER_HUB_USER}/electric-agent-sandbox",
+    "push:test-sandbox": "docker build -f Dockerfile.test-sandbox -t ${DOCKER_HUB_USER}/electric-agent-test-sandbox . && docker push ${DOCKER_HUB_USER}/electric-agent-test-sandbox",
+    "push:sandbox:daytona": "tsx src/web/sandbox/daytona-push.ts",
+    "test:daytona": "node --import tsx --test tests/e2e-daytona.test.ts",
+    "test:sprites": "node --import tsx --test tests/sprites.test.ts",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "npm run build && changeset publish"
   },
+  "files": [
+    "dist/",
+    "playbooks/",
+    "README.md"
+  ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "@daytonaio/api-client": "^0.144.0",
+    "@daytonaio/sdk": "^0.144.0",
     "@durable-streams/client": "^0.2.1",
     "@durable-streams/server": "^0.2.1",
+    "@fly/sprites": "^0.0.1",
     "@hono/node-server": "^1.19.9",
     "commander": "^13.1.0",
     "dotenv": "^17.3.1",
@@ -35,6 +53,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.4",
+    "@changesets/cli": "^2.29.8",
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -48,6 +67,7 @@
     "remark-gfm": "^4.0.1",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
+    "undici": "^7.22.0",
     "vite": "^7.3.1"
   }
 }

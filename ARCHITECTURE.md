@@ -11,6 +11,7 @@ A multi-layered system that takes natural-language descriptions and generates fu
 | Command | File | Purpose |
 |---------|------|---------|
 | `electric-agent headless` | `src/cli/headless.ts` | NDJSON stdin/stdout protocol, used inside Docker containers |
+| `electric-agent headless --stream` | `src/cli/headless.ts` | Durable Stream protocol, used inside Daytona sandboxes |
 | `electric-agent serve` | `src/cli/serve.ts` | Starts Hono web server + DurableStream server + React SPA |
 
 Both are registered in `src/index.ts` via Commander.js.
@@ -38,13 +39,23 @@ onContinueNeeded()                → gate: pauses until yes/no
 
 **`sdkMessageToEvents()`** (`src/engine/message-parser.ts`) — Converts raw Claude Agent SDK messages into `EngineEvent[]`.
 
-### 2. Headless Adapter
+### 2. Headless Adapters
 
-**`StdinReader`** (`src/engine/headless-adapter.ts`) — Single readline over stdin that handles both initial config and gate responses. Prevents data loss from multiple readline instances in piped/Docker mode.
+Two adapters provide the same `readConfig/waitForCommand/callbacks/close` interface but use different transports:
 
-Protocol:
-- **Stdin** (controller → agent): Line 1 = JSON config `{"command":"new",...}`, Lines 2+ = gate responses `{"gate":"approval","decision":"approve"}` or new commands
-- **Stdout** (agent → controller): One `EngineEvent` JSON per line (NDJSON)
+| Adapter | File | Transport | When used |
+|---------|------|-----------|-----------|
+| Stdin/Stdout | `src/engine/headless-adapter.ts` | NDJSON over stdin/stdout | Docker containers (default) |
+| Stream | `src/engine/stream-adapter.ts` | Hosted Durable Stream | Daytona sandboxes (`--stream` flag) |
+
+**Stdin protocol** (controller → agent):
+- Line 1 = JSON config `{"command":"new",...}`, Lines 2+ = gate responses or new commands
+- Agent → controller: One `EngineEvent` JSON per line (NDJSON)
+
+**Stream protocol** — bidirectional on a single durable stream:
+- Server writes: `{ source: "server", type: "command", ... }` or `{ source: "server", type: "gate_response", gate: "...", ... }`
+- Agent writes: `{ source: "agent", type: "tool_start", ... }` etc.
+- Each side filters messages by `source` field
 
 ### 3. Gate Mechanism
 
@@ -60,10 +71,36 @@ Container-forwarded gates: `clarification`, `approval`, `continue`, `revision`
 
 ### 4. Durable Streams
 
-File-backed event log (`@durable-streams/server`) at port 4437. Each session gets a stream at `/session/{id}`. Enables:
+Two modes:
+
+| Mode | Config | Stream URL pattern |
+|------|--------|--------------------|
+| **Local** | `@durable-streams/server` at port 4437 | `http://localhost:4437/session/{id}` |
+| **Hosted** | `DS_URL` + `DS_SERVICE_ID` + `DS_SECRET` env vars | `{DS_URL}/v1/stream/{DS_SERVICE_ID}/session/{id}` |
+
+Stream configuration is centralized in `src/web/streams.ts`:
+- `getStreamConfig()` reads env vars, returns null if not configured (falls back to local)
+- `getStreamConnectionInfo(sessionId)` builds the full URL + auth headers
+- `getStreamEnvVars(sessionId)` generates env vars to pass to sandboxes
+
+Enables:
 - Real-time push via SSE subscription
 - Catch-up on reconnect via offset tracking
 - Full session replay after completion
+
+### 5. Session Bridge
+
+**`SessionBridge`** (`src/web/bridge/types.ts`) — Abstracts bidirectional communication between server and sandbox:
+
+```
+emit(event)             → write server event to stream
+sendCommand(cmd)        → write command to stream
+sendGateResponse(gate)  → write gate response to stream
+onAgentEvent(cb)        → subscribe to agent events from stream
+onComplete(cb)          → fires when session_complete arrives
+```
+
+**`HostedStreamBridge`** (`src/web/bridge/hosted.ts`) — Implementation backed by hosted Durable Streams. Both server and sandbox connect to the same stream; messages are tagged with `source: "server"` or `source: "agent"` and each side filters by source.
 
 ---
 
@@ -154,11 +191,32 @@ Reads container stdout line-by-line, parses as `EngineEvent` JSON, appends to `D
 
 ### Sandbox Provider (`src/web/sandbox/`)
 
-`SandboxProvider` interface abstracts container management. `DockerSandboxProvider` implements it:
+`SandboxProvider` interface (`src/web/sandbox/types.ts`) abstracts sandbox management as pure CRUD + operations. Communication (commands, gate responses) flows through `SessionBridge`, NOT through the provider.
+
+| Provider | File | Runtime | Communication |
+|----------|------|---------|---------------|
+| `DockerSandboxProvider` | `src/web/sandbox/docker.ts` | Docker containers | NDJSON stdin/stdout (via `writeStdin()` + container-bridge) |
+| `DaytonaSandboxProvider` | `src/web/sandbox/daytona.ts` | Daytona cloud sandboxes | Hosted Durable Stream (via `SessionBridge`) |
+
+**CRUD API** (`/api/sandboxes`):
+- `GET /api/sandboxes` — list all active sandboxes
+- `GET /api/sandboxes/:sessionId` — get sandbox status
+- `POST /api/sandboxes` — create standalone sandbox
+- `DELETE /api/sandboxes/:sessionId` — destroy sandbox
+
+**Docker** (`DockerSandboxProvider`):
 - **create()**: `findFreePort()` → generate docker-compose.yml → start postgres+electric (local mode) → `docker compose run agent`
-- **Communication**: NDJSON over `process.stdin.write()`
+- Internal `ChildProcess` stored in private state (not exposed in handle)
 - **File access**: `docker exec find/cat`
 - **Auth**: tries `ANTHROPIC_API_KEY` → `CLAUDE_CODE_OAUTH_TOKEN` → macOS Keychain
+
+**Daytona** (`DaytonaSandboxProvider`):
+- **create()**: `resolveSnapshot()` → `daytona.create({ snapshot, envVars, labels })` → get preview URL
+- **Snapshot flow** (`daytona-registry.ts`): On first sandbox creation, `ensureSnapshot()` checks if a snapshot exists. If not, it gets transient push credentials via `DockerRegistryApi.getTransientPushAccess()`, pushes the local image, and creates a snapshot. Subsequent creates in the same server session reuse the cached snapshot name.
+- **Image build**: `push:sandbox:daytona` script builds linux/amd64 (Daytona requires x86), pushes to transient registry, creates snapshot — all in one command
+- **File access**: `sandbox.process.executeCommand()` / `sandbox.fs.downloadFile()`
+- **Preview**: `sandbox.getPreviewLink(port)` for accessible URLs
+- Requires `DAYTONA_API_KEY` env var. Optional: `DAYTONA_API_URL` (default: `https://app.daytona.io/api`), `DAYTONA_TARGET` (default: `eu`)
 
 ### React Client (`src/web/client/`)
 
@@ -288,9 +346,12 @@ flowchart TD
 ## Key Design Patterns
 
 1. **Callback-driven I/O inversion** — Engine never knows its output target
-2. **NDJSON protocol** — Simple, language-agnostic container communication
-3. **Promise-based gates** — Pause workflow until external decision arrives
-4. **Durable Streams** — File-backed event log for replay, catch-up, persistence
-5. **Hook interception** — Transparent correctness enforcement without agent awareness
-6. **Session resumption** — SDK session IDs preserve full conversation context across runs
-7. **Progressive disclosure** — Planner reads playbooks first, coder reads them per-phase as instructed by the plan
+2. **Dual transport** — NDJSON stdin/stdout for Docker, hosted Durable Stream for cloud sandboxes
+3. **Source-tagged bidirectional stream** — Single stream per session, messages tagged `source: "server"` or `source: "agent"`, each side filters by source
+4. **SessionBridge abstraction** — Hides transport details; server and sandbox use the same API
+5. **Promise-based gates** — Pause workflow until external decision arrives
+6. **Durable Streams** — File-backed or hosted event log for replay, catch-up, persistence
+7. **Hook interception** — Transparent correctness enforcement without agent awareness
+8. **Session resumption** — SDK session IDs preserve full conversation context across runs
+9. **Progressive disclosure** — Planner reads playbooks first, coder reads them per-phase as instructed by the plan
+10. **Provider-agnostic CRUD** — `SandboxProvider` interface enables Docker/Daytona swap without changing server code
