@@ -27,6 +27,17 @@ npm run serve                    # start web UI (Hono + DurableStreams + React S
 node dist/index.js headless      # headless NDJSON mode (used inside Docker containers)
 ```
 
+### Deployment (Fly.io)
+
+```bash
+fly deploy                       # deploy server + SPA to Fly.io (uses Dockerfile.fly)
+fly secrets set FLY_API_TOKEN=... DS_URL=... DS_SERVICE_ID=... DS_SECRET=...
+```
+
+- The Fly.io server runs the Node.js Hono API server and serves the React SPA.
+- Sandbox runtime defaults to Sprites (`SANDBOX_RUNTIME=sprites` in `fly.toml`).
+- CI auto-deploys to Fly.io on push to `main` (`.github/workflows/deploy-fly.yml`).
+
 ### Docker sandbox
 
 ```bash
@@ -102,15 +113,24 @@ src/
     ├── infra.ts                 # DurableStream server lifecycle
     ├── gate.ts                  # Promise-based gate management
     ├── sessions.ts              # Session index (JSON file)
-    ├── container-bridge.ts      # Container stdout → DurableStream bridge
+    ├── streams.ts               # Durable Streams connection config
     ├── sandbox/                 # Container management
     │   ├── types.ts             # SandboxProvider interface + types
     │   ├── docker.ts            # DockerSandboxProvider implementation
     │   ├── daytona.ts           # DaytonaSandboxProvider (cloud, snapshot-based)
     │   ├── daytona-registry.ts  # Transient registry push + snapshot lifecycle
     │   ├── daytona-push.ts      # CLI: build amd64 + push + create snapshot
+    │   ├── sprites.ts           # SpritesSandboxProvider (Fly.io Sprites)
+    │   ├── sprites-bootstrap.ts # Sprites bootstrap + checkpoint restore
     │   └── index.ts             # Re-exports
-    └── client/                  # React SPA (built with Vite)
+    ├── bridge/                  # Sandbox communication bridges
+    │   ├── types.ts             # SessionBridge interface
+    │   ├── hosted.ts            # HostedStreamBridge (Durable Streams)
+    │   ├── docker-stdio.ts      # DockerStdioBridge (stdin/stdout)
+    │   ├── daytona.ts           # DaytonaSessionBridge
+    │   ├── sprites.ts           # SpritesStdioBridge (Sprites SDK sessions)
+    │   └── index.ts             # Re-exports
+    └── client/                  # React SPA (built with Vite, deployed with server)
         ├── index.html
         ├── vite.config.ts
         └── src/
@@ -202,9 +222,7 @@ The following secrets are configured on the GitHub repository (set via `gh secre
 | `DS_SERVICE_ID` | Durable Streams service ID |
 | `DS_SECRET` | Durable Streams JWT secret |
 | `GH_TOKEN` | GitHub PAT (used by agents for git operations) |
-| `FLY_API_TOKEN` | Fly.io deploy token |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
+| `FLY_API_TOKEN` | Fly.io deploy token + Sprites sandbox API |
 
 ## Common Gotchas
 

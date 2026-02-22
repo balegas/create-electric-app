@@ -30,24 +30,6 @@ const SANDBOX_IMAGE = "electric-agent-sandbox"
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Try to read the Claude OAuth access token from the macOS Keychain.
- */
-function readKeychainOAuthToken(): string | null {
-	if (process.platform !== "darwin") return null
-	try {
-		const raw = execFileSync(
-			"security",
-			["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-			{ encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] },
-		).trim()
-		const parsed = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
-		return parsed.claudeAiOauth?.accessToken ?? null
-	} catch {
-		return null
-	}
-}
-
 function findFreePort(): Promise<number> {
 	return new Promise((resolve, reject) => {
 		const server = net.createServer()
@@ -65,12 +47,7 @@ function findFreePort(): Promise<number> {
 }
 
 function resolveAuthEnv(opts?: { apiKey?: string }): [string, string] | null {
-	const apiKey = opts?.apiKey || process.env.ANTHROPIC_API_KEY
-	if (apiKey) return ["ANTHROPIC_API_KEY", apiKey]
-	if (process.env.CLAUDE_CODE_OAUTH_TOKEN)
-		return ["CLAUDE_CODE_OAUTH_TOKEN", process.env.CLAUDE_CODE_OAUTH_TOKEN]
-	const oauthToken = readKeychainOAuthToken()
-	if (oauthToken) return ["CLAUDE_CODE_OAUTH_TOKEN", oauthToken]
+	if (opts?.apiKey) return ["ANTHROPIC_API_KEY", opts.apiKey]
 	return null
 }
 
@@ -97,9 +74,8 @@ function generateComposeFile(
 	if (auth) {
 		agentEnv.push(`${auth[0]}=${auth[1]}`)
 	}
-	const resolvedGhToken = ghToken || process.env.GH_TOKEN || process.env.GITHUB_TOKEN
-	if (resolvedGhToken) {
-		agentEnv.push(`GH_TOKEN=${resolvedGhToken}`)
+	if (ghToken) {
+		agentEnv.push(`GH_TOKEN=${ghToken}`)
 	}
 
 	// Add stream env vars for hosted Durable Streams communication
