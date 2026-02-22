@@ -324,21 +324,6 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.use("*", cors({ origin: "*" }))
 
-// --- Settings ---
-// The Worker does NOT handle user credentials (ANTHROPIC_API_KEY, GH_TOKEN).
-// Users provide their own — those flow directly into the sandbox as env vars.
-
-app.get("/api/settings", (c) => {
-	// Credentials are user-provided and flow into the sandbox, not the Worker.
-	// Always report false — the client Settings UI is not used in Worker mode.
-	return c.json({ hasApiKey: false, hasGhToken: false })
-})
-
-app.put("/api/settings", (c) => {
-	// No-op: credentials flow into the sandbox, not the Worker.
-	return c.json({ ok: true })
-})
-
 // --- Electric provisioning ---
 
 app.post("/api/provision-electric", async (c) => {
@@ -375,6 +360,8 @@ app.post("/api/sessions", async (c) => {
 	const body = (await c.req.json()) as {
 		description: string
 		name?: string
+		apiKey?: string
+		ghToken?: string
 	}
 	if (!body.description) {
 		return c.json({ error: "description is required" }, 400)
@@ -531,7 +518,7 @@ app.post("/api/sessions/:id/respond", async (c) => {
 		// TODO: Create sandbox via Daytona, then send "new" command to DS.
 		// For now, emit a log event explaining the limitation.
 		// When Daytona is wired:
-		//   1. const handle = await createSandbox(c.env, sessionId, { projectName, infra, streamEnv })
+		//   1. const handle = await createSandbox(c.env, sessionId, { projectName, infra, apiKey: session._apiKey, ghToken: session._ghToken })
 		//   2. await kvUpdateSession(kv, sessionId, { _workerState: "running", _sandboxId: handle.sandboxId, ... })
 		//   3. await dsAppendCommand(conn, { command: "new", description, projectName, ... })
 		await dsAppend(conn, {
