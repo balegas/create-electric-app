@@ -13,8 +13,7 @@
   "scripts": {
     "build": "tsc && npm run build:web",
     "build:server": "tsc",
-    "build:web": "vite build --config src/web/client/vite.config.ts && npm run build:worker",
-    "build:worker": "esbuild src/web/worker.ts --bundle --format=esm --outfile=dist/web/client/_worker.js",
+    "build:web": "vite build --config src/web/client/vite.config.ts",
     "dev": "tsc --watch",
     "dev:web": "vite --config src/web/client/vite.config.ts",
     "check": "biome check src/",
@@ -59,7 +58,6 @@
   "devDependencies": {
     "@biomejs/biome": "2.2.4",
     "@changesets/cli": "^2.29.8",
-    "@cloudflare/workers-types": "^4.20260228.0",
     "@types/node": "^22.15.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
