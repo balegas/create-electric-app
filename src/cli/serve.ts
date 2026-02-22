@@ -11,8 +11,8 @@ export async function serveCommand(opts: {
 	dataDir?: string
 	open?: boolean
 }): Promise<void> {
-	const port = opts.port ?? 4400
-	const dataDir = opts.dataDir ?? ".electric-agent"
+	const port = opts.port ?? (process.env.PORT ? parseInt(process.env.PORT, 10) : 4400)
+	const dataDir = opts.dataDir ?? process.env.DATA_DIR ?? ".electric-agent"
 
 	// Require hosted stream credentials
 	const streamConfig = getStreamConfig()

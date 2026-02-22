@@ -1,0 +1,35 @@
+# ---------------------------------------------------------------------------
+# Fly.io server deployment — Node.js Hono API server + React SPA
+# ---------------------------------------------------------------------------
+
+# Stage 1: Build TypeScript + React SPA
+FROM node:24-alpine AS builder
+
+WORKDIR /opt/app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY . .
+RUN npm run build
+# Remove dev dependencies after build
+RUN npm prune --production
+
+# Stage 2: Runtime image (minimal)
+FROM node:24-alpine
+
+RUN apk add --no-cache git curl github-cli bash
+
+WORKDIR /opt/app
+COPY --from=builder /opt/app/dist ./dist
+COPY --from=builder /opt/app/node_modules ./node_modules
+COPY --from=builder /opt/app/package.json ./package.json
+COPY --from=builder /opt/app/playbooks ./playbooks
+
+# Data directory for session state
+RUN mkdir -p /data/.electric-agent
+
+ENV NODE_ENV=production
+ENV DATA_DIR=/data/.electric-agent
+
+EXPOSE 8080
+
+CMD ["node", "dist/index.js", "serve", "--port", "8080", "--data-dir", "/data/.electric-agent"]

@@ -163,6 +163,25 @@ export function createApp(config: ServerConfig) {
 
 	// --- API Routes ---
 
+	// Health check
+	app.get("/api/health", (c) => {
+		const checks: Record<string, string> = {}
+		let healthy = true
+
+		// Stream config
+		if (config.streamConfig.url && config.streamConfig.serviceId && config.streamConfig.secret) {
+			checks.streams = "ok"
+		} else {
+			checks.streams = "error"
+			healthy = false
+		}
+
+		// Sandbox runtime
+		checks.sandbox = config.sandbox.runtime
+
+		return c.json({ healthy, checks }, healthy ? 200 : 503)
+	})
+
 	// Provision Electric Cloud resources via the Claim API
 	app.post("/api/provision-electric", async (c) => {
 		try {
@@ -1040,12 +1059,14 @@ export async function startWebServer(opts: {
 
 	const app = createApp(config)
 
+	const hostname = process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1"
+
 	serve({
 		fetch: app.fetch,
 		port: config.port,
-		hostname: "127.0.0.1",
+		hostname,
 	})
 
-	console.log(`Web UI server running at http://127.0.0.1:${config.port}`)
+	console.log(`Web UI server running at http://${hostname}:${config.port}`)
 	console.log(`Streams: ${config.streamConfig.url} (service: ${config.streamConfig.serviceId})`)
 }
