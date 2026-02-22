@@ -1,7 +1,26 @@
 #:schema node_modules/wrangler/config-schema.json
 name = "create-electric-app"
 compatibility_date = "2024-12-30"
+compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist/web/client"
+
+# KV namespace for session storage
+# Create with: wrangler pages project create create-electric-app
+# Then bind via dashboard or: wrangler pages secret put ...
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "SESSIONS_KV_NAMESPACE_ID"       # replace after `wrangler kv namespace create SESSIONS`
+
+# Environment variables set as secrets via:
+#   wrangler pages secret put DS_URL
+#   wrangler pages secret put DS_SERVICE_ID
+#   wrangler pages secret put DS_SECRET
+#   wrangler pages secret put ANTHROPIC_API_KEY
+#   wrangler pages secret put GH_TOKEN
+#   wrangler pages secret put DAYTONA_API_KEY
+#   wrangler pages secret put DAYTONA_API_URL
+#   wrangler pages secret put DAYTONA_TARGET
+#   wrangler pages secret put SANDBOX_SNAPSHOT
 
 [vars]
 API_BACKEND_URL = "https://electric-agent.fly.dev"
