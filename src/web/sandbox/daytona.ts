@@ -43,9 +43,20 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 	private async resolveSnapshot(): Promise<string> {
 		if (this.cachedSnapshot) return this.cachedSnapshot
 
+		const dockerHubUser = process.env.DOCKER_HUB_USER
+		const dockerHubToken = process.env.DOCKER_HUB_TOKEN
+		if (!dockerHubUser || !dockerHubToken) {
+			throw new Error(
+				"DOCKER_HUB_USER and DOCKER_HUB_TOKEN environment variables are required " +
+					"for Daytona sandbox creation. See README for Docker Hub setup instructions.",
+			)
+		}
+
 		const snapshotName = await ensureSnapshot(this.client, {
-			apiKey: this.apiKey,
-			apiUrl: this.apiUrl,
+			daytonaApiKey: this.apiKey,
+			daytonaApiUrl: this.apiUrl,
+			dockerHubUser,
+			dockerHubToken,
 			localImage: SANDBOX_IMAGE,
 		})
 

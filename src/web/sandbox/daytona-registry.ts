@@ -6,10 +6,12 @@ import { Configuration, DockerRegistryApi } from "@daytonaio/api-client"
 import type { Daytona } from "@daytonaio/sdk"
 
 // ---------------------------------------------------------------------------
-// Daytona Transient Registry — push local images + create snapshots
+// Daytona Registry — push to Docker Hub + register in Daytona + snapshots
 // ---------------------------------------------------------------------------
 
 const SANDBOX_IMAGE = process.env.SANDBOX_IMAGE || "electric-agent-sandbox"
+const DOCKER_HUB_URL = "https://index.docker.io"
+const REGISTRY_NAME = "electric-agent-dockerhub"
 
 function getPackageVersion(): string {
 	try {
@@ -24,78 +26,116 @@ function getPackageVersion(): string {
 }
 
 export interface PushImageOpts {
-	apiKey: string
-	apiUrl?: string
+	/** Daytona API key (for registering the registry in Daytona) */
+	daytonaApiKey: string
+	daytonaApiUrl?: string
+	/** Docker Hub username */
+	dockerHubUser: string
+	/** Docker Hub personal access token */
+	dockerHubToken: string
 	localImage?: string
 }
 
 export interface PushImageResult {
 	remoteImage: string
-	registryUrl: string
-	project: string
+	dockerHubUser: string
 }
 
 /**
- * Push a local Docker image to Daytona's transient registry.
- *
- * 1. Gets temporary push credentials via `DockerRegistryApi.getTransientPushAccess()`
- * 2. Tags the local image with the remote registry path
- * 3. Logs in, pushes, and logs out
+ * Ensure Docker Hub is registered in Daytona's registry API.
+ * Idempotent — skips if already registered.
  */
-export async function pushImageToDaytona(opts: PushImageOpts): Promise<PushImageResult> {
-	const localImage = opts.localImage ?? SANDBOX_IMAGE
-	const apiUrl = opts.apiUrl ?? "https://app.daytona.io/api"
-	const version = getPackageVersion()
-
-	// Get transient push access credentials
-	// DockerRegistryApi uses Bearer auth (accessToken), not apiKey header
+async function ensureDockerHubRegistry(opts: {
+	daytonaApiKey: string
+	daytonaApiUrl?: string
+	dockerHubUser: string
+	dockerHubToken: string
+}): Promise<void> {
+	const apiUrl = opts.daytonaApiUrl ?? "https://app.daytona.io/api"
 	const config = new Configuration({
-		accessToken: opts.apiKey,
+		accessToken: opts.daytonaApiKey,
 		basePath: apiUrl,
 	})
 	const registryApi = new DockerRegistryApi(config)
-	const response = await registryApi.getTransientPushAccess()
-	const access = response.data
 
-	const remoteImage = `${access.registryUrl}/${access.project}/${localImage}:${version}`
+	// Check if we already registered this registry
+	const existing = await registryApi.listRegistries()
+	const found = existing.data.find(
+		(r) =>
+			r.name === REGISTRY_NAME || (r.url === DOCKER_HUB_URL && r.username === opts.dockerHubUser),
+	)
 
-	console.log(`[daytona-registry] Pushing ${localImage} → ${remoteImage}`)
-	console.log(`[daytona-registry] Registry: ${access.registryUrl} (expires: ${access.expiresAt})`)
+	if (found) {
+		console.log(`[daytona-registry] Docker Hub registry already registered (id: ${found.id})`)
+		return
+	}
+
+	// Register Docker Hub in Daytona
+	console.log("[daytona-registry] Registering Docker Hub in Daytona...")
+	await registryApi.createRegistry({
+		name: REGISTRY_NAME,
+		url: DOCKER_HUB_URL,
+		username: opts.dockerHubUser,
+		password: opts.dockerHubToken,
+		project: opts.dockerHubUser,
+		registryType: "organization",
+	})
+	console.log("[daytona-registry] Docker Hub registered successfully")
+}
+
+/**
+ * Push a local Docker image to Docker Hub and register the registry in Daytona.
+ *
+ * 1. Registers Docker Hub in Daytona's registry API (idempotent)
+ * 2. Tags the local image for Docker Hub
+ * 3. Logs in, pushes, and logs out
+ */
+export async function pushImageToDockerHub(opts: PushImageOpts): Promise<PushImageResult> {
+	const localImage = opts.localImage ?? SANDBOX_IMAGE
+	const version = getPackageVersion()
+	const remoteImage = `${opts.dockerHubUser}/${localImage}:${version}`
+
+	// Register Docker Hub in Daytona so it can pull the image
+	await ensureDockerHubRegistry({
+		daytonaApiKey: opts.daytonaApiKey,
+		daytonaApiUrl: opts.daytonaApiUrl,
+		dockerHubUser: opts.dockerHubUser,
+		dockerHubToken: opts.dockerHubToken,
+	})
+
+	console.log(`[daytona-registry] Pushing ${localImage} → docker.io/${remoteImage}`)
 
 	try {
 		// Tag the local image
 		execSync(`docker tag ${localImage} ${remoteImage}`, { stdio: "pipe" })
 
-		// Login to the transient registry
-		execSync(`docker login ${access.registryUrl} -u ${access.username} --password-stdin`, {
-			input: access.secret,
+		// Login to Docker Hub
+		execSync(`docker login -u ${opts.dockerHubUser} --password-stdin`, {
+			input: opts.dockerHubToken,
 			stdio: ["pipe", "pipe", "pipe"],
 		})
 
 		// Push the image
-		console.log("[daytona-registry] Pushing image (this may take a while)...")
+		console.log("[daytona-registry] Pushing image to Docker Hub...")
 		execSync(`docker push ${remoteImage}`, { stdio: "inherit", timeout: 600_000 })
 
 		console.log("[daytona-registry] Push complete")
 	} finally {
-		// Always logout
 		try {
-			execSync(`docker logout ${access.registryUrl}`, { stdio: "pipe" })
+			execSync("docker logout", { stdio: "pipe" })
 		} catch {
 			// Ignore logout errors
 		}
 	}
 
-	return {
-		remoteImage,
-		registryUrl: access.registryUrl,
-		project: access.project,
-	}
+	return { remoteImage, dockerHubUser: opts.dockerHubUser }
 }
 
 export interface EnsureSnapshotOpts {
-	apiKey: string
-	apiUrl?: string
+	daytonaApiKey: string
+	daytonaApiUrl?: string
+	dockerHubUser: string
+	dockerHubToken: string
 	localImage?: string
 	/** Callback for snapshot creation logs */
 	onLogs?: (chunk: string) => void
@@ -105,7 +145,8 @@ export interface EnsureSnapshotOpts {
  * Ensure a Daytona snapshot exists for the sandbox image.
  *
  * - If a snapshot with the expected name already exists and is active, returns its name.
- * - Otherwise, pushes the local image to the transient registry and creates a snapshot.
+ * - Otherwise, pushes the image to Docker Hub, registers the registry in Daytona,
+ *   and creates a snapshot from the Docker Hub image.
  */
 export async function ensureSnapshot(daytona: Daytona, opts: EnsureSnapshotOpts): Promise<string> {
 	const localImage = opts.localImage ?? SANDBOX_IMAGE
@@ -122,18 +163,19 @@ export async function ensureSnapshot(daytona: Daytona, opts: EnsureSnapshotOpts)
 			`[daytona-registry] Snapshot "${snapshotName}" exists but state=${existing.state}, recreating...`,
 		)
 	} catch {
-		// Snapshot doesn't exist — we'll create it
 		console.log(`[daytona-registry] Snapshot "${snapshotName}" not found, creating...`)
 	}
 
-	// Push the local image to Daytona's transient registry
-	const { remoteImage } = await pushImageToDaytona({
-		apiKey: opts.apiKey,
-		apiUrl: opts.apiUrl,
+	// Push to Docker Hub + register in Daytona
+	const { remoteImage } = await pushImageToDockerHub({
+		daytonaApiKey: opts.daytonaApiKey,
+		daytonaApiUrl: opts.daytonaApiUrl,
+		dockerHubUser: opts.dockerHubUser,
+		dockerHubToken: opts.dockerHubToken,
 		localImage,
 	})
 
-	// Create the snapshot from the pushed image
+	// Create the snapshot from the Docker Hub image
 	console.log(`[daytona-registry] Creating snapshot "${snapshotName}" from ${remoteImage}...`)
 	await daytona.snapshot.create(
 		{

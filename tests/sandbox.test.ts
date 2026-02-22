@@ -3,7 +3,7 @@ import "../tests/setup-proxy.js"
 import { strict as assert } from "node:assert"
 import { describe, it } from "node:test"
 import { DaytonaSandboxProvider } from "../src/web/sandbox/daytona.js"
-import { getSnapshotStatus, pushImageToDaytona } from "../src/web/sandbox/daytona-registry.js"
+import { getSnapshotStatus } from "../src/web/sandbox/daytona-registry.js"
 import { DockerSandboxProvider } from "../src/web/sandbox/docker.js"
 import type { SandboxHandle, SandboxProvider } from "../src/web/sandbox/types.js"
 
