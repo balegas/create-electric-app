@@ -74,16 +74,12 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			envVars.ELECTRIC_SECRET = infra.secret
 		}
 
-		const apiKey = opts?.apiKey || process.env.ANTHROPIC_API_KEY
-		if (apiKey) {
-			envVars.ANTHROPIC_API_KEY = apiKey
-		} else if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-			envVars.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN
+		if (opts?.apiKey) {
+			envVars.ANTHROPIC_API_KEY = opts.apiKey
 		}
 
-		const ghToken = opts?.ghToken || process.env.GH_TOKEN || process.env.GITHUB_TOKEN
-		if (ghToken) {
-			envVars.GH_TOKEN = ghToken
+		if (opts?.ghToken) {
+			envVars.GH_TOKEN = opts.ghToken
 		}
 
 		// Note: stream env vars are NOT passed to Daytona sandboxes.
