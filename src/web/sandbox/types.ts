@@ -2,7 +2,7 @@
 // Sandbox handle — returned by create/restartAgent
 // ---------------------------------------------------------------------------
 
-export type SandboxRuntime = "docker" | "daytona"
+export type SandboxRuntime = "docker" | "daytona" | "sprites"
 
 export interface SandboxHandle {
 	sessionId: string

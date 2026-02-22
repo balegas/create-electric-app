@@ -21,12 +21,14 @@ import {
 import { DaytonaSessionBridge } from "./bridge/daytona.js"
 import { DockerStdioBridge } from "./bridge/docker-stdio.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
+import { SpritesStdioBridge } from "./bridge/sprites.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import type { DaytonaSandboxProvider as DaytonaSandboxProviderType } from "./sandbox/daytona.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
+import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
 import {
 	addSession,
 	deleteSession,
@@ -106,6 +108,13 @@ function createStdioBridge(config: ServerConfig, sessionId: string): SessionBrid
 			throw new Error(`No Daytona sandbox object for session ${sessionId}`)
 		}
 		bridge = new DaytonaSessionBridge(sessionId, conn, sandbox)
+	} else if (config.sandbox.runtime === "sprites") {
+		const spritesProvider = config.sandbox as SpritesSandboxProviderType
+		const sprite = spritesProvider.getSpriteObject(sessionId)
+		if (!sprite) {
+			throw new Error(`No Sprites sandbox object for session ${sessionId}`)
+		}
+		bridge = new SpritesStdioBridge(sessionId, conn, sprite)
 	} else {
 		const dockerProvider = config.sandbox as DockerSandboxProviderType
 		const containerId = dockerProvider.getContainerId(sessionId)

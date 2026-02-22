@@ -1,6 +1,7 @@
 import { DaytonaSandboxProvider } from "../web/sandbox/daytona.js"
 import { getSnapshotStatus } from "../web/sandbox/daytona-registry.js"
 import { DockerSandboxProvider } from "../web/sandbox/docker.js"
+import { SpritesSandboxProvider } from "../web/sandbox/sprites.js"
 import type { SandboxProvider } from "../web/sandbox/types.js"
 import { startWebServer } from "../web/server.js"
 import { getStreamConfig } from "../web/streams.js"
@@ -59,6 +60,15 @@ export async function serveCommand(opts: {
 			)
 			console.log(`[serve] To pre-push: npm run push:sandbox:daytona`)
 		}
+	} else if (runtime === "sprites" || (!runtime && process.env.FLY_API_TOKEN)) {
+		if (!process.env.FLY_API_TOKEN) {
+			console.error("Error: SANDBOX_RUNTIME=sprites requires FLY_API_TOKEN to be set.")
+			process.exit(1)
+		}
+		sandbox = new SpritesSandboxProvider({
+			token: process.env.FLY_API_TOKEN,
+		})
+		console.log(`[serve] Sandbox runtime: Sprites (Fly.io)`)
 	} else {
 		sandbox = new DockerSandboxProvider()
 		console.log("[serve] Sandbox runtime: Docker (default)")
@@ -66,8 +76,8 @@ export async function serveCommand(opts: {
 
 	// Determine bridge mode:
 	//   BRIDGE_MODE=stdio  → always stdin/stdout (required for Daytona without internet)
-	//   BRIDGE_MODE=stream → always hosted Durable Streams (default for Docker)
-	//   (unset)            → "stdio" for Daytona, "stream" for Docker
+	//   BRIDGE_MODE=stream → always hosted Durable Streams (default for Docker & Sprites)
+	//   (unset)            → "stdio" for Daytona, "stream" for Docker/Sprites
 	const bridgeModeEnv = process.env.BRIDGE_MODE?.toLowerCase()
 	let bridgeMode: "stream" | "stdio"
 	if (bridgeModeEnv === "stdio") {
@@ -75,7 +85,7 @@ export async function serveCommand(opts: {
 	} else if (bridgeModeEnv === "stream") {
 		bridgeMode = "stream"
 	} else {
-		// Default: Daytona uses stdio (required), Docker uses stream (backward compat)
+		// Default: Daytona uses stdio (required — no internet), others use stream
 		bridgeMode = sandbox.runtime === "daytona" ? "stdio" : "stream"
 	}
 	console.log(`[serve] Bridge mode: ${bridgeMode}`)
