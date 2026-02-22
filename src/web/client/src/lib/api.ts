@@ -132,19 +132,6 @@ export function provisionElectric() {
 	return request<ProvisionResult>("/provision-electric", { method: "POST" })
 }
 
-// --- Settings ---
-
-export function getSettings() {
-	return request<{ hasApiKey: boolean; hasGhToken: boolean }>("/settings")
-}
-
-export function updateSettings(settings: { anthropicApiKey?: string; githubPat?: string }) {
-	return request<{ ok: boolean; ghUsername?: string }>("/settings", {
-		method: "PUT",
-		body: settings,
-	})
-}
-
 // --- Git/GitHub ---
 
 export function getGitStatus(sessionId: string) {
