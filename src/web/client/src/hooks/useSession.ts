@@ -77,8 +77,12 @@ export function useSession(sessionId: string | null) {
 					return [...prev, { kind: "gate" as const, event, resolved: false, ts: event.ts }]
 
 				case "gate_resolved": {
-					// Mark the most recent unresolved gate as resolved
+					// Mark the most recent unresolved gate as resolved, or enrich an
+					// already-resolved gate with details from the server (the client marks
+					// infra_config resolved immediately via callback, before the SSE event
+					// arrives with details).
 					const updated = [...prev]
+					let found = false
 					for (let i = updated.length - 1; i >= 0; i--) {
 						const entry = updated[i]
 						if (entry.kind === "gate" && !entry.resolved) {
@@ -86,8 +90,19 @@ export function useSession(sessionId: string | null) {
 								...entry,
 								resolved: true,
 								resolvedSummary: event.summary || entry.resolvedSummary,
+								resolvedDetails: event.details,
 							}
+							found = true
 							break
+						}
+					}
+					if (!found && event.details) {
+						for (let i = updated.length - 1; i >= 0; i--) {
+							const entry = updated[i]
+							if (entry.kind === "gate" && entry.resolved && !entry.resolvedDetails) {
+								updated[i] = { ...entry, resolvedDetails: event.details }
+								break
+							}
 						}
 					}
 					return updated

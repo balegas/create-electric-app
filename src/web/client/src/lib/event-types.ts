@@ -35,7 +35,13 @@ export type EngineEvent =
 			runtime: "docker" | "sprites" | "daytona"
 			ts: string
 	  }
-	| { type: "gate_resolved"; gate: string; summary?: string; ts: string }
+	| {
+			type: "gate_resolved"
+			gate: string
+			summary?: string
+			details?: Record<string, string>
+			ts: string
+	  }
 
 export type ConsoleEntry =
 	| { kind: "log"; level: LogLevel; message: string; ts: string }
@@ -62,5 +68,7 @@ export type ConsoleEntry =
 			resolved: boolean
 			/** Short summary of the decision, shown when collapsed */
 			resolvedSummary?: string
+			/** Structured key-value details of the gate decision */
+			resolvedDetails?: Record<string, string>
 			ts: string
 	  }

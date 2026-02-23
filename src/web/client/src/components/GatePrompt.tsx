@@ -230,11 +230,13 @@ function InfraConfigGate({
 	event,
 	onResolved,
 	resolved,
+	resolvedDetails,
 }: {
 	sessionId: string
 	event: Extract<EngineEvent, { type: "infra_config_prompt" }>
 	onResolved: (summary: string) => void
 	resolved?: boolean
+	resolvedDetails?: Record<string, string>
 }) {
 	const isLocal = event.runtime === "docker"
 	const [mode, setMode] = useState<"local" | "cloud" | "claim">(isLocal ? "local" : "claim")
@@ -333,57 +335,38 @@ function InfraConfigGate({
 	}
 
 	if (resolved) {
+		// Use server-provided details (works for both live + replay).
+		// Fall back to component state for the brief moment before the SSE event arrives.
+		const details: Record<string, string> = resolvedDetails ?? {}
+		if (!resolvedDetails) {
+			details.Infrastructure = modeLabels[mode]
+			if (mode === "cloud" || mode === "claim") {
+				if (databaseUrl) details["Connection string"] = databaseUrl
+				if (sourceId) details["Source ID"] = sourceId
+			}
+			if (mode === "claim" && claimUrl) {
+				details["Claim link"] = claimUrl
+			}
+			if (setupRepo && repoAccount && repoName.trim()) {
+				details.Repository = `${repoAccount}/${repoName}`
+				details.Visibility = repoVisibility
+			}
+		}
 		return (
 			<div className="gate-prompt">
-				<h3>Setup {event.projectName}</h3>
 				<div className="gate-config-summary">
-					<div>
-						<strong>Infrastructure:</strong> {modeLabels[mode]}
-					</div>
-					{mode === "claim" && provisioned && (
-						<>
-							<div>
-								<strong>Database URL:</strong> {databaseUrl}
-							</div>
-							<div>
-								<strong>Source ID:</strong> {sourceId}
-							</div>
-							<div>
-								<strong>Electric URL:</strong> {electricUrl}
-							</div>
-							{claimUrl && (
-								<div>
-									<strong>Claim:</strong>{" "}
-									<a href={claimUrl} target="_blank" rel="noopener noreferrer">
-										{claimUrl}
-									</a>
-								</div>
+					{Object.entries(details).map(([key, value]) => (
+						<div key={key}>
+							<strong>{key}:</strong>{" "}
+							{value.startsWith("http") ? (
+								<a href={value} target="_blank" rel="noopener noreferrer">
+									{value}
+								</a>
+							) : (
+								value
 							)}
-						</>
-					)}
-					{mode === "cloud" && (
-						<>
-							<div>
-								<strong>Database URL:</strong> {databaseUrl}
-							</div>
-							<div>
-								<strong>Electric URL:</strong> {electricUrl}
-							</div>
-							<div>
-								<strong>Source ID:</strong> {sourceId}
-							</div>
-						</>
-					)}
-					{setupRepo && repoAccount && repoName.trim() && (
-						<>
-							<div>
-								<strong>Repository:</strong> {repoAccount}/{repoName}
-							</div>
-							<div>
-								<strong>Visibility:</strong> {repoVisibility}
-							</div>
-						</>
-					)}
+						</div>
+					))}
 				</div>
 			</div>
 		)
@@ -701,6 +684,7 @@ export function GatePrompt({
 					event={entry.event}
 					onResolved={resolve}
 					resolved={resolved}
+					resolvedDetails={entry.resolvedDetails}
 				/>
 			)
 			break
