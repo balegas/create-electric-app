@@ -151,7 +151,13 @@ export async function runNew(opts: {
 	}
 
 	const baseDir = opts.baseDir || process.cwd()
-	const { projectName, projectDir } = resolveProjectDir(baseDir, inferredName)
+	// When the caller provides an explicit projectName (e.g. server/sandbox),
+	// use it as-is — no dedup suffix. A sprite has exactly one project, and
+	// the server-sent name is used for the GitHub repo. Only add entropy
+	// when the name was inferred and might collide on a developer's machine.
+	const { projectName, projectDir } = opts.projectName
+		? { projectName: inferredName, projectDir: path.resolve(baseDir, inferredName) }
+		: resolveProjectDir(baseDir, inferredName)
 
 	emit({ type: "log", level: "plan", message: `Creating project: ${projectName}`, ts: ts() })
 	emit({ type: "log", level: "plan", message: `Description: ${description}`, ts: ts() })
@@ -551,22 +557,43 @@ function gitAutoPush(projectDir: string, emit: (event: EngineEvent) => void | Pr
 			encoding: "utf-8",
 			stdio: "pipe",
 		}).trim()
-		if (!remote) return
+		if (!remote) {
+			emit({
+				type: "log",
+				level: "verbose",
+				message: "No remote configured — skipping push",
+				ts: ts(),
+			})
+			return
+		}
 
 		const branch = execSync("git branch --show-current", {
 			cwd: projectDir,
 			encoding: "utf-8",
 			stdio: "pipe",
 		}).trim()
-		execSync(`git push -u origin ${branch}`, {
+		emit({ type: "log", level: "task", message: `Pushing to origin/${branch}...`, ts: ts() })
+		const pushOutput = execSync(`git push -u origin ${branch} 2>&1`, {
 			cwd: projectDir,
-			stdio: "pipe",
+			encoding: "utf-8",
 			timeout: 60_000,
 			env: { ...process.env },
+		}).trim()
+		if (pushOutput) {
+			emit({ type: "log", level: "verbose", message: pushOutput, ts: ts() })
+		}
+		emit({ type: "log", level: "done", message: `Pushed to origin/${branch}`, ts: ts() })
+	} catch (err) {
+		const detail =
+			(err as Record<string, string>)?.stderr ||
+			(err as Record<string, string>)?.stdout ||
+			(err instanceof Error ? err.message : "Push failed")
+		emit({
+			type: "log",
+			level: "error",
+			message: `Git push failed: ${detail}`,
+			ts: ts(),
 		})
-		emit({ type: "log", level: "done", message: "Pushed to remote", ts: ts() })
-	} catch {
-		// No remote or push failed — non-fatal
 	}
 }
 
