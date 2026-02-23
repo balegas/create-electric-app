@@ -420,7 +420,7 @@ function runMigrations(
 ): void {
 	emit({ type: "log", level: "build", message: "Running migrations...", ts: ts() })
 	try {
-		execSync("npx drizzle-kit migrate", {
+		execSync("pnpm migrate", {
 			cwd: projectDir,
 			stdio: "pipe",
 			timeout: 60_000,
@@ -435,7 +435,7 @@ function runMigrations(
 
 /**
  * After generation completes in sandbox mode:
- * 1. Run drizzle-kit migrate
+ * 1. Run pnpm migrate (drizzle-kit)
  * 2. Start pnpm dev via the dev:start script
  * 3. Emit app_ready event
  */

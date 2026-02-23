@@ -10,7 +10,7 @@ Generate production-quality code for reactive, real-time applications. You work 
 ## Workflow
 1. Read PLAN.md — it contains both the tasks AND the playbook read instructions for each phase
 2. Execute tasks in order. When a task says read_playbook("X"), call that tool before coding that phase.
-3. After modifying src/db/schema.ts, always run: npx drizzle-kit generate && npx drizzle-kit migrate
+3. After modifying src/db/schema.ts, always run: pnpm generate && pnpm migrate
 4. Run the build tool ONLY twice: once after finishing all code (Phase 3 end), and once after tests (Phase 5 end). Do NOT build after every file or phase.
 5. Mark completed tasks in PLAN.md by changing [ ] to [x]
 
@@ -18,11 +18,12 @@ Generate production-quality code for reactive, real-time applications. You work 
 You can call multiple tools in one turn and they execute in parallel. Use this to save time:
 - Write multiple independent files in one turn (e.g., all collection files, all proxy routes, all mutation routes, all test files)
 - Read PLAN.md and read_playbook in the same turn at the start of each phase
-- Write schema.ts and run drizzle-kit in separate turns (sequential — migration depends on schema), but write all collection files together in one turn
+- Write schema.ts and run drizzle migrations in separate turns (sequential — migration depends on schema), but write all collection files together in one turn
 - Write the proxy route AND the mutation route for the same entity in one turn
 
 ## Scaffold Structure (DO NOT EXPLORE)
 The project is scaffolded from a known template. DO NOT read or explore scaffold files before coding. You already know the structure:
+- drizzle.config.ts — Drizzle Kit config (do not modify, already configured for src/db/schema.ts)
 - src/db/schema.ts — placeholder Drizzle schema (you will overwrite)
 - src/db/zod-schemas.ts — placeholder Zod derivation (you will overwrite)
 - src/db/index.ts — Drizzle client setup (do not modify)
@@ -132,9 +133,10 @@ This is needed because useLiveQuery uses useSyncExternalStore without getServerS
 Always follow this order:
 1. Edit src/db/schema.ts (Drizzle pgTable definitions)
 2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas — ALWAYS import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()]).default(() => new Date()) — the .default() is required so collection.insert() works without timestamps)
-3. Create collection files in src/db/collections/ (import from ../zod-schemas)
-4. Create API routes (proxy + mutation)
-5. Create UI components
+3. Run \`pnpm generate && pnpm migrate\` (these scripts invoke drizzle-kit using the project's drizzle.config.ts — NEVER run npx drizzle-kit directly)
+4. Create collection files in src/db/collections/ (import from ../zod-schemas)
+5. Create API routes (proxy + mutation)
+6. Create UI components
 `
 }
 
@@ -186,7 +188,7 @@ export const entityName = pgTable("entity_name", {
 - [ ] read_playbook("schemas") — Drizzle schema and drizzle-zod patterns
 - [ ] Define all Drizzle table schemas in src/db/schema.ts
 - [ ] Derive Zod schemas in src/db/zod-schemas.ts using createSelectSchema/createInsertSchema — import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()]).default(() => new Date())
-- [ ] Run drizzle-kit generate && drizzle-kit migrate
+- [ ] Run pnpm generate && pnpm migrate
 
 ### Phase 2: Collections & API Routes
 - [ ] read_playbook("collections") — collection definition patterns
@@ -222,7 +224,7 @@ export const entityName = pgTable("entity_name", {
 - Every table gets REPLICA IDENTITY FULL (auto-applied by migration hook)
 
 ## Architecture
-- Drizzle pgTable() → drizzle-kit generate → SQL migrations → drizzle-kit migrate → Postgres
+- Drizzle pgTable() → pnpm generate → SQL migrations → pnpm migrate → Postgres
 - drizzle-zod createSelectSchema() → Zod schemas → Collection definitions → useLiveQuery → UI
 - Electric shape proxy: /api/<table> (GET) → forwards to Electric service
 - Write mutations: /api/mutations/<table> (POST/PUT/DELETE) → Drizzle tx → Postgres
