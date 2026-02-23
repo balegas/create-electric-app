@@ -484,6 +484,15 @@ function gitAutoCommit(
 	emit: (event: EngineEvent) => void | Promise<void>,
 ): string | null {
 	try {
+		if (!fs.existsSync(path.join(projectDir, ".git"))) {
+			emit({
+				type: "log",
+				level: "error",
+				message: "Skipping commit — not a git repository",
+				ts: ts(),
+			})
+			return null
+		}
 		execSync("git add -A", { cwd: projectDir, stdio: "pipe" })
 		try {
 			execSync("git diff --cached --quiet", { cwd: projectDir, stdio: "pipe" })

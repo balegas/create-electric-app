@@ -150,7 +150,10 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		])
 
 		const projectDir = `/home/agent/workspace/${projectName}`
-		await sprite.exec(`mkdir -p ${projectDir}`)
+		// Don't pre-create projectDir — resolveProjectDir() inside the agent
+		// appends a random suffix when the directory already exists, which causes
+		// a path mismatch between server (sandboxProjectDir) and agent (actual path).
+		// The parent /home/agent/workspace is created during bootstrap.
 
 		// Fetch the public URL from the API — it includes the org slug suffix.
 		// Sprites route this URL to port 8080 by default; VITE_PORT is set to 8080 above.

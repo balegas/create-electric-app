@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
 import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
@@ -433,6 +435,18 @@ function runMigrations(
 	projectDir: string,
 	emit: (event: EngineEvent) => void | Promise<void>,
 ): void {
+	// Verify project directory has a package.json before attempting migrations
+	const pkgPath = path.join(projectDir, "package.json")
+	if (!fs.existsSync(pkgPath)) {
+		emit({
+			type: "log",
+			level: "error",
+			message: `Skipping migrations — no package.json found in ${projectDir}`,
+			ts: ts(),
+		})
+		return
+	}
+
 	emit({ type: "log", level: "build", message: "Running migrations...", ts: ts() })
 
 	const maxAttempts = 5
