@@ -12,11 +12,12 @@ export type EngineEvent =
 			toolName: string
 			toolUseId: string
 			input: Record<string, unknown>
+			agent?: string
 			ts: string
 	  }
-	| { type: "tool_result"; toolUseId: string; output: string; ts: string }
-	| { type: "assistant_text"; text: string; ts: string }
-	| { type: "assistant_thinking"; text: string; ts: string }
+	| { type: "tool_result"; toolUseId: string; output: string; agent?: string; ts: string }
+	| { type: "assistant_text"; text: string; agent?: string; ts: string }
+	| { type: "assistant_thinking"; text: string; agent?: string; ts: string }
 	| {
 			type: "clarification_needed"
 			questions: string[]

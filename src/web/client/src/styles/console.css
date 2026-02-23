@@ -97,6 +97,12 @@
 	color: var(--text-muted);
 }
 
+.tool-inline-agent {
+	font-weight: 600;
+	color: var(--blue);
+	font-size: 13px;
+}
+
 .tool-inline-name {
 	font-weight: 600;
 	color: var(--brand-1);
