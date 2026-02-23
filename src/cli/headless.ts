@@ -412,6 +412,21 @@ function executeGitOp(
 }
 
 /**
+ * Extract a useful error message from an execSync failure.
+ * Node's execSync attaches stderr/stdout as Buffers on the thrown error,
+ * but err.message only contains "Command failed: <cmd>" with no detail.
+ */
+function extractExecError(err: unknown): string {
+	if (!(err instanceof Error)) return "Migration failed"
+
+	const e = err as Error & { stderr?: Buffer | string; stdout?: Buffer | string }
+	const stderr = e.stderr?.toString().trim()
+	const stdout = e.stdout?.toString().trim()
+	// Prefer stderr (where drizzle-kit writes errors), fall back to stdout, then message
+	return stderr || stdout || e.message
+}
+
+/**
  * Run drizzle-kit migrations with retries (DB may not be ready yet).
  */
 function runMigrations(
@@ -434,9 +449,11 @@ function runMigrations(
 			emit({ type: "log", level: "done", message: "Migrations complete", ts: ts() })
 			return
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : "Migration failed"
+			const detail = extractExecError(err)
 			const isConnectionError =
-				msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND") || msg.includes("timeout")
+				detail.includes("ECONNREFUSED") ||
+				detail.includes("ENOTFOUND") ||
+				detail.includes("timeout")
 
 			if (isConnectionError && attempt < maxAttempts) {
 				emit({
@@ -447,7 +464,12 @@ function runMigrations(
 				})
 				execSync(`sleep ${delayMs / 1000}`)
 			} else {
-				emit({ type: "log", level: "error", message: `Migration failed: ${msg}`, ts: ts() })
+				emit({
+					type: "log",
+					level: "error",
+					message: `Migration failed: ${detail}`,
+					ts: ts(),
+				})
 				return
 			}
 		}
