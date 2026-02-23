@@ -5,6 +5,8 @@ import { SessionListItem } from "./SessionListItem"
 interface SidebarProps {
 	collapsed: boolean
 	onToggle: () => void
+	mobileOpen?: boolean
+	onMobileClose?: () => void
 }
 
 function CollapseIcon({ collapsed }: { collapsed: boolean }) {
@@ -31,7 +33,7 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
 	)
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
 	const { sessions, pendingProject, handleDeleteSession } = useAppContext()
 	const navigate = useNavigate()
 	const location = useLocation()
@@ -44,8 +46,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 		(a, b) => new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime(),
 	)
 
+	const handleNavigate = (path: string) => {
+		navigate(path)
+		onMobileClose?.()
+	}
+
 	return (
-		<aside className="sidebar">
+		<aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
 			<div className="sidebar-header">
 				<svg className="sidebar-icon" viewBox="0 0 192 192" aria-label="Electric">
 					<title>Electric</title>
@@ -62,7 +69,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 			</div>
 
 			<div className="sidebar-sessions">
-				<div className="session-item" onClick={() => navigate("/")} title="New App">
+				<div className="session-item" onClick={() => handleNavigate("/")} title="New App">
 					<span className="session-avatar new-project-avatar">+</span>
 					<div className="session-item-details">
 						<div className="session-item-name">New App</div>
@@ -84,7 +91,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 						key={s.id}
 						session={s}
 						active={s.id === activeSessionId}
-						onClick={() => navigate(`/session/${s.id}`)}
+						onClick={() => handleNavigate(`/session/${s.id}`)}
 						onDelete={() => handleDeleteSession(s.id)}
 					/>
 				))}
