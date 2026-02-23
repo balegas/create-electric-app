@@ -412,24 +412,45 @@ function executeGitOp(
 }
 
 /**
- * Run drizzle-kit migrations.
+ * Run drizzle-kit migrations with retries (DB may not be ready yet).
  */
 function runMigrations(
 	projectDir: string,
 	emit: (event: EngineEvent) => void | Promise<void>,
 ): void {
 	emit({ type: "log", level: "build", message: "Running migrations...", ts: ts() })
-	try {
-		execSync("pnpm migrate", {
-			cwd: projectDir,
-			stdio: "pipe",
-			timeout: 60_000,
-			env: { ...process.env },
-		})
-		emit({ type: "log", level: "done", message: "Migrations complete", ts: ts() })
-	} catch (err) {
-		const msg = err instanceof Error ? err.message : "Migration failed"
-		emit({ type: "log", level: "error", message: `Migration failed: ${msg}`, ts: ts() })
+
+	const maxAttempts = 5
+	const delayMs = 3_000
+
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		try {
+			execSync("pnpm migrate", {
+				cwd: projectDir,
+				stdio: "pipe",
+				timeout: 60_000,
+				env: { ...process.env },
+			})
+			emit({ type: "log", level: "done", message: "Migrations complete", ts: ts() })
+			return
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "Migration failed"
+			const isConnectionError =
+				msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND") || msg.includes("timeout")
+
+			if (isConnectionError && attempt < maxAttempts) {
+				emit({
+					type: "log",
+					level: "build",
+					message: `Database not ready, retrying in ${delayMs / 1000}s (attempt ${attempt}/${maxAttempts})...`,
+					ts: ts(),
+				})
+				execSync(`sleep ${delayMs / 1000}`)
+			} else {
+				emit({ type: "log", level: "error", message: `Migration failed: ${msg}`, ts: ts() })
+				return
+			}
+		}
 	}
 }
 

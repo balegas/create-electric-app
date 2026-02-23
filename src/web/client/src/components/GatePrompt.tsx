@@ -290,14 +290,17 @@ function InfraConfigGate({
 				payload.sourceId = sourceId
 				payload.secret = secret
 				payload.claimId = claimId
-				parts.push(`Provisioned — claim: ${claimUrl}`)
+				parts.push(`Database: ${databaseUrl}`)
+				parts.push(`Source ID: ${sourceId}`)
+				if (claimUrl) parts.push(`Claim: ${claimUrl}`)
 			} else if (mode === "cloud") {
 				payload.mode = "cloud"
 				payload.databaseUrl = databaseUrl
 				payload.electricUrl = electricUrl
 				payload.sourceId = sourceId
 				payload.secret = secret
-				parts.push("Electric Cloud")
+				parts.push(`Database: ${databaseUrl}`)
+				parts.push(`Source ID: ${sourceId}`)
 			} else {
 				payload.mode = "local"
 				parts.push("Local Docker")
@@ -310,9 +313,9 @@ function InfraConfigGate({
 				parts.push(`${repoAccount}/${repoName} (${repoVisibility})`)
 			}
 
-			payload._summary = parts.join(" · ")
+			payload._summary = parts.join("\n")
 			await respondToGate(sessionId, "infra_config", payload)
-			onResolved(parts.join(" · "))
+			onResolved(parts.join("\n"))
 		} catch {
 			setSubmitting(false)
 		}
