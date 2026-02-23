@@ -406,7 +406,7 @@ Instructions:
 5. Add a new "## Iteration: ${userRequest.slice(0, 60)}" section to the bottom of PLAN.md with tasks for this change
 6. Read ONLY the specific source files you need to modify (consult ARCHITECTURE.md for exact paths)
 7. Implement the changes immediately — write the actual code, following the Drizzle Workflow order
-8. If schema changes are needed, run pnpm generate && pnpm migrate
+8. If schema changes are needed, run drizzle-kit generate && drizzle-kit migrate
 9. Mark tasks as done in PLAN.md after completing them
 10. Update ARCHITECTURE.md to reflect any changes (new entities, routes, components, styles, or contexts)
 11. Run the build tool ONCE after all changes are complete — not after each file
