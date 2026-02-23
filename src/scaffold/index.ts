@@ -278,11 +278,13 @@ function patchViteConfig(projectDir: string): void {
 
 	// Ensure allowedHosts is always present — Vite blocks requests from
 	// Sprites hostnames (*.sprites.app) without it.
+	// Must be boolean `true`, NOT the string "all" — Vite only accepts
+	// `string[] | true` (see https://vite.dev/config/server-options).
 	if (!content.includes("allowedHosts")) {
 		if (content.match(/host:\s*/)) {
-			content = content.replace(/(host:\s*[^,\n]+,?)/, '$1\n\t\tallowedHosts: "all",')
+			content = content.replace(/(host:\s*[^,\n]+,?)/, "$1\n\t\tallowedHosts: true,")
 		} else if (content.match(/server:\s*\{/)) {
-			content = content.replace(/(server:\s*\{)/, '$1\n\t\tallowedHosts: "all",')
+			content = content.replace(/(server:\s*\{)/, "$1\n\t\tallowedHosts: true,")
 		}
 	}
 
@@ -299,7 +301,7 @@ function patchViteConfig(projectDir: string): void {
 		].join("\n")
 		// Insert proxy after allowedHosts or host line
 		if (content.includes("allowedHosts")) {
-			content = content.replace(/(allowedHosts:\s*"all",?)/, `$1\n${proxyBlock}`)
+			content = content.replace(/(allowedHosts:\s*true,?)/, `$1\n${proxyBlock}`)
 		} else {
 			content = content.replace(/(host:\s*true,?)/, `$1\n${proxyBlock}`)
 		}

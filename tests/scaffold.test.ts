@@ -155,6 +155,24 @@ describe("scaffold", () => {
 		assert.ok(!rootRoute.includes("ssr: false"), "root route should NOT have ssr: false")
 	})
 
+	it("patches vite.config.ts with allowedHosts: true (not string)", () => {
+		const viteConfig = fs.readFileSync(path.join(TEST_DIR, "vite.config.ts"), "utf-8")
+		// Must be boolean true, NOT "all" — Vite only accepts string[] | true
+		assert.ok(viteConfig.includes("allowedHosts: true"), "allowedHosts: true present")
+		assert.ok(!viteConfig.includes('allowedHosts: "all"'), 'allowedHosts: "all" must not be used')
+	})
+
+	it("patches vite.config.ts with host: true", () => {
+		const viteConfig = fs.readFileSync(path.join(TEST_DIR, "vite.config.ts"), "utf-8")
+		assert.ok(viteConfig.includes("host: true"), "host: true present")
+	})
+
+	it("patches vite.config.ts with Electric proxy", () => {
+		const viteConfig = fs.readFileSync(path.join(TEST_DIR, "vite.config.ts"), "utf-8")
+		assert.ok(viteConfig.includes("'/v1/shape'"), "proxy for /v1/shape present")
+		assert.ok(viteConfig.includes("ELECTRIC_URL"), "ELECTRIC_URL in proxy target")
+	})
+
 	it("patches .gitignore with Electric entries", () => {
 		const gitignore = fs.readFileSync(path.join(TEST_DIR, ".gitignore"), "utf-8")
 		assert.ok(gitignore.includes("_agent/"), "_agent/ in .gitignore")

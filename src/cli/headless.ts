@@ -232,8 +232,10 @@ async function listenForIterations(
 				continue
 			}
 
+			// Prefer the agent's known projectDir (from runNew result) over
+			// the server-sent one — the agent knows the actual directory.
 			const gitSuccess = executeGitOp(
-				{ ...gitCmd, projectDir: gitCmd.projectDir || projectDir },
+				{ ...gitCmd, projectDir: projectDir || gitCmd.projectDir },
 				callbacks.onEvent,
 			)
 			callbacks.onEvent({ type: "session_complete", success: gitSuccess, ts: ts() })
