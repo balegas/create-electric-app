@@ -6,7 +6,10 @@ import { ts } from "./events.js"
  * This mirrors the logic in processAgentMessage but produces structured events
  * instead of console output.
  */
-export function sdkMessageToEvents(message: Record<string, unknown>): EngineEvent[] {
+export function sdkMessageToEvents(
+	message: Record<string, unknown>,
+	agent?: string,
+): EngineEvent[] {
 	const events: EngineEvent[] = []
 
 	if (message.type === "assistant" && (message.message as Record<string, unknown>)?.content) {
@@ -17,11 +20,12 @@ export function sdkMessageToEvents(message: Record<string, unknown>): EngineEven
 		for (const block of content) {
 			if ("text" in block && block.text) {
 				const text = block.text as string
-				events.push({ type: "assistant_text", text, ts: ts() })
+				events.push({ type: "assistant_text", text, agent, ts: ts() })
 			} else if ("thinking" in block && block.thinking) {
 				events.push({
 					type: "assistant_thinking",
 					text: block.thinking as string,
+					agent,
 					ts: ts(),
 				})
 			} else if ("name" in block) {
@@ -34,6 +38,7 @@ export function sdkMessageToEvents(message: Record<string, unknown>): EngineEven
 					toolName: name,
 					toolUseId,
 					input,
+					agent,
 					ts: ts(),
 				})
 			}
@@ -65,6 +70,7 @@ export function sdkMessageToEvents(message: Record<string, unknown>): EngineEven
 						type: "tool_result",
 						toolUseId,
 						output: texts.join("\n"),
+						agent,
 						ts: ts(),
 					})
 				}

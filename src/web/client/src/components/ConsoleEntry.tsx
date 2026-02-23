@@ -55,10 +55,11 @@ export function ConsoleThinkingEntry({
 	entry: Extract<ConsoleEntryType, { kind: "thinking" }>
 	duration: string | null
 }) {
+	const label = entry.agent || "agent"
 	return (
 		<details className="thinking-inline">
 			<summary>
-				<span className="thinking-label">Thinking</span>
+				<span className="thinking-label">[{label}] Thinking</span>
 				<span className="thinking-preview">{entry.text.slice(0, 100)}...</span>
 				<Duration value={duration} />
 			</summary>
@@ -78,10 +79,11 @@ export function ConsoleTextEntry({
 	entry: Extract<ConsoleEntryType, { kind: "text" }>
 	duration: string | null
 }) {
+	const label = entry.agent || "agent"
 	if (entry.text.length <= COLLAPSE_THRESHOLD) {
 		return (
 			<div className="console-entry">
-				<span className="prefix task">[agent]</span>
+				<span className="prefix task">[{label}]</span>
 				<span>
 					<Markdown inline>{entry.text}</Markdown>
 				</span>
@@ -93,7 +95,7 @@ export function ConsoleTextEntry({
 	return (
 		<details className="tool-inline">
 			<summary>
-				<span className="tool-inline-name">agent</span>
+				<span className="tool-inline-name">{label}</span>
 				<span className="tool-inline-summary">{entry.text.slice(0, 120)}...</span>
 				<Duration value={duration} />
 			</summary>

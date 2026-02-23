@@ -66,9 +66,10 @@ function buildEnhancedDescription(
  */
 function createMessageForwarder(
 	callbacks: OrchestratorCallbacks,
+	agent?: string,
 ): (msg: Record<string, unknown>) => void {
 	return (msg) => {
-		const events = sdkMessageToEvents(msg)
+		const events = sdkMessageToEvents(msg, agent)
 		for (const event of events) {
 			callbacks.onEvent(event)
 		}
@@ -232,12 +233,12 @@ export async function runNew(opts: {
 
 	// Step 2: Plan
 	emit({ type: "log", level: "plan", message: "Running planner agent...", ts: ts() })
-	const messageForwarder = createMessageForwarder(callbacks)
+	const plannerForwarder = createMessageForwarder(callbacks, "planner")
 	let plan = await runPlanner(
 		description,
 		projectDir,
 		reporter,
-		messageForwarder,
+		plannerForwarder,
 		opts.abortController,
 	)
 
@@ -258,7 +259,7 @@ export async function runNew(opts: {
 				`${description}\n\nRevision feedback: ${feedback}`,
 				projectDir,
 				reporter,
-				messageForwarder,
+				plannerForwarder,
 				opts.abortController,
 			)
 			emit({ type: "plan_ready", plan, ts: ts() })
@@ -293,11 +294,12 @@ export async function runNew(opts: {
 
 	// Step 5: Run coder (with continuation on max turns / max budget)
 	emit({ type: "log", level: "task", message: "Running coder agent...", ts: ts() })
+	const coderForwarder = createMessageForwarder(callbacks, "coder")
 	let result = await runCoder(
 		projectDir,
 		undefined,
 		reporter,
-		messageForwarder,
+		coderForwarder,
 		undefined,
 		opts.abortController,
 	)
@@ -324,7 +326,7 @@ export async function runNew(opts: {
 			projectDir,
 			"Continue where you left off. Keep working on the remaining unchecked tasks in PLAN.md.",
 			reporter,
-			messageForwarder,
+			coderForwarder,
 			result.sessionId,
 			opts.abortController,
 		)
@@ -390,7 +392,7 @@ export async function runIterate(opts: {
 	const { callbacks, projectDir, userRequest } = opts
 	const emit = (event: EngineEvent) => callbacks.onEvent(event)
 	const reporter = createReporterFromCallbacks(callbacks, opts.verbose)
-	const messageForwarder = createMessageForwarder(callbacks)
+	const messageForwarder = createMessageForwarder(callbacks, "coder")
 
 	const iterationPrompt = `The user wants the following change to the existing app:
 

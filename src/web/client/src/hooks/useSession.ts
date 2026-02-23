@@ -32,6 +32,7 @@ export function useSession(sessionId: string | null) {
 							toolUseId: event.toolUseId,
 							input: event.input,
 							output: null,
+							agent: event.agent,
 							ts: event.ts,
 						},
 					]
@@ -41,7 +42,11 @@ export function useSession(sessionId: string | null) {
 					for (let i = updated.length - 1; i >= 0; i--) {
 						const entry = updated[i]
 						if (entry.kind === "tool" && entry.toolUseId === event.toolUseId) {
-							updated[i] = { ...entry, output: event.output }
+							updated[i] = {
+								...entry,
+								output: event.output,
+								agent: entry.agent || event.agent,
+							}
 							break
 						}
 					}
@@ -49,10 +54,21 @@ export function useSession(sessionId: string | null) {
 				}
 
 				case "assistant_text":
-					return [...prev, { kind: "text" as const, text: event.text, ts: event.ts }]
+					return [
+						...prev,
+						{ kind: "text" as const, text: event.text, agent: event.agent, ts: event.ts },
+					]
 
 				case "assistant_thinking":
-					return [...prev, { kind: "thinking" as const, text: event.text, ts: event.ts }]
+					return [
+						...prev,
+						{
+							kind: "thinking" as const,
+							text: event.text,
+							agent: event.agent,
+							ts: event.ts,
+						},
+					]
 
 				case "clarification_needed":
 				case "plan_ready":

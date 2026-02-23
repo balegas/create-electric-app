@@ -65,11 +65,11 @@ export function ToolExecution({ entry, duration }: { entry: ToolEntry; duration:
 	const isLoading = entry.output === null
 	const isBash = entry.toolName === "Bash" || entry.toolName === "bash"
 	const command = isBash ? (entry.input.command as string) || "" : ""
-
 	if (isBash) {
 		return (
 			<details className="tool-inline">
 				<summary>
+					{entry.agent && <span className="tool-inline-agent">[{entry.agent}]</span>}
 					<span className="tool-inline-name">$</span>
 					<span className="tool-inline-command">{command}</span>
 					{isLoading ? <span className="spinner-inline" /> : <Duration value={duration} />}
@@ -84,6 +84,7 @@ export function ToolExecution({ entry, duration }: { entry: ToolEntry; duration:
 	return (
 		<details className="tool-inline">
 			<summary>
+				{entry.agent && <span className="tool-inline-agent">[{entry.agent}]</span>}
 				<span className="tool-inline-name">{entry.toolName}</span>
 				<span className="tool-inline-summary">{getToolSummary(entry)}</span>
 				{isLoading ? <span className="spinner-inline" /> : <Duration value={duration} />}
