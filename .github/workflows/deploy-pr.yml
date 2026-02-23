@@ -47,12 +47,23 @@ jobs:
 
       - name: Configure secrets
         run: |
-          flyctl secrets set --app "$APP_NAME" --stage \
-            DS_URL="${{ secrets.DS_URL }}" \
-            DS_SERVICE_ID="${{ secrets.DS_SERVICE_ID }}" \
-            DS_SECRET="${{ secrets.DS_SECRET }}" \
-            GH_TOKEN="${{ secrets.GH_TOKEN }}" \
+          SECRETS=(
+            DS_URL="${{ secrets.DS_URL }}"
+            DS_SERVICE_ID="${{ secrets.DS_SERVICE_ID }}"
+            DS_SECRET="${{ secrets.DS_SECRET }}"
+            GH_TOKEN="${{ secrets.GH_TOKEN }}"
             FLY_API_TOKEN="${{ secrets.FLY_API_TOKEN }}"
+          )
+
+          # When agent code changed, point sprites at the pkg-pr-new preview
+          # so PR sandboxes run the PR's agent code instead of the published version.
+          if [ "${{ needs.detect-changes.outputs.agent }}" = "true" ]; then
+            PKG_URL="https://pkg.pr.new/balegas/create-electric-app/electric-agent@${{ github.event.pull_request.head.sha }}"
+            SECRETS+=( AGENT_PACKAGE_URL="$PKG_URL" )
+            echo "Agent code changed — sprites will install from: $PKG_URL"
+          fi
+
+          flyctl secrets set --app "$APP_NAME" --stage "${SECRETS[@]}"
 
       - name: Generate PR fly config
         run: |
@@ -91,6 +102,7 @@ jobs:
             body += `| **Preview** | ${url} |\n`;
 
             if (agentChanged) {
+              body += `| **Agent (sandbox)** | PR agent code via pkg-pr-new |\n`;
               body += `| **Agent (StackBlitz)** | _See pkg-pr-new comment_ |\n`;
             }
 

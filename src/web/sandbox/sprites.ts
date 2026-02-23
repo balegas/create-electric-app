@@ -99,8 +99,11 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		// Enable outbound internet access
 		await this.setNetworkPolicyAllowAll(spriteName)
 
-		// Bootstrap (or restore from checkpoint)
-		await ensureBootstrapped(sprite)
+		// Bootstrap (or restore from checkpoint).
+		// When AGENT_PACKAGE_URL is set (e.g. PR preview), install from that URL
+		// instead of the published electric-agent package.
+		const packageUrl = process.env.AGENT_PACKAGE_URL || undefined
+		await ensureBootstrapped(sprite, packageUrl ? { packageUrl } : undefined)
 
 		// Set environment variables by writing an env file and sourcing it
 		const envVars: Record<string, string> = {
