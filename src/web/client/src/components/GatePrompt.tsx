@@ -18,14 +18,17 @@ function ClarificationGate({
 	sessionId,
 	event,
 	onResolved,
+	resolved,
 }: {
 	sessionId: string
 	event: Extract<EngineEvent, { type: "clarification_needed" }>
 	onResolved: (summary: string) => void
+	resolved?: boolean
 }) {
 	const [answers, setAnswers] = useState<string[]>(event.questions.map(() => ""))
 	const [extra, setExtra] = useState("")
 	const [submitting, setSubmitting] = useState(false)
+	const disabled = submitting || !!resolved
 
 	async function handleSubmit() {
 		setSubmitting(true)
@@ -59,25 +62,29 @@ function ClarificationGate({
 							next[i] = e.target.value
 							setAnswers(next)
 						}}
-						disabled={submitting}
+						disabled={disabled}
 					/>
 				</div>
 			))}
-			<div className="question">
-				<label>Anything else you'd like to add?</label>
-				<textarea
-					value={extra}
-					onChange={(e) => setExtra(e.target.value)}
-					disabled={submitting}
-					rows={3}
-					placeholder="Optional: add any extra context, requirements, or preferences..."
-				/>
-			</div>
-			<div className="gate-actions">
-				<button className="gate-btn gate-btn-primary" onClick={handleSubmit} disabled={submitting}>
-					{submitting ? "Submitting..." : "Submit Answers"}
-				</button>
-			</div>
+			{!resolved && (
+				<div className="question">
+					<label>Anything else you'd like to add?</label>
+					<textarea
+						value={extra}
+						onChange={(e) => setExtra(e.target.value)}
+						disabled={disabled}
+						rows={3}
+						placeholder="Optional: add any extra context, requirements, or preferences..."
+					/>
+				</div>
+			)}
+			{!resolved && (
+				<div className="gate-actions">
+					<button className="gate-btn gate-btn-primary" onClick={handleSubmit} disabled={disabled}>
+						{submitting ? "Submitting..." : "Submit Answers"}
+					</button>
+				</div>
+			)}
 		</div>
 	)
 }
@@ -86,10 +93,12 @@ function PlanGate({
 	sessionId,
 	event,
 	onResolved,
+	resolved,
 }: {
 	sessionId: string
 	event: Extract<EngineEvent, { type: "plan_ready" }>
 	onResolved: (summary: string) => void
+	resolved?: boolean
 }) {
 	const [submitting, setSubmitting] = useState(false)
 
@@ -115,33 +124,39 @@ function PlanGate({
 	const approve = useCallback(() => handleDecision("approve"), [handleDecision])
 	const cancel = useCallback(() => handleDecision("cancel"), [handleDecision])
 
-	useKeyboardShortcut("Enter", approve, { disabled: submitting })
-	useEscapeKey(cancel, submitting)
+	useKeyboardShortcut("Enter", approve, { disabled: submitting || !!resolved })
+	useEscapeKey(cancel, submitting || !!resolved)
 
 	return (
 		<div className="gate-plan">
 			<div className="gate-plan-body">
 				<Markdown>{event.plan}</Markdown>
 			</div>
-			<div className="gate-plan-actions">
-				<button
-					className="gate-btn gate-btn-primary"
-					onClick={() => handleDecision("approve")}
-					disabled={submitting}
-				>
-					Approve <kbd>Enter</kbd>
-				</button>
-				<button className="gate-btn" onClick={() => handleDecision("revise")} disabled={submitting}>
-					Revise
-				</button>
-				<button
-					className="gate-btn gate-btn-danger"
-					onClick={() => handleDecision("cancel")}
-					disabled={submitting}
-				>
-					Cancel <kbd>Esc</kbd>
-				</button>
-			</div>
+			{!resolved && (
+				<div className="gate-plan-actions">
+					<button
+						className="gate-btn gate-btn-primary"
+						onClick={() => handleDecision("approve")}
+						disabled={submitting}
+					>
+						Approve <kbd>Enter</kbd>
+					</button>
+					<button
+						className="gate-btn"
+						onClick={() => handleDecision("revise")}
+						disabled={submitting}
+					>
+						Revise
+					</button>
+					<button
+						className="gate-btn gate-btn-danger"
+						onClick={() => handleDecision("cancel")}
+						disabled={submitting}
+					>
+						Cancel <kbd>Esc</kbd>
+					</button>
+				</div>
+			)}
 		</div>
 	)
 }
@@ -150,10 +165,14 @@ function ContinueGate({
 	sessionId,
 	reason,
 	onResolved,
+	resolved,
+	resolvedSummary,
 }: {
 	sessionId: string
 	reason: string
 	onResolved: (summary: string) => void
+	resolved?: boolean
+	resolvedSummary?: string
 }) {
 	const [submitting, setSubmitting] = useState(false)
 
@@ -174,8 +193,8 @@ function ContinueGate({
 	const continueAction = useCallback(() => handleDecision(true), [handleDecision])
 	const stopAction = useCallback(() => handleDecision(false), [handleDecision])
 
-	useKeyboardShortcut("Enter", continueAction, { disabled: submitting })
-	useEscapeKey(stopAction, submitting)
+	useKeyboardShortcut("Enter", continueAction, { disabled: submitting || !!resolved })
+	useEscapeKey(stopAction, submitting || !!resolved)
 
 	const isBudget = reason === "max_budget"
 
@@ -186,16 +205,22 @@ function ContinueGate({
 					? "Budget limit reached. Continue with additional budget?"
 					: "Turn limit reached. Continue?"}
 			</span>
-			<button
-				className="gate-btn gate-btn-primary"
-				onClick={() => handleDecision(true)}
-				disabled={submitting}
-			>
-				Continue <kbd>Enter</kbd>
-			</button>
-			<button className="gate-btn" onClick={() => handleDecision(false)} disabled={submitting}>
-				Stop <kbd>Esc</kbd>
-			</button>
+			{resolved ? (
+				<span className="gate-continue-decision">{resolvedSummary || "Decided"}</span>
+			) : (
+				<>
+					<button
+						className="gate-btn gate-btn-primary"
+						onClick={() => handleDecision(true)}
+						disabled={submitting}
+					>
+						Continue <kbd>Enter</kbd>
+					</button>
+					<button className="gate-btn" onClick={() => handleDecision(false)} disabled={submitting}>
+						Stop <kbd>Esc</kbd>
+					</button>
+				</>
+			)}
 		</div>
 	)
 }
@@ -204,10 +229,12 @@ function InfraConfigGate({
 	sessionId,
 	event,
 	onResolved,
+	resolved,
 }: {
 	sessionId: string
 	event: Extract<EngineEvent, { type: "infra_config_prompt" }>
 	onResolved: (summary: string) => void
+	resolved?: boolean
 }) {
 	const isLocal = event.runtime === "docker"
 	const [mode, setMode] = useState<"local" | "cloud" | "claim">(isLocal ? "local" : "claim")
@@ -291,9 +318,73 @@ function InfraConfigGate({
 		}
 	}
 
+	const disabled = submitting || !!resolved
 	const cloudValid = databaseUrl.trim() && sourceId.trim() && secret.trim()
 	const claimValid = provisioned && databaseUrl.trim() && sourceId.trim() && secret.trim()
 	const repoValid = !setupRepo || (repoAccount && repoName.trim())
+
+	const modeLabels = {
+		claim: "Provisioned (Cloud)",
+		local: "Local (Docker)",
+		cloud: "Electric Cloud (BYO)",
+	}
+
+	if (resolved) {
+		return (
+			<div className="gate-prompt">
+				<h3>Setup {event.projectName}</h3>
+				<div className="gate-config-summary">
+					<div>
+						<strong>Infrastructure:</strong> {modeLabels[mode]}
+					</div>
+					{mode === "claim" && provisioned && (
+						<>
+							<div>
+								<strong>Database URL:</strong> {databaseUrl}
+							</div>
+							<div>
+								<strong>Source ID:</strong> {sourceId}
+							</div>
+							<div>
+								<strong>Electric URL:</strong> {electricUrl}
+							</div>
+							{claimUrl && (
+								<div>
+									<strong>Claim:</strong>{" "}
+									<a href={claimUrl} target="_blank" rel="noopener noreferrer">
+										{claimUrl}
+									</a>
+								</div>
+							)}
+						</>
+					)}
+					{mode === "cloud" && (
+						<>
+							<div>
+								<strong>Database URL:</strong> {databaseUrl}
+							</div>
+							<div>
+								<strong>Electric URL:</strong> {electricUrl}
+							</div>
+							<div>
+								<strong>Source ID:</strong> {sourceId}
+							</div>
+						</>
+					)}
+					{setupRepo && repoAccount && repoName.trim() && (
+						<>
+							<div>
+								<strong>Repository:</strong> {repoAccount}/{repoName}
+							</div>
+							<div>
+								<strong>Visibility:</strong> {repoVisibility}
+							</div>
+						</>
+					)}
+				</div>
+			</div>
+		)
+	}
 
 	return (
 		<div className="gate-prompt">
@@ -344,7 +435,7 @@ function InfraConfigGate({
 							<button
 								className="gate-btn gate-btn-primary"
 								onClick={handleProvision}
-								disabled={provisioning || submitting}
+								disabled={provisioning || disabled}
 								style={{ marginBottom: 8 }}
 							>
 								{provisioning ? "Provisioning..." : "Provision Resources"}
@@ -411,7 +502,7 @@ function InfraConfigGate({
 							type="text"
 							value={databaseUrl}
 							onChange={(e) => setDatabaseUrl(e.target.value)}
-							disabled={submitting}
+							disabled={disabled}
 							placeholder="postgresql://user:pass@host:5432/dbname"
 						/>
 					</div>
@@ -421,7 +512,7 @@ function InfraConfigGate({
 							type="text"
 							value={electricUrl}
 							onChange={(e) => setElectricUrl(e.target.value)}
-							disabled={submitting}
+							disabled={disabled}
 							placeholder="https://api.electric-sql.cloud"
 						/>
 					</div>
@@ -431,7 +522,7 @@ function InfraConfigGate({
 							type="text"
 							value={sourceId}
 							onChange={(e) => setSourceId(e.target.value)}
-							disabled={submitting}
+							disabled={disabled}
 							placeholder="Your Electric Cloud source ID"
 						/>
 					</div>
@@ -441,7 +532,7 @@ function InfraConfigGate({
 							type="password"
 							value={secret}
 							onChange={(e) => setSecret(e.target.value)}
-							disabled={submitting}
+							disabled={disabled}
 							placeholder="Your Electric Cloud secret"
 						/>
 					</div>
@@ -459,7 +550,7 @@ function InfraConfigGate({
 								type="checkbox"
 								checked={setupRepo}
 								onChange={(e) => setSetupRepo(e.target.checked)}
-								disabled={submitting}
+								disabled={disabled}
 							/>
 							Create a GitHub repo for this project
 						</label>
@@ -472,7 +563,7 @@ function InfraConfigGate({
 									<select
 										value={repoAccount}
 										onChange={(e) => setRepoAccount(e.target.value)}
-										disabled={submitting}
+										disabled={disabled}
 									>
 										{event.ghAccounts.map((a) => (
 											<option key={a.login} value={a.login}>
@@ -490,7 +581,7 @@ function InfraConfigGate({
 									type="text"
 									value={repoName}
 									onChange={(e) => setRepoName(e.target.value)}
-									disabled={submitting}
+									disabled={disabled}
 									placeholder="my-app"
 								/>
 							</div>
@@ -503,7 +594,7 @@ function InfraConfigGate({
 											name="repo-visibility"
 											checked={repoVisibility === "private"}
 											onChange={() => setRepoVisibility("private")}
-											disabled={submitting}
+											disabled={disabled}
 										/>
 										Private
 									</label>
@@ -513,7 +604,7 @@ function InfraConfigGate({
 											name="repo-visibility"
 											checked={repoVisibility === "public"}
 											onChange={() => setRepoVisibility("public")}
-											disabled={submitting}
+											disabled={disabled}
 										/>
 										Public
 									</label>
@@ -529,7 +620,7 @@ function InfraConfigGate({
 					className="gate-btn gate-btn-primary"
 					onClick={handleSubmit}
 					disabled={
-						submitting ||
+						disabled ||
 						(mode === "cloud" && !cloudValid) ||
 						(mode === "claim" && !claimValid) ||
 						!repoValid
@@ -564,38 +655,68 @@ export function GatePrompt({
 	onResolved,
 	duration,
 }: GatePromptProps & { duration: string | null }) {
-	if (entry.resolved) {
-		const label = resolvedLabel(entry.event.type)
-		const summary = entry.resolvedSummary
-
-		return (
-			<details className="gate-resolved-details">
-				<summary>
-					<span className="prefix done">[gate]</span>
-					<span className="gate-resolved-label">{label}</span>
-					<Duration value={duration} />
-				</summary>
-				{summary && (
-					<div className="gate-resolved-body">
-						<pre>{summary}</pre>
-					</div>
-				)}
-			</details>
-		)
-	}
-
 	const resolve = (summary?: string) => onResolved(entryIndex, summary)
+	const { resolved, resolvedSummary } = entry
 
+	let content: React.ReactNode = null
 	switch (entry.event.type) {
 		case "clarification_needed":
-			return <ClarificationGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
+			content = (
+				<ClarificationGate
+					sessionId={sessionId}
+					event={entry.event}
+					onResolved={resolve}
+					resolved={resolved}
+				/>
+			)
+			break
 		case "plan_ready":
-			return <PlanGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
+			content = (
+				<PlanGate
+					sessionId={sessionId}
+					event={entry.event}
+					onResolved={resolve}
+					resolved={resolved}
+				/>
+			)
+			break
 		case "continue_needed":
-			return <ContinueGate sessionId={sessionId} reason={entry.event.reason} onResolved={resolve} />
+			content = (
+				<ContinueGate
+					sessionId={sessionId}
+					reason={entry.event.reason}
+					onResolved={resolve}
+					resolved={resolved}
+					resolvedSummary={resolvedSummary}
+				/>
+			)
+			break
 		case "infra_config_prompt":
-			return <InfraConfigGate sessionId={sessionId} event={entry.event} onResolved={resolve} />
+			content = (
+				<InfraConfigGate
+					sessionId={sessionId}
+					event={entry.event}
+					onResolved={resolve}
+					resolved={resolved}
+				/>
+			)
+			break
 		default:
 			return null
 	}
+
+	if (resolved) {
+		return (
+			<div className="gate-answered">
+				<div className="gate-answered-header">
+					<span className="prefix done">[gate]</span>
+					<span className="gate-resolved-label">{resolvedLabel(entry.event.type)}</span>
+					<Duration value={duration} />
+				</div>
+				{content}
+			</div>
+		)
+	}
+
+	return content
 }
