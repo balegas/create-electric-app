@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useLocation, useNavigate, useParams } from "react-router-dom"
+import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { Console } from "../components/Console"
 import { PromptInput } from "../components/PromptInput"
 import { Settings } from "../components/Settings"
@@ -14,6 +14,10 @@ import {
 	sendIterate,
 } from "../lib/api"
 import type { ConsoleEntry } from "../lib/event-types"
+
+interface OutletCtx {
+	openMobileDrawer: () => void
+}
 
 type AppState = "hidden" | "starting" | "stopping" | "running" | "stopped"
 
@@ -61,6 +65,7 @@ export function SessionPage() {
 	const { id } = useParams<{ id: string }>()
 	const location = useLocation()
 	const navigate = useNavigate()
+	const { openMobileDrawer } = useOutletContext<OutletCtx>()
 	const {
 		sessions,
 		showSettings,
@@ -70,6 +75,15 @@ export function SessionPage() {
 		refreshSettings,
 		refreshSessions,
 	} = useAppContext()
+	const [overflowOpen, setOverflowOpen] = useState(false)
+
+	// Close overflow menu when clicking outside
+	useEffect(() => {
+		if (!overflowOpen) return
+		const handleClick = () => setOverflowOpen(false)
+		document.addEventListener("click", handleClick)
+		return () => document.removeEventListener("click", handleClick)
+	}, [overflowOpen])
 
 	// Handle "new" session: create it and replace the URL
 	const [initializing, setInitializing] = useState(id === "new")
@@ -207,6 +221,28 @@ export function SessionPage() {
 			)}
 
 			<div className="session-header">
+				<button
+					type="button"
+					className="mobile-hamburger"
+					onClick={openMobileDrawer}
+					aria-label="Open menu"
+				>
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 18 18"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+					>
+						<title>Menu</title>
+						<line x1="3" y1="4.5" x2="15" y2="4.5" />
+						<line x1="3" y1="9" x2="15" y2="9" />
+						<line x1="3" y1="13.5" x2="15" y2="13.5" />
+					</svg>
+				</button>
+
 				<span className="session-header-name">
 					{initializing ? "Initializing..." : (activeSession?.projectName ?? "Loading...")}
 				</span>
@@ -227,21 +263,71 @@ export function SessionPage() {
 					</span>
 				)}
 
-				{totalCost > 0 && (
-					<span style={{ color: "var(--text-subtle)", fontSize: 12, marginLeft: 4 }}>
-						${totalCost.toFixed(4)}
-					</span>
-				)}
+				<span className="session-header-cost">
+					{totalCost > 0 && (
+						<span style={{ color: "var(--text-subtle)", fontSize: 12, marginLeft: 4 }}>
+							${totalCost.toFixed(4)}
+						</span>
+					)}
+				</span>
 
-				{appPort && (appReady || appState === "running" || sessionDone) && (
-					<a
-						href={previewUrl ?? `http://localhost:${appPort}`}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="session-header-action primary"
-					>
-						Preview
-					</a>
+				<span className="session-header-actions-group">
+					{appPort && (appReady || appState === "running" || sessionDone) && (
+						<a
+							href={previewUrl ?? `http://localhost:${appPort}`}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="session-header-action primary"
+						>
+							Preview
+						</a>
+					)}
+				</span>
+
+				{/* Mobile overflow menu */}
+				<button
+					type="button"
+					className="session-header-overflow"
+					onClick={(e) => {
+						e.stopPropagation()
+						setOverflowOpen((v) => !v)
+					}}
+					aria-label="More options"
+				>
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+						<title>More</title>
+						<circle cx="8" cy="3" r="1.5" />
+						<circle cx="8" cy="8" r="1.5" />
+						<circle cx="8" cy="13" r="1.5" />
+					</svg>
+				</button>
+				{overflowOpen && (
+					<div className="session-header-overflow-menu">
+						{totalCost > 0 && (
+							<div className="session-header-overflow-menu-item">Cost: ${totalCost.toFixed(4)}</div>
+						)}
+						{appPort && (appReady || appState === "running" || sessionDone) && (
+							<a
+								href={previewUrl ?? `http://localhost:${appPort}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="session-header-overflow-menu-item"
+								onClick={() => setOverflowOpen(false)}
+							>
+								Preview App
+							</a>
+						)}
+						<button
+							type="button"
+							className="session-header-overflow-menu-item"
+							onClick={() => {
+								setOverflowOpen(false)
+								setShowSettings((v) => !v)
+							}}
+						>
+							Settings
+						</button>
+					</div>
 				)}
 			</div>
 

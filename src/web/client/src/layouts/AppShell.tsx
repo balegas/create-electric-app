@@ -38,6 +38,17 @@ export function useAppContext() {
 	return ctx
 }
 
+function useIsMobile() {
+	const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768)
+	useEffect(() => {
+		const mq = window.matchMedia("(max-width: 768px)")
+		const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+		mq.addEventListener("change", handler)
+		return () => mq.removeEventListener("change", handler)
+	}, [])
+	return isMobile
+}
+
 export function AppShell() {
 	const [sessions, setSessions] = useState<SessionInfo[]>([])
 	const [authSource, setAuthSource] = useState<AuthSource>(null)
@@ -48,12 +59,18 @@ export function AppShell() {
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		() => localStorage.getItem("sidebarCollapsed") === "true",
 	)
+	const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+	const isMobile = useIsMobile()
+
 	const toggleSidebar = useCallback(() => {
 		setSidebarCollapsed((v) => {
 			localStorage.setItem("sidebarCollapsed", String(!v))
 			return !v
 		})
 	}, [])
+
+	const openMobileDrawer = useCallback(() => setMobileDrawerOpen(true), [])
+	const closeMobileDrawer = useCallback(() => setMobileDrawerOpen(false), [])
 
 	const navigate = useNavigate()
 	const location = useLocation()
@@ -64,6 +81,9 @@ export function AppShell() {
 		const wasSession = prevPathRef.current.startsWith("/session/")
 		const isSession = location.pathname.startsWith("/session/")
 		prevPathRef.current = location.pathname
+
+		// Close mobile drawer on any navigation
+		setMobileDrawerOpen(false)
 
 		// Only auto-collapse when entering a session from a non-session page
 		if (isSession && !wasSession) {
@@ -166,9 +186,23 @@ export function AppShell() {
 	return (
 		<AppContext.Provider value={ctx}>
 			<div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-				<Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+				{isMobile && mobileDrawerOpen && (
+					<div
+						className="sidebar-backdrop"
+						onClick={closeMobileDrawer}
+						onKeyDown={(e) => {
+							if (e.key === "Escape") closeMobileDrawer()
+						}}
+					/>
+				)}
+				<Sidebar
+					collapsed={sidebarCollapsed}
+					onToggle={toggleSidebar}
+					mobileOpen={mobileDrawerOpen}
+					onMobileClose={closeMobileDrawer}
+				/>
 				<main className="main-content">
-					<Outlet />
+					<Outlet context={{ openMobileDrawer }} />
 				</main>
 				<button
 					type="button"

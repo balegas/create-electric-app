@@ -1,0 +1,433 @@
+/* ============================================
+   Mobile-responsive styles (breakpoint: 768px)
+   ============================================ */
+
+@media (max-width: 768px) {
+	/* ---- Layout: single-column, no grid sidebar ---- */
+	.app-shell {
+		grid-template-columns: 1fr;
+	}
+
+	/* ---- Sidebar: off-canvas drawer ---- */
+	.sidebar {
+		position: fixed;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		width: 280px;
+		z-index: 200;
+		transform: translateX(-100%);
+		transition: transform 0.25s ease;
+	}
+
+	.sidebar.mobile-open {
+		transform: translateX(0);
+	}
+
+	/* Backdrop overlay when drawer is open */
+	.sidebar-backdrop {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.5);
+		z-index: 199;
+	}
+
+	/* Hide the desktop collapse toggle on mobile */
+	.sidebar-collapse {
+		display: none;
+	}
+
+	/* Override collapsed state — always show full sidebar content in drawer */
+	.app-shell.sidebar-collapsed .sidebar-brand,
+	.app-shell.sidebar-collapsed .sidebar-section-label {
+		display: block;
+	}
+
+	.app-shell.sidebar-collapsed .session-item {
+		gap: 8px;
+	}
+
+	.app-shell.sidebar-collapsed .session-item-details,
+	.app-shell.sidebar-collapsed .session-item-delete,
+	.app-shell.sidebar-collapsed .session-item:hover .session-item-delete {
+		opacity: 1;
+		width: auto;
+		overflow: visible;
+		pointer-events: auto;
+	}
+
+	.app-shell.sidebar-collapsed .sidebar-collapse-label {
+		opacity: 1;
+		max-width: 120px;
+		display: inline;
+	}
+
+	/* ---- Hamburger button ---- */
+	.mobile-hamburger {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border: none;
+		background: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		border-radius: 6px;
+		flex-shrink: 0;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.mobile-hamburger:hover {
+		color: var(--text);
+		background: var(--bg-hover);
+	}
+
+	/* ---- Session header: compact + overflow ---- */
+	.session-header {
+		padding: 0 8px;
+		gap: 6px;
+	}
+
+	.session-header-name {
+		font-size: 13px;
+		min-width: 0;
+		flex: 1;
+	}
+
+	/* Hide cost and action buttons by default — shown via overflow menu */
+	.session-header .session-header-cost,
+	.session-header .session-header-actions-group {
+		display: none;
+	}
+
+	/* Overflow menu button */
+	.session-header-overflow {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border: none;
+		background: none;
+		color: var(--text-muted);
+		cursor: pointer;
+		border-radius: 6px;
+		flex-shrink: 0;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.session-header-overflow:hover {
+		color: var(--text);
+		background: var(--bg-hover);
+	}
+
+	/* Overflow dropdown */
+	.session-header-overflow-menu {
+		position: absolute;
+		top: calc(var(--topbar-height) - 4px);
+		right: 8px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 6px;
+		z-index: 100;
+		min-width: 180px;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	}
+
+	.session-header-overflow-menu-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		padding: 8px 12px;
+		border: none;
+		background: none;
+		color: var(--text-muted);
+		font-size: 13px;
+		font-family: var(--font-mono);
+		cursor: pointer;
+		border-radius: 6px;
+		text-decoration: none;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	.session-header-overflow-menu-item:hover {
+		background: var(--bg-hover);
+		color: var(--text);
+	}
+
+	/* ---- Console: reduce padding ---- */
+	.console {
+		padding: 8px;
+	}
+
+	/* ---- Tool inline: truncate summary more aggressively ---- */
+	.tool-inline-summary,
+	.thinking-preview {
+		max-width: 200px;
+	}
+
+	.tool-inline-command {
+		max-width: 200px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.tool-inline-body {
+		padding: 6px 0 6px 10px;
+		margin-left: 4px;
+	}
+
+	.tool-inline-body pre {
+		max-height: 250px;
+	}
+
+	/* ---- Prompt bar: compact horizontal ---- */
+	.prompt-bar {
+		padding: 6px 8px;
+		gap: 6px;
+		height: auto;
+		min-height: var(--footer-height);
+	}
+
+	.prompt-bar textarea {
+		padding: 8px 12px;
+		min-height: 40px;
+		font-size: 15px;
+	}
+
+	.prompt-bar button {
+		padding: 6px 12px;
+		min-height: 36px;
+		font-size: 13px;
+	}
+
+	/* ---- Mobile home topbar: hamburger on home page ---- */
+	.mobile-home-topbar {
+		display: flex;
+		align-items: center;
+		padding: 6px 8px;
+		height: var(--topbar-height);
+		flex-shrink: 0;
+	}
+
+	/* ---- Hero: mobile-specific design ---- */
+	.hero {
+		padding: 0 16px;
+		justify-content: flex-start;
+		padding-top: 8vh;
+	}
+
+	.hero-logo {
+		height: 48px;
+		margin-bottom: 12px;
+	}
+
+	.hero-subtitle {
+		font-size: 15px;
+		margin-bottom: 24px;
+	}
+
+	.hero-prompt {
+		max-width: 100%;
+	}
+
+	.hero-prompt .prompt-bar {
+		border-radius: 12px;
+	}
+
+	.hero-prompt .prompt-bar textarea {
+		min-height: 48px;
+		font-size: 15px;
+		padding: 12px;
+	}
+
+	.hero-prompt .prompt-bar button {
+		min-height: 48px;
+		padding: 8px 16px;
+		font-size: 14px;
+		border-radius: 0 11px 11px 0;
+	}
+
+	.hero-resume-btn {
+		width: 100%;
+		padding: 12px 20px;
+		font-size: 14px;
+	}
+
+	/* ---- Gates: inline stacked, full-width buttons ---- */
+	.gate-prompt {
+		padding: 12px;
+	}
+
+	.gate-prompt .question input,
+	.gate-prompt .question textarea,
+	.gate-prompt .question select {
+		font-size: 14px;
+		padding: 10px 12px;
+	}
+
+	.gate-actions {
+		flex-direction: column;
+	}
+
+	.gate-actions .gate-btn {
+		width: 100%;
+		padding: 10px 16px;
+		text-align: center;
+	}
+
+	.gate-plan-actions {
+		flex-wrap: wrap;
+	}
+
+	.gate-plan-actions .gate-btn {
+		flex: 1;
+		min-width: 0;
+		padding: 10px 12px;
+		text-align: center;
+	}
+
+	/* Hide keyboard hints on mobile */
+	.gate-btn kbd {
+		display: none;
+	}
+
+	/* Continue gate: stack on narrow screens */
+	.gate-continue {
+		flex-wrap: wrap;
+		gap: 8px;
+		padding: 10px 12px;
+	}
+
+	.gate-continue-text {
+		width: 100%;
+		flex: none;
+	}
+
+	.gate-continue .gate-btn {
+		flex: 1;
+		text-align: center;
+		padding: 8px 12px;
+	}
+
+	/* Infra config option group — stack vertically */
+	.gate-option-group {
+		flex-direction: column;
+	}
+
+	.gate-option {
+		padding: 12px;
+	}
+
+	/* ---- Modals: full-width on mobile ---- */
+	.modal-card {
+		width: 95%;
+		max-width: none;
+		max-height: 90vh;
+		overflow-y: auto;
+		border-radius: 14px;
+	}
+
+	.modal-actions {
+		flex-direction: column-reverse;
+	}
+
+	.modal-actions .modal-btn {
+		width: 100%;
+		text-align: center;
+		padding: 10px 16px;
+	}
+
+	/* ---- Settings: full-width inputs ---- */
+	.settings-input-row {
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.settings-input-row input {
+		font-size: 14px;
+		padding: 8px 12px;
+	}
+
+	.settings-input-row button {
+		width: 100%;
+		padding: 8px 12px;
+		text-align: center;
+	}
+
+	/* ---- Repo picker: touch-friendly ---- */
+	.repo-picker-item {
+		padding: 14px;
+		min-height: 48px;
+	}
+
+	.repo-picker-new-branch {
+		flex-direction: column;
+	}
+
+	.repo-picker-new-branch input {
+		font-size: 14px;
+		padding: 10px 12px;
+	}
+
+	/* ---- Global settings button: move to accommodate hamburger ---- */
+	.global-settings-btn {
+		top: 6px;
+		right: 8px;
+		width: 36px;
+		height: 36px;
+	}
+
+	/* ---- Jump to bottom: touch-friendly ---- */
+	.jump-to-bottom {
+		padding: 10px 20px;
+		font-size: 12px;
+	}
+
+	/* ---- Action groups ---- */
+	.action-item-summary {
+		max-width: 150px;
+	}
+
+	.action-item-detail {
+		padding: 8px 12px 8px 24px;
+	}
+
+	/* ---- Markdown: responsive code blocks ---- */
+	.markdown pre {
+		padding: 10px 12px;
+		font-size: 12px;
+	}
+
+	.markdown table {
+		display: block;
+		overflow-x: auto;
+	}
+}
+
+/* ---- Desktop-only: hide mobile elements ---- */
+@media (min-width: 769px) {
+	.mobile-hamburger {
+		display: none;
+	}
+
+	.mobile-home-topbar {
+		display: none;
+	}
+
+	.sidebar-backdrop {
+		display: none;
+	}
+
+	.session-header-overflow {
+		display: none;
+	}
+
+	.session-header-overflow-menu {
+		display: none;
+	}
+}
