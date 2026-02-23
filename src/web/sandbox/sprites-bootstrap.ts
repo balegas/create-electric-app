@@ -6,9 +6,13 @@
  * a checkpoint so subsequent sprites can restore instantly.
  */
 
+import { createRequire } from "node:module"
 import type { Sprite } from "@fly/sprites"
 
-const CHECKPOINT_COMMENT = "bootstrapped"
+const require = createRequire(import.meta.url)
+const { version } = require("../../../package.json") as { version: string }
+
+const CHECKPOINT_COMMENT = `bootstrapped:${version}`
 
 export interface BootstrapOptions {
 	/** Custom package URL (e.g. pkg-pr-new preview) to install instead of the published electric-agent */
