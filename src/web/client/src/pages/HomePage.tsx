@@ -77,6 +77,7 @@ export function HomePage() {
 						<line x1="3" y1="13.5" x2="15" y2="13.5" />
 					</svg>
 				</button>
+				<img src="/img/brand/logo.svg" alt="Electric" className="mobile-topbar-logo" />
 			</div>
 
 			<div className="hero">
