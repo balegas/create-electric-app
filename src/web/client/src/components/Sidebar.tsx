@@ -70,13 +70,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 				</div>
 				{pendingProject && (
 					<div className="session-item session-item-pending" title={pendingProject.name}>
-						<span className="session-avatar session-avatar-pending">
-							{pendingProject.name
-								.split(/[-_ ]+/)
-								.slice(0, 2)
-								.map((w) => w.charAt(0).toUpperCase())
-								.join("")}
-						</span>
+						<span className="session-avatar session-avatar-pending" />
 						<div className="session-item-details">
 							<div className="session-item-name">{pendingProject.name}</div>
 							<div className="session-item-meta">

@@ -330,7 +330,6 @@
 	border-radius: 50%;
 	background: var(--bg-hover);
 	color: var(--text);
-	flex-shrink: 0;
 	box-shadow:
 		0 0 0 2px transparent,
 		0 0 0 4px transparent;
@@ -367,6 +366,8 @@
 }
 
 .session-avatar-pending {
+	background: var(--border);
+	color: transparent;
 	animation: pulse-fade 1.5s ease-in-out infinite;
 }
 
@@ -381,10 +382,10 @@
 }
 
 .new-project-avatar {
-	background: transparent !important;
+	background: transparent;
 	outline: 1.5px dashed var(--text-subtle);
 	outline-offset: -1.5px;
-	color: var(--text-subtle) !important;
+	color: var(--text-subtle);
 	font-size: 16px;
 	font-weight: 400;
 }

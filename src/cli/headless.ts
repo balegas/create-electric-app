@@ -294,8 +294,8 @@ function executeGitOp(
 	config: HeadlessConfig,
 	emit: (event: EngineEvent) => void | Promise<void>,
 ): boolean {
-	const cwd = config.projectDir!
-	const op = config.gitOp!
+	const cwd = config.projectDir ?? ""
+	const op = config.gitOp ?? "commit"
 	const toolUseId = `git-${op}-${Date.now()}`
 
 	function run(cmd: string): string {
