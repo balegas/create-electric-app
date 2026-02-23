@@ -229,7 +229,7 @@ export function SessionPage() {
 
 				{appPort && (appReady || appState === "running" || sessionDone) && (
 					<a
-						href={`http://localhost:${appPort}`}
+						href={activeSession?.previewUrl ?? `http://localhost:${appPort}`}
 						target="_blank"
 						rel="noopener noreferrer"
 						className="session-header-action primary"

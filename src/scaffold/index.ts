@@ -239,7 +239,7 @@ function patchViteConfig(projectDir: string): void {
 	if (!content.includes("host:")) {
 		content = content.replace(
 			/port:\s*parseInt\(process\.env\.VITE_PORT \|\| '5174'\),?/,
-			"port: parseInt(process.env.VITE_PORT || '5174'),\n\t\thost: true,",
+			"port: parseInt(process.env.VITE_PORT || '5174'),\n\t\thost: true,\n\t\tallowedHosts: \"all\",",
 		)
 	}
 

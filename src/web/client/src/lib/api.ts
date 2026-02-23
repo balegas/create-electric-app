@@ -59,6 +59,7 @@ export interface SessionInfo {
 	lastActiveAt: string
 	status: "running" | "complete" | "error" | "cancelled"
 	appPort?: number
+	previewUrl?: string
 	git?: SessionGitState
 }
 
