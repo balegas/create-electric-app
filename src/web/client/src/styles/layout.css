@@ -142,7 +142,8 @@
 }
 
 .sidebar-collapsed .session-item-details,
-.sidebar-collapsed .session-item-delete {
+.sidebar-collapsed .session-item-delete,
+.sidebar-collapsed .session-item:hover .session-item-delete {
 	opacity: 0;
 	width: 0;
 	overflow: hidden;
