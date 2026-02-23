@@ -43,6 +43,23 @@ export class SpritesSandboxProvider implements SandboxProvider {
 	}
 
 	/**
+	 * Fetch the public URL for a sprite from the REST API.
+	 * The URL includes an org slug suffix that we can't derive locally.
+	 */
+	private async getSpriteUrl(spriteName: string): Promise<string | null> {
+		const url = `${this.baseURL}/v1/sprites/${encodeURIComponent(spriteName)}`
+		const resp = await fetch(url, {
+			headers: { Authorization: `Bearer ${this.token}` },
+		})
+		if (!resp.ok) {
+			console.warn(`[sprites] Failed to get sprite info (${resp.status}): ${await resp.text()}`)
+			return null
+		}
+		const data = (await resp.json()) as { url?: string }
+		return data.url ?? null
+	}
+
+	/**
 	 * Set network policy to allow all outbound connections.
 	 * The JS SDK doesn't expose this yet, so we call the REST API directly.
 	 */
@@ -88,7 +105,7 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		// Set environment variables by writing an env file and sourcing it
 		const envVars: Record<string, string> = {
 			SANDBOX_MODE: "1",
-			VITE_PORT: "5173",
+			VITE_PORT: "8080",
 		}
 
 		const isCloud = infra.mode === "cloud" || infra.mode === "claim"
@@ -130,17 +147,16 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		const projectDir = `/home/agent/workspace/${projectName}`
 		await sprite.exec(`mkdir -p ${projectDir}`)
 
-		// Get preview URL for port 5173
-		// Sprites expose HTTP via https://{name}.sprites.dev by default on port 8080.
-		// For other ports we use the proxy URL format.
-		const previewUrl = `https://${spriteName}.sprites.dev`
+		// Fetch the public URL from the API — it includes the org slug suffix.
+		// Sprites route this URL to port 8080 by default; VITE_PORT is set to 8080 above.
+		const previewUrl = await this.getSpriteUrl(spriteName)
 
 		const handle: SandboxHandle = {
 			sessionId,
 			runtime: "sprites",
-			port: 5173,
+			port: 8080,
 			projectDir,
-			previewUrl,
+			previewUrl: previewUrl ?? undefined,
 		}
 
 		this.handles.set(sessionId, handle)
