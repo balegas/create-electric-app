@@ -12,8 +12,13 @@ import {
 
 export type AuthSource = "api-key" | "keychain" | null
 
+export interface PendingProject {
+	name: string
+}
+
 interface AppContextValue {
 	sessions: SessionInfo[]
+	pendingProject: PendingProject | null
 	authSource: AuthSource
 	hasGhToken: boolean | null
 	showSettings: boolean
@@ -39,6 +44,7 @@ export function AppShell() {
 	const [hasGhToken, setHasGhToken] = useState<boolean | null>(null)
 	const [showSettings, setShowSettings] = useState(false)
 	const [loading] = useState(false)
+	const [pendingProject, setPendingProject] = useState<PendingProject | null>(null)
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		() => localStorage.getItem("sidebarCollapsed") === "true",
 	)
@@ -75,6 +81,8 @@ export function AppShell() {
 		try {
 			const data = await listSessions()
 			setSessions(data.sessions)
+			// Clear pending project once real sessions have loaded
+			setPendingProject(null)
 		} catch {
 			// ignore
 		}
@@ -116,6 +124,9 @@ export function AppShell() {
 
 	const handleNewProject = useCallback(
 		(description: string) => {
+			// Show a faded placeholder avatar while the session is being created
+			const words = description.split(/\s+/).slice(0, 3).join(" ")
+			setPendingProject({ name: words || "New project" })
 			// Navigate immediately — SessionPage will create the session
 			navigate("/session/new", { state: { description } })
 		},
@@ -140,6 +151,7 @@ export function AppShell() {
 
 	const ctx: AppContextValue = {
 		sessions,
+		pendingProject,
 		authSource,
 		hasGhToken,
 		showSettings,

@@ -32,7 +32,7 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
-	const { sessions, handleDeleteSession } = useAppContext()
+	const { sessions, pendingProject, handleDeleteSession } = useAppContext()
 	const navigate = useNavigate()
 	const location = useLocation()
 
@@ -68,6 +68,23 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 						<div className="session-item-name">New App</div>
 					</div>
 				</div>
+				{pendingProject && (
+					<div className="session-item session-item-pending" title={pendingProject.name}>
+						<span className="session-avatar session-avatar-pending">
+							{pendingProject.name
+								.split(/[-_ ]+/)
+								.slice(0, 2)
+								.map((w) => w.charAt(0).toUpperCase())
+								.join("")}
+						</span>
+						<div className="session-item-details">
+							<div className="session-item-name">{pendingProject.name}</div>
+							<div className="session-item-meta">
+								<span>Setting up...</span>
+							</div>
+						</div>
+					</div>
+				)}
 				{sortedSessions.map((s) => (
 					<SessionListItem
 						key={s.id}
