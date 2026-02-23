@@ -120,12 +120,16 @@ export function SessionPage() {
 	const [appPort, setAppPort] = useState<number | undefined>(
 		() => sessions.find((s) => s.id === effectiveId)?.appPort,
 	)
+	const [previewUrl, setPreviewUrl] = useState<string | undefined>(
+		() => sessions.find((s) => s.id === effectiveId)?.previewUrl,
+	)
 
 	useEffect(() => {
 		if (effectiveId) {
 			const session = sessions.find((s) => s.id === effectiveId)
 			setActiveSession(session ?? null)
 			if (session?.appPort) setAppPort(session.appPort)
+			if (session?.previewUrl) setPreviewUrl(session.previewUrl)
 		}
 	}, [effectiveId, sessions])
 
@@ -136,9 +140,10 @@ export function SessionPage() {
 		activeSession?.status === "complete" ||
 		activeSession?.status === "error"
 
+	const appResolved = appState === "running" && !!previewUrl
 	useEffect(() => {
-		if (!effectiveId || !sessionDone) {
-			setAppState("hidden")
+		if (!effectiveId || !sessionDone || appResolved) {
+			if (!sessionDone) setAppState("hidden")
 			return
 		}
 
@@ -147,6 +152,7 @@ export function SessionPage() {
 				const status = await getAppStatus(effectiveId)
 				setAppState(status.running ? "running" : "stopped")
 				if (status.port) setAppPort(status.port)
+				if (status.previewUrl) setPreviewUrl(status.previewUrl)
 			} catch {
 				setAppState("stopped")
 			}
@@ -154,7 +160,7 @@ export function SessionPage() {
 		checkStatus()
 		const interval = setInterval(checkStatus, 10_000)
 		return () => clearInterval(interval)
-	}, [effectiveId, sessionDone])
+	}, [effectiveId, sessionDone, appResolved])
 
 	const handleIterate = useCallback(
 		async (request: string) => {
@@ -229,7 +235,7 @@ export function SessionPage() {
 
 				{appPort && (appReady || appState === "running" || sessionDone) && (
 					<a
-						href={activeSession?.previewUrl ?? `http://localhost:${appPort}`}
+						href={previewUrl ?? `http://localhost:${appPort}`}
 						target="_blank"
 						rel="noopener noreferrer"
 						className="session-header-action primary"

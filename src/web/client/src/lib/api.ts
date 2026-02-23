@@ -129,7 +129,9 @@ export function deleteSession(sessionId: string) {
 // --- App status ---
 
 export function getAppStatus(sessionId: string) {
-	return request<{ running: boolean; port?: number }>(`/sessions/${sessionId}/app-status`)
+	return request<{ running: boolean; port?: number; previewUrl?: string }>(
+		`/sessions/${sessionId}/app-status`,
+	)
 }
 
 export function startApp(sessionId: string) {

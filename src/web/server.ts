@@ -701,10 +701,14 @@ export function createApp(config: ServerConfig) {
 
 		const handle = config.sandbox.get(sessionId)
 		if (!handle || !config.sandbox.isAlive(handle)) {
-			return c.json({ running: false, port: session.appPort })
+			return c.json({ running: false, port: session.appPort, previewUrl: session.previewUrl })
 		}
 		const running = await config.sandbox.isAppRunning(handle)
-		return c.json({ running, port: handle.port ?? session.appPort })
+		return c.json({
+			running,
+			port: handle.port ?? session.appPort,
+			previewUrl: handle.previewUrl ?? session.previewUrl,
+		})
 	})
 
 	// Start the generated app
@@ -1034,6 +1038,13 @@ export function createApp(config: ServerConfig) {
 			).trim()
 			const parsed = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
 			const token = parsed.claudeAiOauth?.accessToken ?? null
+			if (token) {
+				console.log(
+					`[dev] Loaded OAuth token from keychain: ${token.slice(0, 20)}...${token.slice(-10)}`,
+				)
+			} else {
+				console.log("[dev] No OAuth token found in keychain")
+			}
 			return c.json({ oauthToken: token })
 		} catch {
 			return c.json({ oauthToken: null })
