@@ -425,7 +425,7 @@ function runMigrations(
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
-			execSync("pnpm migrate", {
+			execSync("npx drizzle-kit migrate", {
 				cwd: projectDir,
 				stdio: "pipe",
 				timeout: 60_000,
@@ -456,7 +456,7 @@ function runMigrations(
 
 /**
  * After generation completes in sandbox mode:
- * 1. Run pnpm migrate (drizzle-kit)
+ * 1. Run drizzle-kit migrate
  * 2. Start pnpm dev via the dev:start script
  * 3. Emit app_ready event
  */
