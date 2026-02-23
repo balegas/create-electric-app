@@ -209,7 +209,8 @@ function InfraConfigGate({
 	event: Extract<EngineEvent, { type: "infra_config_prompt" }>
 	onResolved: (summary: string) => void
 }) {
-	const [mode, setMode] = useState<"local" | "cloud" | "claim">("local")
+	const isLocal = event.runtime === "docker"
+	const [mode, setMode] = useState<"local" | "cloud" | "claim">(isLocal ? "local" : "claim")
 	const [databaseUrl, setDatabaseUrl] = useState("")
 	const [electricUrl, setElectricUrl] = useState("https://api.electric-sql.cloud")
 	const [sourceId, setSourceId] = useState("")
@@ -262,7 +263,7 @@ function InfraConfigGate({
 				payload.sourceId = sourceId
 				payload.secret = secret
 				payload.claimId = claimId
-				parts.push(`Quick Start (Cloud) — claim: ${claimUrl}`)
+				parts.push(`Provisioned — claim: ${claimUrl}`)
 			} else if (mode === "cloud") {
 				payload.mode = "cloud"
 				payload.databaseUrl = databaseUrl
@@ -299,39 +300,38 @@ function InfraConfigGate({
 			<h3>Setup {event.projectName}</h3>
 
 			<p className="gate-summary">Infrastructure</p>
-			<div className="question">
-				<div className="gate-radio-group">
-					<label className="gate-radio">
-						<input
-							type="radio"
-							name="infra-mode"
-							checked={mode === "claim"}
-							onChange={() => setMode("claim")}
-							disabled={submitting}
-						/>
-						Quick Start (Cloud)
-					</label>
-					<label className="gate-radio">
-						<input
-							type="radio"
-							name="infra-mode"
-							checked={mode === "local"}
-							onChange={() => setMode("local")}
-							disabled={submitting}
-						/>
-						Local (Docker)
-					</label>
-					<label className="gate-radio">
-						<input
-							type="radio"
-							name="infra-mode"
-							checked={mode === "cloud"}
-							onChange={() => setMode("cloud")}
-							disabled={submitting}
-						/>
-						Electric Cloud (BYO)
-					</label>
-				</div>
+			<div className="gate-option-group">
+				<button
+					type="button"
+					className={`gate-option ${mode === "claim" ? "active" : ""}`}
+					onClick={() => setMode("claim")}
+					disabled={submitting}
+				>
+					<span className="gate-option-title">Provision</span>
+					<span className="gate-option-desc">
+						Auto-provision database &amp; Electric Cloud (72h)
+					</span>
+				</button>
+				{isLocal && (
+					<button
+						type="button"
+						className={`gate-option ${mode === "local" ? "active" : ""}`}
+						onClick={() => setMode("local")}
+						disabled={submitting}
+					>
+						<span className="gate-option-title">Local</span>
+						<span className="gate-option-desc">Run with Docker Compose on your machine</span>
+					</button>
+				)}
+				<button
+					type="button"
+					className={`gate-option ${mode === "cloud" ? "active" : ""}`}
+					onClick={() => setMode("cloud")}
+					disabled={submitting}
+				>
+					<span className="gate-option-title">Bring your own</span>
+					<span className="gate-option-desc">Provide your own database &amp; Electric details</span>
+				</button>
 			</div>
 			{mode === "claim" && (
 				<div className="question">

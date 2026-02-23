@@ -36,6 +36,8 @@ export type EngineEvent =
 			projectName: string
 			/** GitHub accounts available for repo creation (empty if gh not authenticated) */
 			ghAccounts: { login: string; type: "user" | "org" }[]
+			/** Sandbox runtime — "docker" supports local mode, cloud runtimes hide it */
+			runtime: "docker" | "sprites" | "daytona"
 			ts: string
 	  }
 	| { type: "gate_resolved"; gate: string; summary?: string; ts: string }

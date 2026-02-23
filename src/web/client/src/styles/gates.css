@@ -227,6 +227,56 @@
 	accent-color: var(--brand-2);
 }
 
+/* Infra mode option buttons */
+.gate-option-group {
+	display: flex;
+	gap: 8px;
+	margin: 8px 0;
+}
+
+.gate-option {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: transparent;
+	cursor: pointer;
+	text-align: left;
+	transition:
+		background 0.15s,
+		border-color 0.15s;
+}
+
+.gate-option:hover {
+	background: var(--bg-hover);
+}
+
+.gate-option.active {
+	border-color: var(--brand-2);
+	background: var(--bg-hover);
+}
+
+.gate-option:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.gate-option-title {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.gate-option-desc {
+	font-size: 11px;
+	color: var(--text-subtle);
+	line-height: 1.3;
+}
+
 /* Resolved gate — expandable details */
 .gate-resolved-details {
 	margin: 0;

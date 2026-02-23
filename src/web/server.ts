@@ -281,7 +281,13 @@ export function createApp(config: ServerConfig) {
 		}
 
 		// Emit combined infra + repo setup gate
-		await bridge.emit({ type: "infra_config_prompt", projectName, ghAccounts, ts: ts() })
+		await bridge.emit({
+			type: "infra_config_prompt",
+			projectName,
+			ghAccounts,
+			runtime: config.sandbox.runtime,
+			ts: ts(),
+		})
 
 		// Launch async flow: wait for setup gate → create sandbox → start agent
 		const asyncFlow = async () => {
