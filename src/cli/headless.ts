@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
 import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
@@ -319,6 +321,17 @@ function executeGitOp(
 		}
 	}
 
+	// Verify git repository exists before attempting any operation
+	if (!fs.existsSync(path.join(cwd, ".git"))) {
+		emit({
+			type: "log",
+			level: "error",
+			message: `Git ${op} skipped — no .git directory found in ${cwd}`,
+			ts: ts(),
+		})
+		return false
+	}
+
 	try {
 		switch (op) {
 			case "commit": {
@@ -433,6 +446,17 @@ function runMigrations(
 	projectDir: string,
 	emit: (event: EngineEvent) => void | Promise<void>,
 ): void {
+	// Verify package.json exists before running pnpm commands
+	if (!fs.existsSync(path.join(projectDir, "package.json"))) {
+		emit({
+			type: "log",
+			level: "error",
+			message: `Skipping migrations — no package.json found in ${projectDir}`,
+			ts: ts(),
+		})
+		return
+	}
+
 	emit({ type: "log", level: "build", message: "Running migrations...", ts: ts() })
 
 	const maxAttempts = 5
@@ -486,6 +510,17 @@ async function startSandboxDevServer(
 	projectDir: string,
 	emit: (event: EngineEvent) => void | Promise<void>,
 ): Promise<void> {
+	// Verify the project directory has the expected structure
+	if (!fs.existsSync(path.join(projectDir, "package.json"))) {
+		emit({
+			type: "log",
+			level: "error",
+			message: `Cannot start dev server — no package.json found in ${projectDir}`,
+			ts: ts(),
+		})
+		return
+	}
+
 	// Step 1: Run migrations
 	runMigrations(projectDir, emit)
 

@@ -178,6 +178,26 @@ export async function runNew(opts: {
 			ts: ts(),
 		})
 	}
+
+	// Validate critical project structure before proceeding to planner/coder
+	const pkgExists = fs.existsSync(path.join(projectDir, "package.json"))
+	if (!pkgExists) {
+		emit({
+			type: "log",
+			level: "error",
+			message: "Critical: package.json missing after scaffold — cannot proceed",
+			ts: ts(),
+		})
+		emit({
+			type: "phase_complete",
+			phase: "scaffold",
+			success: false,
+			errors: ["package.json missing after scaffold"],
+			ts: ts(),
+		})
+		return { projectDir }
+	}
+
 	emit({ type: "log", level: "done", message: "Scaffold complete", ts: ts() })
 
 	// Step 1b: Validate playbooks
@@ -483,6 +503,18 @@ function gitAutoCommit(
 	message: string,
 	emit: (event: EngineEvent) => void | Promise<void>,
 ): string | null {
+	// Check for .git directory before attempting git operations
+	if (!fs.existsSync(path.join(projectDir, ".git"))) {
+		emit({
+			type: "log",
+			level: "error",
+			message:
+				"Skipping git commit — no .git directory found (git init may have failed during scaffold)",
+			ts: ts(),
+		})
+		return null
+	}
+
 	try {
 		execSync("git add -A", { cwd: projectDir, stdio: "pipe" })
 		try {

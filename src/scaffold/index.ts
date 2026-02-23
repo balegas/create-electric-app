@@ -53,6 +53,15 @@ export async function scaffold(
 		throw new Error(`Failed to clone KPB template: ${msg}`)
 	}
 
+	// Validate that gitpick actually produced a usable project
+	const pkgJsonPath = path.join(projectDir, "package.json")
+	if (!fs.existsSync(pkgJsonPath)) {
+		throw new Error(
+			`Scaffold failed: package.json not found in ${projectDir} after cloning KPB template. ` +
+				"The template clone may have been incomplete.",
+		)
+	}
+
 	// Step 2: Copy template overlay files
 	reporter?.log("verbose", `Copying template overlay files from ${templateDir}...`)
 	if (!fs.existsSync(templateDir)) {
@@ -148,6 +157,23 @@ export async function scaffold(
 			const msg = `Git init failed: ${e instanceof Error ? e.message : "unknown"}`
 			reporter?.log("error", msg)
 			errors.push(msg)
+
+			// Attempt bare git init as recovery — at minimum create the .git directory
+			// so later git operations don't fail with "not a git repository"
+			try {
+				execSync("git init -b main", { cwd: projectDir, stdio: "pipe" })
+				execSync('git config user.email "electric-agent@local"', {
+					cwd: projectDir,
+					stdio: "pipe",
+				})
+				execSync('git config user.name "Electric Agent"', {
+					cwd: projectDir,
+					stdio: "pipe",
+				})
+				reporter?.log("verbose", "Recovery: bare git init succeeded")
+			} catch {
+				errors.push("Recovery git init also failed — git operations will not work")
+			}
 		}
 	}
 
