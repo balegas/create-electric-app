@@ -37,6 +37,7 @@
   "files": [
     "dist/",
     "playbooks/",
+    "template/",
     "README.md"
   ],
   "engines": {

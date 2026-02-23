@@ -54,7 +54,13 @@ export async function scaffold(
 	}
 
 	// Step 2: Copy template overlay files
-	reporter?.log("verbose", "Copying template overlay files...")
+	reporter?.log("verbose", `Copying template overlay files from ${templateDir}...`)
+	if (!fs.existsSync(templateDir)) {
+		reporter?.log(
+			"error",
+			`Template directory not found at ${templateDir} — template overlay files (drizzle.config.ts, etc.) will be missing`,
+		)
+	}
 	copyTemplateFiles(templateDir, projectDir)
 	reporter?.log("verbose", "Template overlay complete")
 
