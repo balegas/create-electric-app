@@ -10,18 +10,26 @@ import type { Sprite } from "@fly/sprites"
 
 const CHECKPOINT_COMMENT = "bootstrapped"
 
+export interface BootstrapOptions {
+	/** Custom package URL (e.g. pkg-pr-new preview) to install instead of the published electric-agent */
+	packageUrl?: string
+}
+
 /**
  * Bootstrap a sprite by installing required global tools.
  * This runs inside a freshly-created sprite that has Node.js but nothing else.
  */
-export async function bootstrapSprite(sprite: Sprite): Promise<void> {
+export async function bootstrapSprite(sprite: Sprite, opts?: BootstrapOptions): Promise<void> {
+	const packageSpec = opts?.packageUrl ?? "electric-agent"
+
 	console.log(`[sprites-bootstrap] Installing pnpm...`)
 	await sprite.exec("npm install -g pnpm", { maxBuffer: 50 * 1024 * 1024 })
 
-	console.log(`[sprites-bootstrap] Installing electric-agent...`)
-	await sprite.exec("npm install -g electric-agent", {
-		maxBuffer: 50 * 1024 * 1024,
-	})
+	console.log(`[sprites-bootstrap] Installing electric-agent from: ${packageSpec}`)
+	await sprite.execFile("bash", [
+		"-c",
+		`source /etc/profile.d/npm-global.sh 2>/dev/null; npm install -g ${packageSpec}`,
+	])
 
 	// Create the workspace directory structure matching other runtimes
 	await sprite.exec("mkdir -p /home/agent/workspace")
@@ -54,14 +62,21 @@ export async function bootstrapSprite(sprite: Sprite): Promise<void> {
 }
 
 /**
- * Ensure the sprite is bootstrapped. If a "bootstrapped" checkpoint exists,
- * restore from it. Otherwise, run the full bootstrap and create the checkpoint.
+ * Ensure the sprite is bootstrapped. If a matching checkpoint exists,
+ * restore from it. Otherwise, run the full bootstrap and create a checkpoint.
+ *
+ * When a custom packageUrl is provided (e.g. PR preview), the checkpoint
+ * comment includes a hash of the URL so different versions don't collide.
  */
-export async function ensureBootstrapped(sprite: Sprite): Promise<void> {
+export async function ensureBootstrapped(sprite: Sprite, opts?: BootstrapOptions): Promise<void> {
+	const comment = opts?.packageUrl
+		? `${CHECKPOINT_COMMENT}:${shortHash(opts.packageUrl)}`
+		: CHECKPOINT_COMMENT
+
 	// Check for existing checkpoint
 	try {
 		const checkpoints = await sprite.listCheckpoints()
-		const bootstrapped = checkpoints.find((cp) => cp.comment === CHECKPOINT_COMMENT)
+		const bootstrapped = checkpoints.find((cp) => cp.comment === comment)
 		if (bootstrapped) {
 			console.log(`[sprites-bootstrap] Restoring from checkpoint "${bootstrapped.id}"...`)
 			const response = await sprite.restoreCheckpoint(bootstrapped.id)
@@ -75,12 +90,12 @@ export async function ensureBootstrapped(sprite: Sprite): Promise<void> {
 	}
 
 	// Run full bootstrap
-	await bootstrapSprite(sprite)
+	await bootstrapSprite(sprite, opts)
 
 	// Create checkpoint for future reuse
 	console.log(`[sprites-bootstrap] Creating checkpoint...`)
 	try {
-		const response = await sprite.createCheckpoint(CHECKPOINT_COMMENT)
+		const response = await sprite.createCheckpoint(comment)
 		await consumeStream(response)
 		console.log(`[sprites-bootstrap] Checkpoint created`)
 	} catch (err) {
@@ -101,4 +116,13 @@ async function consumeStream(response: Response): Promise<void> {
 	} finally {
 		reader.releaseLock()
 	}
+}
+
+/** Simple string hash for checkpoint disambiguation */
+function shortHash(input: string): string {
+	let hash = 0
+	for (let i = 0; i < input.length; i++) {
+		hash = ((hash << 5) - hash + input.charCodeAt(i)) | 0
+	}
+	return (hash >>> 0).toString(36)
 }

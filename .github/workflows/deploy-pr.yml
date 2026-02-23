@@ -1,0 +1,172 @@
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    outputs:
+      agent: ${{ steps.filter.outputs.agent }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            agent:
+              - 'src/**'
+              - '!src/web/client/**'
+
+  deploy:
+    name: Deploy PR Preview
+    if: github.event.action != 'closed'
+    needs: [detect-changes]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      APP_NAME: electric-agent-pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Create Fly app (if needed)
+        run: flyctl status --app "$APP_NAME" 2>/dev/null || flyctl apps create "$APP_NAME" || true
+
+      - name: Configure secrets
+        run: |
+          SECRETS=(
+            DS_URL="${{ secrets.DS_URL }}"
+            DS_SERVICE_ID="${{ secrets.DS_SERVICE_ID }}"
+            DS_SECRET="${{ secrets.DS_SECRET }}"
+            GH_TOKEN="${{ secrets.GH_TOKEN }}"
+            FLY_API_TOKEN="${{ secrets.FLY_API_TOKEN }}"
+          )
+
+          # When agent code changed, point sprites at the pkg-pr-new preview
+          # so PR sandboxes run the PR's agent code instead of the published version.
+          if [ "${{ needs.detect-changes.outputs.agent }}" = "true" ]; then
+            PKG_URL="https://pkg.pr.new/balegas/create-electric-app/electric-agent@${{ github.event.pull_request.head.sha }}"
+            SECRETS+=( AGENT_PACKAGE_URL="$PKG_URL" )
+            echo "Agent code changed — sprites will install from: $PKG_URL"
+          fi
+
+          flyctl secrets set --app "$APP_NAME" --stage "${SECRETS[@]}"
+
+      - name: Generate PR fly config
+        run: |
+          sed 's/^app = .*/app = "'"$APP_NAME"'"/' fly.toml > fly.pr.toml
+          sed -i 's/min_machines_running = 1/min_machines_running = 0/' fly.pr.toml
+
+      - name: Deploy
+        run: flyctl deploy --remote-only --config fly.pr.toml --ha=false
+
+      - name: Smoke test
+        run: |
+          URL="https://${APP_NAME}.fly.dev/api/health"
+          echo "Checking $URL ..."
+          for i in 1 2 3 4 5 6; do
+            sleep 5
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL") || true
+            echo "  Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed"
+              exit 0
+            fi
+          done
+          echo "Health endpoint unreachable after 6 attempts"
+          exit 1
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const appName = process.env.APP_NAME;
+            const url = `https://${appName}.fly.dev`;
+            const agentChanged = '${{ needs.detect-changes.outputs.agent }}' === 'true';
+
+            let body = `### PR Preview\n\n`;
+            body += `| Resource | URL |\n|---|---|\n`;
+            body += `| **Preview** | ${url} |\n`;
+
+            if (agentChanged) {
+              body += `| **Agent (sandbox)** | PR agent code via pkg-pr-new |\n`;
+              body += `| **Agent (StackBlitz)** | _See pkg-pr-new comment_ |\n`;
+            }
+
+            body += `\nDeployed at \`${new Date().toISOString()}\` · commit \`${context.sha.slice(0, 7)}\``;
+
+            const marker = '<!-- pr-preview-deploy -->';
+            body = `${marker}\n${body}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
+
+  teardown:
+    name: Teardown PR Preview
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      APP_NAME: electric-agent-pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Destroy PR preview app
+        run: flyctl apps destroy "$APP_NAME" --yes || true
+
+      - name: Remove PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- pr-preview-deploy -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const existing = comments.find(c => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+              });
+            }
