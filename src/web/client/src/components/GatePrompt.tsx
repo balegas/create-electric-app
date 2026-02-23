@@ -139,7 +139,7 @@ function PlanGate({
 						onClick={() => handleDecision("approve")}
 						disabled={submitting}
 					>
-						Approve <kbd>Enter</kbd>
+						Approve
 					</button>
 					<button
 						className="gate-btn"
@@ -153,7 +153,7 @@ function PlanGate({
 						onClick={() => handleDecision("cancel")}
 						disabled={submitting}
 					>
-						Cancel <kbd>Esc</kbd>
+						Cancel
 					</button>
 				</div>
 			)}
@@ -214,10 +214,10 @@ function ContinueGate({
 						onClick={() => handleDecision(true)}
 						disabled={submitting}
 					>
-						Continue <kbd>Enter</kbd>
+						Continue
 					</button>
 					<button className="gate-btn" onClick={() => handleDecision(false)} disabled={submitting}>
-						Stop <kbd>Esc</kbd>
+						Stop
 					</button>
 				</>
 			)}

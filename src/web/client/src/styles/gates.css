@@ -149,18 +149,6 @@
 	background: rgba(248, 81, 73, 0.1);
 }
 
-.gate-btn kbd {
-	display: inline-block;
-	font-family: var(--font-mono);
-	font-size: 10px;
-	padding: 1px 4px;
-	margin-left: 4px;
-	border-radius: 3px;
-	background: rgba(255, 255, 255, 0.08);
-	border: 1px solid rgba(255, 255, 255, 0.15);
-	opacity: 0.6;
-}
-
 /* Continue gate — compact banner */
 .gate-continue {
 	display: flex;
