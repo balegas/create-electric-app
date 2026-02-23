@@ -12,6 +12,8 @@ import { ToolExecution } from "./ToolExecution"
 interface ConsoleProps {
 	sessionId: string
 	entries: ConsoleEntry[]
+	isLive: boolean
+	isComplete: boolean
 	onGateResolved: (index: number, summary?: string) => void
 }
 
@@ -29,7 +31,34 @@ function formatDuration(ms: number): string {
 	return `${minutes}m ${remainingSeconds.toFixed(0)}s`
 }
 
-export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
+/**
+ * Shows a pulsing "Waiting for response" indicator with a live elapsed timer.
+ * Displayed when the agent is between API turns (no events arriving).
+ */
+function WaitingIndicator({ sinceTs }: { sinceTs: string }) {
+	const [elapsed, setElapsed] = useState("")
+
+	useEffect(() => {
+		const origin = new Date(sinceTs).getTime()
+		const tick = () => {
+			const ms = Date.now() - origin
+			setElapsed(formatDuration(Math.max(0, ms)))
+		}
+		tick()
+		const id = setInterval(tick, 1000)
+		return () => clearInterval(id)
+	}, [sinceTs])
+
+	return (
+		<div className="console-entry waiting-indicator">
+			<span className="spinner-inline" />
+			<span className="waiting-label">Waiting for response...</span>
+			<span className="duration">{elapsed}</span>
+		</div>
+	)
+}
+
+export function Console({ sessionId, entries, isLive, isComplete, onGateResolved }: ConsoleProps) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const bottomRef = useRef<HTMLDivElement>(null)
 	const [isAtBottom, setIsAtBottom] = useState(true)
@@ -69,6 +98,21 @@ export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
 		if (ts) prevTs = ts
 	}
 
+	// Determine whether to show the waiting indicator:
+	// Show when the session is live, not complete, and no tool is currently loading
+	// or waiting on a gate. This covers the gap between API turns.
+	let showWaiting = false
+	let waitingSinceTs = ""
+	if (isLive && !isComplete && entries.length > 0) {
+		const last = entries[entries.length - 1]
+		const hasLoadingTool = last.kind === "tool" && last.output === null
+		const hasUnresolvedGate = last.kind === "gate" && !last.resolved
+		if (!hasLoadingTool && !hasUnresolvedGate) {
+			showWaiting = true
+			waitingSinceTs = prevTs || new Date().toISOString()
+		}
+	}
+
 	return (
 		<div className="console" ref={containerRef} onScroll={handleScroll}>
 			{entries.map((entry, i) => {
@@ -105,6 +149,7 @@ export function Console({ sessionId, entries, onGateResolved }: ConsoleProps) {
 						return null
 				}
 			})}
+			{showWaiting && <WaitingIndicator sinceTs={waitingSinceTs} />}
 			<div ref={bottomRef} />
 			{!isAtBottom && (
 				<button type="button" className="jump-to-bottom" onClick={scrollToBottom}>
