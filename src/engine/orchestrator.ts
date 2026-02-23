@@ -343,6 +343,8 @@ export async function runNew(opts: {
 				message: "feat: initial app generation",
 				ts: ts(),
 			})
+			// Push to remote if one exists (e.g. repo was created during scaffold)
+			gitAutoPush(projectDir, emit)
 		}
 
 		emit({
@@ -503,6 +505,36 @@ function gitAutoCommit(
 		const msg = err instanceof Error ? err.message : "unknown error"
 		emit({ type: "log", level: "error", message: `Git commit failed: ${msg}`, ts: ts() })
 		return null
+	}
+}
+
+/**
+ * Push to remote origin if configured. Silently skips if no remote exists.
+ */
+function gitAutoPush(projectDir: string, emit: (event: EngineEvent) => void | Promise<void>): void {
+	try {
+		// Check if a remote origin exists
+		const remote = execSync("git remote get-url origin", {
+			cwd: projectDir,
+			encoding: "utf-8",
+			stdio: "pipe",
+		}).trim()
+		if (!remote) return
+
+		const branch = execSync("git branch --show-current", {
+			cwd: projectDir,
+			encoding: "utf-8",
+			stdio: "pipe",
+		}).trim()
+		execSync(`git push -u origin ${branch}`, {
+			cwd: projectDir,
+			stdio: "pipe",
+			timeout: 60_000,
+			env: { ...process.env },
+		})
+		emit({ type: "log", level: "done", message: "Pushed to remote", ts: ts() })
+	} catch {
+		// No remote or push failed — non-fatal
 	}
 }
 

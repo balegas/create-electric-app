@@ -241,24 +241,21 @@ function patchViteConfig(projectDir: string): void {
 	// sandbox sets VITE_PORT=5173 so the Docker port binding works)
 	content = content.replace(/port:\s*5173/, "port: parseInt(process.env.VITE_PORT || '5174')")
 
-	// Bind to all interfaces so Caddy/Docker can reach the dev server
+	// Bind to all interfaces so Caddy/Docker/Sprites can reach the dev server.
+	// Insert host + allowedHosts + proxy together after port to keep them grouped.
 	if (!content.includes("host:")) {
 		content = content.replace(
 			/port:\s*parseInt\(process\.env\.VITE_PORT \|\| '5174'\),?/,
-			"port: parseInt(process.env.VITE_PORT || '5174'),\n\t\thost: true,\n\t\tallowedHosts: \"all\",",
+			"port: parseInt(process.env.VITE_PORT || '5174'),\n\t\thost: true,",
 		)
 	}
 
-	// Fallback: ensure allowedHosts is always present even if the regex chain
-	// above didn't match (e.g. KPB template changed its default port or already
-	// had host: true). Without this, Vite blocks requests from Sprites hostnames
-	// like *.sprites.app.
+	// Ensure allowedHosts is always present — Vite blocks requests from
+	// Sprites hostnames (*.sprites.app) without it.
 	if (!content.includes("allowedHosts")) {
 		if (content.match(/host:\s*/)) {
-			// Insert after host: line
 			content = content.replace(/(host:\s*[^,\n]+,?)/, '$1\n\t\tallowedHosts: "all",')
 		} else if (content.match(/server:\s*\{/)) {
-			// Insert at top of server block
 			content = content.replace(/(server:\s*\{)/, '$1\n\t\tallowedHosts: "all",')
 		}
 	}
@@ -274,8 +271,12 @@ function patchViteConfig(projectDir: string): void {
 			"\t\t\t},",
 			"\t\t},",
 		].join("\n")
-		// Insert proxy after the host: true line
-		content = content.replace(/(host:\s*true,?)/, `$1\n${proxyBlock}`)
+		// Insert proxy after allowedHosts or host line
+		if (content.includes("allowedHosts")) {
+			content = content.replace(/(allowedHosts:\s*"all",?)/, `$1\n${proxyBlock}`)
+		} else {
+			content = content.replace(/(host:\s*true,?)/, `$1\n${proxyBlock}`)
+		}
 	}
 
 	fs.writeFileSync(vitePath, content, "utf-8")
