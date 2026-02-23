@@ -8,7 +8,6 @@ const PROTECTED_FILES = new Set([
 	"biome.json",
 	"pnpm-lock.yaml",
 	"postgres.conf",
-	"drizzle.config.ts",
 	"vitest.config.ts",
 ])
 
