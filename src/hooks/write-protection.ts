@@ -3,7 +3,6 @@ import type { HookCallback, PreToolUseHookInput } from "@anthropic-ai/claude-age
 const PROTECTED_FILES = new Set([
 	"docker-compose.yml",
 	"Caddyfile",
-	"vite.config.ts",
 	"tsconfig.json",
 	"biome.json",
 	"pnpm-lock.yaml",
