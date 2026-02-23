@@ -291,13 +291,16 @@ export function validateGhToken(token: string): TokenValidation {
 /**
  * Publish a local project to a new GitHub repo.
  * Creates a feature branch and pushes.
+ * If a token is provided, it is used instead of the ambient GH_TOKEN.
  */
 export function ghPublish(
 	projectDir: string,
 	repoName: string,
-	opts?: { visibility?: "public" | "private" },
+	opts?: { visibility?: "public" | "private"; token?: string },
 ): PublishResult {
 	const visibility = opts?.visibility ?? "private"
+	const ghOpts: { cwd: string; env?: Record<string, string> } = { cwd: projectDir }
+	if (opts?.token) ghOpts.env = { GH_TOKEN: opts.token }
 
 	try {
 		// Checkpoint any uncommitted changes first
@@ -328,7 +331,7 @@ export function ghPublish(
 				"origin",
 				"--push",
 			],
-			{ cwd: projectDir },
+			ghOpts,
 		)
 
 		// Extract repo URL from output
@@ -348,12 +351,17 @@ export function ghPublish(
 
 /**
  * Create a PR from the current branch to the default branch.
+ * If a token is provided, it is used instead of the ambient GH_TOKEN.
  */
 export function ghPrCreate(
 	projectDir: string,
 	title?: string,
 	body?: string,
+	token?: string,
 ): { prUrl: string | null; error?: string } {
+	const ghOpts: { cwd: string; env?: Record<string, string> } = { cwd: projectDir }
+	if (token) ghOpts.env = { GH_TOKEN: token }
+
 	try {
 		const branch = execGit(projectDir, ["rev-parse", "--abbrev-ref", "HEAD"])
 		const prTitle = title || `[electric-agent] ${branch}`
@@ -363,9 +371,7 @@ export function ghPrCreate(
 		// Push current branch first
 		execGit(projectDir, ["push", "-u", "origin", branch])
 
-		const output = execGh(["pr", "create", "--title", prTitle, "--body", prBody], {
-			cwd: projectDir,
-		})
+		const output = execGh(["pr", "create", "--title", prTitle, "--body", prBody], ghOpts)
 
 		// Extract PR URL from output
 		const urlMatch = output.match(/(https:\/\/github\.com\/\S+\/pull\/\d+)/)
@@ -380,12 +386,14 @@ export function ghPrCreate(
 
 /**
  * List the authenticated user's personal account + organizations.
+ * If a token is provided, it is used instead of the ambient GH_TOKEN.
  */
-export function ghListAccounts(): GhAccount[] {
+export function ghListAccounts(token?: string): GhAccount[] {
+	const ghOpts = token ? { env: { GH_TOKEN: token } } : undefined
 	const accounts: GhAccount[] = []
 	try {
 		// Get the authenticated user's login
-		const username = execGh(["api", "/user", "--jq", ".login"])
+		const username = execGh(["api", "/user", "--jq", ".login"], ghOpts)
 		if (username) {
 			accounts.push({ login: username, type: "user" })
 		}
@@ -394,7 +402,7 @@ export function ghListAccounts(): GhAccount[] {
 	}
 	try {
 		// Get organizations the user belongs to
-		const output = execGh(["api", "/user/orgs", "--jq", "[.[] | .login]"])
+		const output = execGh(["api", "/user/orgs", "--jq", "[.[] | .login]"], ghOpts)
 		const orgs = JSON.parse(output) as string[]
 		for (const org of orgs) {
 			accounts.push({ login: org, type: "org" })
@@ -407,31 +415,39 @@ export function ghListAccounts(): GhAccount[] {
 
 /**
  * List the authenticated user's GitHub repos.
+ * If a token is provided, it is used instead of the ambient GH_TOKEN.
  */
-export function ghListRepos(limit = 50): GhRepo[] {
+export function ghListRepos(limit = 50, token?: string): GhRepo[] {
+	const ghOpts = token ? { env: { GH_TOKEN: token } } : undefined
 	try {
 		// Use /user/repos API to get ALL repos the token has access to
 		// (owned, collaborator, and org member), not just owned repos.
-		const output = execGh([
-			"api",
-			`/user/repos?sort=updated&per_page=${limit}&affiliation=owner,collaborator,organization_member`,
-			"--jq",
-			`[.[] | {nameWithOwner: .full_name, url: .html_url, updatedAt: .updated_at}]`,
-		])
+		const output = execGh(
+			[
+				"api",
+				`/user/repos?sort=updated&per_page=${limit}&affiliation=owner,collaborator,organization_member`,
+				"--jq",
+				`[.[] | {nameWithOwner: .full_name, url: .html_url, updatedAt: .updated_at}]`,
+			],
+			ghOpts,
+		)
 		return JSON.parse(output) as GhRepo[]
 	} catch {
 		// Fallback to gh repo list (only owned repos)
 		try {
-			const output = execGh([
-				"repo",
-				"list",
-				"--json",
-				"nameWithOwner,url,updatedAt",
-				"--limit",
-				String(limit),
-				"--sort",
-				"updated",
-			])
+			const output = execGh(
+				[
+					"repo",
+					"list",
+					"--json",
+					"nameWithOwner,url,updatedAt",
+					"--limit",
+					String(limit),
+					"--sort",
+					"updated",
+				],
+				ghOpts,
+			)
 			return JSON.parse(output) as GhRepo[]
 		} catch {
 			return []
@@ -441,19 +457,22 @@ export function ghListRepos(limit = 50): GhRepo[] {
 
 /**
  * List branches for a GitHub repo.
+ * If a token is provided, it is used instead of the ambient GH_TOKEN.
  */
-export function ghListBranches(repoFullName: string): GhBranch[] {
+export function ghListBranches(repoFullName: string, token?: string): GhBranch[] {
+	const ghOpts = token ? { env: { GH_TOKEN: token } } : undefined
 	try {
 		// Get the default branch name
-		const defaultBranch = execGh(["api", `/repos/${repoFullName}`, "--jq", ".default_branch"])
+		const defaultBranch = execGh(
+			["api", `/repos/${repoFullName}`, "--jq", ".default_branch"],
+			ghOpts,
+		)
 
 		// Get all branches
-		const output = execGh([
-			"api",
-			`/repos/${repoFullName}/branches?per_page=100`,
-			"--jq",
-			`[.[] | {name: .name}]`,
-		])
+		const output = execGh(
+			["api", `/repos/${repoFullName}/branches?per_page=100`, "--jq", `[.[] | {name: .name}]`],
+			ghOpts,
+		)
 		const branches = JSON.parse(output) as { name: string }[]
 		return branches.map((b) => ({
 			name: b.name,
@@ -466,21 +485,23 @@ export function ghListBranches(repoFullName: string): GhBranch[] {
 
 /**
  * Clone a GitHub repo into a target directory.
+ * If a token is provided, it is used instead of the ambient GH_TOKEN.
  */
-export function ghClone(repoUrl: string, targetDir: string, branch?: string): void {
+export function ghClone(repoUrl: string, targetDir: string, branch?: string, token?: string): void {
 	const args = ["repo", "clone", repoUrl, targetDir]
 	if (branch) {
 		args.push("--", "-b", branch)
 	}
-	execGh(args)
+	execGh(args, token ? { env: { GH_TOKEN: token } } : undefined)
 }
 
 /**
  * Check if gh CLI is available and authenticated.
+ * If a token is provided, it is used instead of the ambient GH_TOKEN.
  */
-export function isGhAuthenticated(): boolean {
+export function isGhAuthenticated(token?: string): boolean {
 	try {
-		execGh(["auth", "status"])
+		execGh(["auth", "status"], token ? { env: { GH_TOKEN: token } } : undefined)
 		return true
 	} catch {
 		return false

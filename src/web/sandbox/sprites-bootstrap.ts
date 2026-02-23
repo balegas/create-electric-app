@@ -26,10 +26,29 @@ export async function bootstrapSprite(sprite: Sprite): Promise<void> {
 	// Create the workspace directory structure matching other runtimes
 	await sprite.exec("mkdir -p /home/agent/workspace")
 
+	// Write a profile script that adds npm global bin and nvm paths to PATH.
+	// Sprites use nvm-managed Node.js — the bin dir isn't in the default PATH
+	// when running commands via sprite.execFile("bash", ["-c", ...]).
+	await sprite.execFile("bash", [
+		"-c",
+		[
+			// Source nvm if present (sets up node/npm/npx in PATH)
+			'export NVM_DIR="/.sprite/languages/node/nvm"',
+			'[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"',
+			// Get the npm global bin path and write it to a profile script
+			'NPM_BIN="$(npm config get prefix)/bin"',
+			'echo "export PATH=\\"$NPM_BIN:\\$PATH\\"" > /etc/profile.d/npm-global.sh',
+			// Also add nvm init to the profile so node/npm are always available
+			'echo "export NVM_DIR=\\"/.sprite/languages/node/nvm\\"" >> /etc/profile.d/npm-global.sh',
+			'echo "[ -s \\"\\$NVM_DIR/nvm.sh\\" ] && . \\"\\$NVM_DIR/nvm.sh\\"" >> /etc/profile.d/npm-global.sh',
+		].join(" && "),
+	])
+
 	// Configure git (needed for the git agent)
-	await sprite.exec('git config --global user.name "electric-agent"')
-	await sprite.exec('git config --global user.email "agent@electric-sql.com"')
-	await sprite.exec("git config --global init.defaultBranch main")
+	// Use execFile to avoid sprite.exec() splitting quoted args by whitespace
+	await sprite.execFile("git", ["config", "--global", "user.name", "electric-agent"])
+	await sprite.execFile("git", ["config", "--global", "user.email", "agent@electric-sql.com"])
+	await sprite.execFile("git", ["config", "--global", "init.defaultBranch", "main"])
 
 	console.log(`[sprites-bootstrap] Bootstrap complete`)
 }

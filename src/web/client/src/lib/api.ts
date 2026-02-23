@@ -12,10 +12,22 @@ function credentialFields(): { apiKey?: string; ghToken?: string } {
 	return fields
 }
 
-async function request<T>(path: string, opts?: { method?: string; body?: unknown }): Promise<T> {
+/** Return headers with the GH token for GET requests to GitHub routes. */
+function ghHeaders(): Record<string, string> {
+	const token = getGhToken()
+	return token ? { "X-GH-Token": token } : {}
+}
+
+async function request<T>(
+	path: string,
+	opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
+): Promise<T> {
+	const headers: Record<string, string> = { ...opts?.headers }
+	if (opts?.body) headers["Content-Type"] = "application/json"
+
 	const res = await fetch(`${API_BASE}${path}`, {
 		method: opts?.method ?? "GET",
-		headers: opts?.body ? { "Content-Type": "application/json" } : undefined,
+		headers: Object.keys(headers).length > 0 ? headers : undefined,
 		body: opts?.body ? JSON.stringify(opts.body) : undefined,
 	})
 
@@ -151,11 +163,13 @@ export function getGitStatus(sessionId: string) {
 }
 
 export function listGithubRepos() {
-	return request<{ repos: GhRepo[] }>("/github/repos")
+	return request<{ repos: GhRepo[] }>("/github/repos", { headers: ghHeaders() })
 }
 
 export function listBranches(repoFullName: string) {
-	return request<{ branches: GhBranch[] }>(`/github/repos/${repoFullName}/branches`)
+	return request<{ branches: GhBranch[] }>(`/github/repos/${repoFullName}/branches`, {
+		headers: ghHeaders(),
+	})
 }
 
 export function resumeFromGithub(repoUrl: string, branch?: string) {

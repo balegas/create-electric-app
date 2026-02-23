@@ -197,6 +197,7 @@ Reads container stdout line-by-line, parses as `EngineEvent` JSON, appends to `D
 |----------|------|---------|---------------|
 | `DockerSandboxProvider` | `src/web/sandbox/docker.ts` | Docker containers | NDJSON stdin/stdout (via `writeStdin()` + container-bridge) |
 | `DaytonaSandboxProvider` | `src/web/sandbox/daytona.ts` | Daytona cloud sandboxes | Hosted Durable Stream (via `SessionBridge`) |
+| `SpritesSandboxProvider` | `src/web/sandbox/sprites.ts` | Fly.io Sprites micro-VMs | Stdio bridge over Sprites session (via `SpritesStdioBridge`) |
 
 **CRUD API** (`/api/sandboxes`):
 - `GET /api/sandboxes` — list all active sandboxes
@@ -343,6 +344,161 @@ flowchart TD
 
 ---
 
+## Sprites Sandbox Architecture
+
+Sprites are cloud micro-VMs managed by Fly.io via the `@fly/sprites` SDK. They serve as the primary cloud sandbox runtime for deployed environments (e.g., on Fly.io). Unlike Docker (local) or Daytona (snapshot-based), Sprites are lightweight VMs that boot from scratch and use a checkpoint mechanism for fast subsequent starts.
+
+### Sprite Lifecycle
+
+1. **Create** — `SpritesSandboxProvider.create()` calls `client.createSprite(name, { ramMB, cpus, region })`. Default: 2 GB RAM, 2 CPUs, `ord` region. Sprite names follow the pattern `ea-{sessionId first 12 chars}`.
+2. **Network policy** — Immediately after creation, a REST API call sets the network policy to allow all outbound connections (the JS SDK doesn't expose this yet).
+3. **Bootstrap / Checkpoint restore** — `ensureBootstrapped(sprite)` checks for a `"bootstrapped"` checkpoint:
+   - **If checkpoint exists**: Restores from it (instant — skips all install steps).
+   - **If no checkpoint**: Runs full bootstrap, then creates the checkpoint for future reuse.
+4. **Environment injection** — Writes env vars to `/etc/profile.d/electric-agent.sh` (see below).
+5. **Agent start** — The bridge or server starts the `electric-agent headless` process.
+6. **Destroy** — `sprite.delete()` tears down the VM.
+
+### Bootstrap Process (`src/web/sandbox/sprites-bootstrap.ts`)
+
+Sprites run Ubuntu 24.04 with Node.js (via nvm) pre-installed but no project tooling. Bootstrap installs:
+
+1. `pnpm` (global npm install)
+2. `electric-agent` (global npm install)
+3. Creates `/home/agent/workspace/` directory
+4. Writes `/etc/profile.d/npm-global.sh` — a profile script that adds the npm global bin and nvm paths to `$PATH` so commands run via `execFile("bash", ["-c", ...])` can find `node`, `npm`, and globally-installed binaries.
+5. Configures git identity (`electric-agent` / `agent@electric-sql.com`, default branch `main`)
+
+After bootstrap completes, `sprite.createCheckpoint("bootstrapped")` snapshots the VM state. Subsequent sprites restore from this checkpoint instantly instead of re-running the install steps.
+
+### Environment Variables
+
+All env vars are written to `/etc/profile.d/electric-agent.sh` as `export KEY="value"` lines (base64-encoded to avoid shell quoting issues in `execFile`). The agent process sources this file at startup.
+
+| Variable | When set | Purpose |
+|----------|----------|---------|
+| `SANDBOX_MODE` | Always | Signals headless mode |
+| `VITE_PORT` | Always | Dev server port (5173) |
+| `DATABASE_URL` | Cloud/claim infra | Postgres connection string |
+| `ELECTRIC_URL` | Cloud/claim infra | Electric sync endpoint |
+| `ELECTRIC_SOURCE_ID` | Cloud/claim infra | Electric source identifier |
+| `ELECTRIC_SECRET` | Cloud/claim infra | Electric auth secret |
+| `ANTHROPIC_API_KEY` | If provided | Claude API key for agents |
+| `GH_TOKEN` | If provided | GitHub PAT for git operations |
+| `DS_*` (stream vars) | If hosted streams configured | Durable Streams connection (URL, service ID, secret, session ID) |
+
+### Agent Launch
+
+Two launch modes exist depending on the bridge type:
+
+**Stream bridge mode** (default for Sprites):
+- `SpritesSandboxProvider.startAgent()` uses `sprite.spawn("bash", [...])` to start the agent without blocking.
+- The agent runs `electric-agent headless` and communicates via the stream adapter (Durable Streams).
+- Output is redirected to `/tmp/agent-stdout.log` and `/tmp/agent-stderr.log`.
+- The server waits 3 seconds after launch for the agent to connect to the stream.
+
+**Stdio bridge mode** (also supported):
+- `SpritesStdioBridge.start()` uses `sprite.createSession("bash", [...], { detachable: true })` to get stdin/stdout handles.
+- The bridge reads NDJSON from stdout line by line and relays events to the Durable Stream.
+- Commands and gate responses are written to the session's stdin.
+
+### Communication Flow
+
+```
+React Client ←—SSE—→ Hono Server ←—Durable Stream—→ Agent (in Sprite)
+                          ↕                              ↕
+                    gate.ts (gates)              headless-adapter.ts
+```
+
+**Stream bridge (default):**
+1. Both the server and the agent inside the sprite connect to the same hosted Durable Stream.
+2. Messages are tagged with `source: "server"` or `source: "agent"`, and each side filters by source.
+3. The server writes commands and gate responses to the stream; the agent reads them.
+4. The agent writes `EngineEvent`s to the stream; the server reads them for gate resolution.
+
+**Stdio bridge:**
+1. The bridge holds a Sprites session with stdin/stdout handles to the agent process.
+2. Agent stdout (NDJSON) is parsed line-by-line and appended to the Durable Stream for the UI.
+3. Commands and gate responses are written to the agent's stdin.
+
+### Complete Session Flow (Sprites)
+
+```
+1. User clicks "Create" in browser
+   → POST /api/sessions { description, apiKey, ghToken }
+
+2. Server creates DurableStream + SessionInfo
+   → Emits infra_config_prompt gate
+
+3. User selects infrastructure (local/cloud/claim)
+   → Gate resolves
+
+4. SpritesSandboxProvider.create():
+   a. createSprite("ea-{id}", { ramMB: 2048, cpus: 2, region: "ord" })
+   b. setNetworkPolicyAllowAll() — REST API call
+   c. ensureBootstrapped() — restore checkpoint or full bootstrap
+   d. Write env vars to /etc/profile.d/electric-agent.sh
+   e. mkdir /home/agent/workspace/{projectName}
+   → Returns SandboxHandle { previewUrl: "https://ea-{id}.sprites.dev" }
+
+5. Server detects Sprites runtime in stream bridge mode:
+   → spritesProvider.startAgent(handle)
+   → Agent process starts: sources env, runs electric-agent headless
+   → Agent connects to Durable Stream via DS_* env vars
+   → Server waits 3s for agent to connect
+
+6. Server sends command to stream:
+   → { source: "server", type: "command", command: "new", description, ... }
+
+7. Agent reads command from stream, runs orchestrator:
+   → clarifier → scaffold → planner → coder → git agent
+   → Each phase emits EngineEvents to stream
+
+8. React client receives events via SSE proxy (GET /api/sessions/:id/events)
+   → Gates displayed as UI prompts, resolved via POST /api/sessions/:id/respond
+
+9. Agent emits session_complete
+   → User sees preview at https://ea-{id}.sprites.dev
+```
+
+### SSE Proxy
+
+The React client never connects directly to Durable Streams. Instead, `GET /api/sessions/:id/events` acts as an SSE proxy:
+
+1. Opens a `DurableStream` reader pointed at the session's stream URL (with auth headers).
+2. Subscribes with `live: true` for real-time updates.
+3. Filters out internal protocol messages (`type: "command"` and `type: "gate_response"`).
+4. Strips the `source` field from events before forwarding.
+5. Forwards remaining events as SSE `data:` frames with `id:` set to the stream offset.
+6. Supports `Last-Event-ID` header for reconnection catch-up.
+
+### Gate Resolution (Sprites)
+
+Gates pause the agent workflow until an external decision arrives. With Sprites:
+
+**Stream bridge mode:**
+- Agent calls a gate callback (e.g., `onPlanReady`) → emits gate event to stream → blocks on stream waiting for response
+- React client displays gate UI → user responds → `POST /api/sessions/:id/respond`
+- Server classifies the gate:
+  - **Server-side gates** (`checkpoint`, `publish`, `infra_config`, `repo_setup`): resolved in-process via `resolveGate()`
+  - **Container-forwarded gates** (`clarification`, `approval`, `continue`, `revision`): server writes `{ source: "server", type: "gate_response", gate, ... }` to stream → agent picks it up
+
+**Stdio bridge mode:**
+- Same flow but gate responses are written to the agent's stdin via `cmd.stdin.write()` instead of to the stream.
+
+### Gotchas & Debugging
+
+- **`sprite.exec()` splits by whitespace**: `exec(command)` does `command.trim().split(/\s+/)`, breaking all shell features (pipes, redirects, `&&`, quoted args). Always use `sprite.execFile("bash", ["-c", "..."])` instead.
+- **`createSession()` forces TTY**: Merges stdout/stderr and adds terminal control characters. Avoid for structured output (NDJSON). Use `spawn()` for non-blocking agent launch.
+- **PATH issues**: npm global binaries are not in the default PATH. Every command must source `/etc/profile.d/npm-global.sh` first. The env file also sources nvm to make `node`/`npm` available.
+- **Checkpoint caching**: The bootstrap checkpoint is per-sprite, not global. Each new sprite either restores from its own checkpoint or bootstraps fresh. If the `electric-agent` package is updated, old checkpoints will have the stale version — destroy and recreate the sprite.
+- **Preview URLs**: Sprites expose HTTP at `https://{name}.sprites.dev`. Port 8080 is the default; other ports require the proxy URL format. The dev server runs on port 5173 (set via `VITE_PORT`).
+- **Sprite CLI flag order**: The `sprite` CLI uses Go-style flags — flags must come before positional arguments (e.g., `sprite destroy -force ea-abc123`, NOT `sprite destroy ea-abc123 -force`).
+- **Network policy**: Must be set immediately after creation or the sprite has no outbound internet access (needed for npm install, Electric sync, etc.).
+- **Agent logs**: When using `startAgent()` (stream bridge mode), stdout/stderr are redirected to `/tmp/agent-stdout.log` and `/tmp/agent-stderr.log` inside the sprite. Use `sprite exec <name> -- cat /tmp/agent-stderr.log` to debug.
+
+---
+
 ## Key Design Patterns
 
 1. **Callback-driven I/O inversion** — Engine never knows its output target
@@ -354,4 +510,5 @@ flowchart TD
 7. **Hook interception** — Transparent correctness enforcement without agent awareness
 8. **Session resumption** — SDK session IDs preserve full conversation context across runs
 9. **Progressive disclosure** — Planner reads playbooks first, coder reads them per-phase as instructed by the plan
-10. **Provider-agnostic CRUD** — `SandboxProvider` interface enables Docker/Daytona swap without changing server code
+10. **Provider-agnostic CRUD** — `SandboxProvider` interface enables Docker/Daytona/Sprites swap without changing server code
+11. **Checkpoint-accelerated bootstrap** — Sprites install tooling once, checkpoint the VM state, and restore instantly on subsequent creates

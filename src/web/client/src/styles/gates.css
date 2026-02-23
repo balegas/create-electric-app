@@ -8,8 +8,8 @@
 }
 
 .gate-prompt h3 {
-	font-family: var(--font-mono);
-	font-size: 14px;
+	font-family: var(--font-sans);
+	font-size: 15px;
 	font-weight: 600;
 	margin-bottom: 8px;
 	color: var(--brand-1);
@@ -18,7 +18,7 @@
 .gate-prompt .gate-summary {
 	color: var(--text-muted);
 	font-size: 13px;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	margin-bottom: 12px;
 }
 
@@ -46,8 +46,8 @@
 
 .gate-prompt .question label {
 	display: block;
-	font-family: var(--font-mono);
-	font-size: 12px;
+	font-family: var(--font-sans);
+	font-size: 13px;
 	color: var(--text-muted);
 	margin-bottom: 4px;
 }
@@ -184,8 +184,8 @@
 .gate-radio {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	font-family: var(--font-mono);
+	gap: 8px;
+	font-family: var(--font-sans);
 	font-size: 13px;
 	color: var(--text);
 	cursor: pointer;
