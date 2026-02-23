@@ -159,6 +159,42 @@
 		color: var(--text);
 	}
 
+	/* ---- Mobile preview bar: shown below session header when session is done ---- */
+	.mobile-preview-bar {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 8px 12px;
+		background: var(--bg-surface);
+		border-bottom: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+
+	.mobile-preview-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 20px;
+		font-size: 13px;
+		font-family: var(--font-mono);
+		color: var(--brand-1);
+		background: transparent;
+		border: 1px solid var(--brand-3);
+		border-radius: 8px;
+		text-decoration: none;
+		-webkit-tap-highlight-color: transparent;
+		transition:
+			color 0.15s,
+			background 0.15s,
+			border-color 0.15s;
+	}
+
+	.mobile-preview-link:hover {
+		background: var(--brand-2);
+		border-color: var(--brand-2);
+		color: #fff;
+	}
+
 	/* ---- Console: reduce padding ---- */
 	.console {
 		padding: 8px;
@@ -205,13 +241,19 @@
 		font-size: 13px;
 	}
 
-	/* ---- Mobile home topbar: hamburger on home page ---- */
+	/* ---- Mobile home topbar: hamburger + brand on home page ---- */
 	.mobile-home-topbar {
 		display: flex;
 		align-items: center;
 		padding: 6px 8px;
 		height: var(--topbar-height);
 		flex-shrink: 0;
+		border-bottom: 1px solid var(--border);
+		gap: 8px;
+	}
+
+	.mobile-topbar-logo {
+		height: 22px;
 	}
 
 	/* ---- Hero: mobile-specific design ---- */
@@ -428,6 +470,14 @@
 	}
 
 	.session-header-overflow-menu {
+		display: none;
+	}
+
+	.mobile-preview-bar {
+		display: none;
+	}
+
+	.mobile-topbar-logo {
 		display: none;
 	}
 }
