@@ -31,6 +31,7 @@ export type EngineEvent =
 			type: "infra_config_prompt"
 			projectName: string
 			ghAccounts: { login: string; type: "user" | "org" }[]
+			runtime: "docker" | "sprites" | "daytona"
 			ts: string
 	  }
 	| { type: "gate_resolved"; gate: string; summary?: string; ts: string }

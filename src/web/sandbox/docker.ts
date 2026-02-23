@@ -46,8 +46,9 @@ function findFreePort(): Promise<number> {
 	})
 }
 
-function resolveAuthEnv(opts?: { apiKey?: string }): [string, string] | null {
+function resolveAuthEnv(opts?: { apiKey?: string; oauthToken?: string }): [string, string] | null {
 	if (opts?.apiKey) return ["ANTHROPIC_API_KEY", opts.apiKey]
+	if (opts?.oauthToken) return ["CLAUDE_CODE_OAUTH_TOKEN", opts.oauthToken]
 	return null
 }
 
@@ -559,7 +560,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 	async createFromRepo(
 		sessionId: string,
 		repoUrl: string,
-		opts?: { branch?: string; apiKey?: string; ghToken?: string },
+		opts?: { branch?: string; apiKey?: string; oauthToken?: string; ghToken?: string },
 	): Promise<SandboxHandle> {
 		const repoName =
 			repoUrl
@@ -569,6 +570,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 
 		const handle = await this.create(sessionId, {
 			apiKey: opts?.apiKey,
+			oauthToken: opts?.oauthToken,
 			ghToken: opts?.ghToken,
 			projectName: repoName,
 		})

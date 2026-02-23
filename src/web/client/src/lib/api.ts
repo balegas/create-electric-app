@@ -1,13 +1,15 @@
-import { getApiKey, getGhToken } from "./credentials"
+import { getApiKey, getGhToken, getOauthToken } from "./credentials"
 
 const API_BASE = "/api"
 
 /** Return user-provided credentials (if set) for inclusion in request bodies. */
-function credentialFields(): { apiKey?: string; ghToken?: string } {
-	const fields: { apiKey?: string; ghToken?: string } = {}
+function credentialFields(): { apiKey?: string; oauthToken?: string; ghToken?: string } {
+	const fields: { apiKey?: string; oauthToken?: string; ghToken?: string } = {}
 	const apiKey = getApiKey()
+	const oauthToken = getOauthToken()
 	const ghToken = getGhToken()
 	if (apiKey) fields.apiKey = apiKey
+	else if (oauthToken) fields.oauthToken = oauthToken
 	if (ghToken) fields.ghToken = ghToken
 	return fields
 }
@@ -170,6 +172,10 @@ export function listBranches(repoFullName: string) {
 	return request<{ branches: GhBranch[] }>(`/github/repos/${repoFullName}/branches`, {
 		headers: ghHeaders(),
 	})
+}
+
+export function fetchKeychainCredentials() {
+	return request<{ oauthToken: string | null }>("/credentials/keychain")
 }
 
 export function resumeFromGithub(repoUrl: string, branch?: string) {

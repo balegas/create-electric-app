@@ -319,6 +319,7 @@
 	width: 32px;
 	height: 32px;
 	margin: 4px;
+	flex-shrink: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -329,7 +330,6 @@
 	border-radius: 50%;
 	background: var(--bg-hover);
 	color: var(--text);
-	flex-shrink: 0;
 	box-shadow:
 		0 0 0 2px transparent,
 		0 0 0 4px transparent;
@@ -359,6 +359,37 @@
 		0 0 0 4px var(--text-subtle);
 }
 
+/* Pending session — faded placeholder while creating */
+.session-item-pending {
+	opacity: 0.5;
+	pointer-events: none;
+}
+
+.session-avatar-pending {
+	background: var(--border);
+	color: transparent;
+	animation: pulse-fade 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-fade {
+	0%,
+	100% {
+		opacity: 0.4;
+	}
+	50% {
+		opacity: 0.8;
+	}
+}
+
+.new-project-avatar {
+	background: transparent;
+	outline: 1.5px dashed var(--text-subtle);
+	outline-offset: -1.5px;
+	color: var(--text-subtle);
+	font-size: 16px;
+	font-weight: 400;
+}
+
 /* Session list item in sidebar */
 .session-item {
 	display: flex;
@@ -367,8 +398,13 @@
 	padding: 6px 8px;
 	border-radius: 6px;
 	cursor: pointer;
-	transition: background 0.1s;
+	transition:
+		background 0.1s,
+		gap 0.2s ease;
 	margin-bottom: 1px;
+	height: 48px;
+	box-sizing: border-box;
+	overflow: hidden;
 }
 
 .session-item:hover {
@@ -382,6 +418,11 @@
 .session-item-details {
 	flex: 1;
 	min-width: 0;
+	overflow: hidden;
+	opacity: 1;
+	transition:
+		opacity 0.15s ease,
+		width 0.2s ease;
 }
 
 .session-item-name {
@@ -412,9 +453,11 @@
 	border-radius: 4px;
 	line-height: 1;
 	flex-shrink: 0;
+	overflow: hidden;
 	transition:
 		color 0.1s,
-		opacity 0.1s;
+		opacity 0.1s,
+		width 0.2s ease;
 }
 
 .session-item:hover .session-item-delete {

@@ -32,7 +32,7 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
-	const { sessions, handleDeleteSession } = useAppContext()
+	const { sessions, pendingProject, handleDeleteSession } = useAppContext()
 	const navigate = useNavigate()
 	const location = useLocation()
 
@@ -61,21 +61,29 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 				<span className="sidebar-brand">Electric Agent</span>
 			</div>
 
-			<button type="button" className="sidebar-new-btn" onClick={() => navigate("/")}>
-				{collapsed ? "+" : "+ New Project"}
-			</button>
-
-			{!collapsed && sortedSessions.length > 0 && (
-				<div className="sidebar-section-label">Recent</div>
-			)}
-
 			<div className="sidebar-sessions">
+				<div className="session-item" onClick={() => navigate("/")} title="New App">
+					<span className="session-avatar new-project-avatar">+</span>
+					<div className="session-item-details">
+						<div className="session-item-name">New App</div>
+					</div>
+				</div>
+				{pendingProject && (
+					<div className="session-item session-item-pending" title={pendingProject.name}>
+						<span className="session-avatar session-avatar-pending" />
+						<div className="session-item-details">
+							<div className="session-item-name">{pendingProject.name}</div>
+							<div className="session-item-meta">
+								<span>Setting up...</span>
+							</div>
+						</div>
+					</div>
+				)}
 				{sortedSessions.map((s) => (
 					<SessionListItem
 						key={s.id}
 						session={s}
 						active={s.id === activeSessionId}
-						collapsed={collapsed}
 						onClick={() => navigate(`/session/${s.id}`)}
 						onDelete={() => handleDeleteSession(s.id)}
 					/>

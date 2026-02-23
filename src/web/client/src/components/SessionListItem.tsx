@@ -1,11 +1,11 @@
 import { useState } from "react"
 import { createPortal } from "react-dom"
+import { useEscapeKey, useKeyboardShortcut } from "../hooks/useKeyboardShortcut"
 import type { SessionInfo } from "../lib/api"
 
 interface SessionListItemProps {
 	session: SessionInfo
 	active: boolean
-	collapsed: boolean
 	onClick: () => void
 	onDelete: () => void
 }
@@ -58,6 +58,9 @@ function DeleteModal({
 	onConfirm: () => void
 	onCancel: () => void
 }) {
+	useEscapeKey(onCancel)
+	useKeyboardShortcut("Enter", onConfirm)
+
 	return createPortal(
 		<div className="modal-overlay" onClick={onCancel}>
 			<div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -79,13 +82,7 @@ function DeleteModal({
 	)
 }
 
-export function SessionListItem({
-	session,
-	active,
-	collapsed,
-	onClick,
-	onDelete,
-}: SessionListItemProps) {
+export function SessionListItem({ session, active, onClick, onDelete }: SessionListItemProps) {
 	const [showDeleteModal, setShowDeleteModal] = useState(false)
 
 	const statusRingClass = `session-avatar-${session.status}`
@@ -98,23 +95,13 @@ export function SessionListItem({
 		.map((w) => w.charAt(0).toUpperCase())
 		.join("")
 
-	if (collapsed) {
-		return (
+	return (
+		<>
 			<div
 				className={`session-item ${active ? "active" : ""}`}
 				onClick={onClick}
 				title={session.projectName}
 			>
-				<span className={avatarClass} style={avatarStyle}>
-					{initials}
-				</span>
-			</div>
-		)
-	}
-
-	return (
-		<>
-			<div className={`session-item ${active ? "active" : ""}`} onClick={onClick}>
 				<span className={avatarClass} style={avatarStyle}>
 					{initials}
 				</span>

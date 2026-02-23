@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
+import { useEscapeKey, useKeyboardShortcut } from "../hooks/useKeyboardShortcut"
 import { type ProvisionResult, provisionElectric, respondToGate } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
@@ -92,17 +93,30 @@ function PlanGate({
 }) {
 	const [submitting, setSubmitting] = useState(false)
 
-	async function handleDecision(decision: "approve" | "revise" | "cancel") {
-		setSubmitting(true)
-		const labels = { approve: "Plan approved", revise: "Revision requested", cancel: "Cancelled" }
-		const summary = labels[decision]
-		try {
-			await respondToGate(sessionId, "approval", { decision, _summary: summary })
-			onResolved(summary)
-		} catch {
-			setSubmitting(false)
-		}
-	}
+	const handleDecision = useCallback(
+		async (decision: "approve" | "revise" | "cancel") => {
+			setSubmitting(true)
+			const labels = {
+				approve: "Plan approved",
+				revise: "Revision requested",
+				cancel: "Cancelled",
+			}
+			const summary = labels[decision]
+			try {
+				await respondToGate(sessionId, "approval", { decision, _summary: summary })
+				onResolved(summary)
+			} catch {
+				setSubmitting(false)
+			}
+		},
+		[sessionId, onResolved],
+	)
+
+	const approve = useCallback(() => handleDecision("approve"), [handleDecision])
+	const cancel = useCallback(() => handleDecision("cancel"), [handleDecision])
+
+	useKeyboardShortcut("Enter", approve, { disabled: submitting })
+	useEscapeKey(cancel, submitting)
 
 	return (
 		<div className="gate-plan">
@@ -115,7 +129,7 @@ function PlanGate({
 					onClick={() => handleDecision("approve")}
 					disabled={submitting}
 				>
-					Approve
+					Approve <kbd>Enter</kbd>
 				</button>
 				<button className="gate-btn" onClick={() => handleDecision("revise")} disabled={submitting}>
 					Revise
@@ -125,7 +139,7 @@ function PlanGate({
 					onClick={() => handleDecision("cancel")}
 					disabled={submitting}
 				>
-					Cancel
+					Cancel <kbd>Esc</kbd>
 				</button>
 			</div>
 		</div>
@@ -143,16 +157,25 @@ function ContinueGate({
 }) {
 	const [submitting, setSubmitting] = useState(false)
 
-	async function handleDecision(proceed: boolean) {
-		setSubmitting(true)
-		const summary = proceed ? "Continued" : "Stopped"
-		try {
-			await respondToGate(sessionId, "continue", { proceed, _summary: summary })
-			onResolved(summary)
-		} catch {
-			setSubmitting(false)
-		}
-	}
+	const handleDecision = useCallback(
+		async (proceed: boolean) => {
+			setSubmitting(true)
+			const summary = proceed ? "Continued" : "Stopped"
+			try {
+				await respondToGate(sessionId, "continue", { proceed, _summary: summary })
+				onResolved(summary)
+			} catch {
+				setSubmitting(false)
+			}
+		},
+		[sessionId, onResolved],
+	)
+
+	const continueAction = useCallback(() => handleDecision(true), [handleDecision])
+	const stopAction = useCallback(() => handleDecision(false), [handleDecision])
+
+	useKeyboardShortcut("Enter", continueAction, { disabled: submitting })
+	useEscapeKey(stopAction, submitting)
 
 	const isBudget = reason === "max_budget"
 
@@ -168,10 +191,10 @@ function ContinueGate({
 				onClick={() => handleDecision(true)}
 				disabled={submitting}
 			>
-				Continue
+				Continue <kbd>Enter</kbd>
 			</button>
 			<button className="gate-btn" onClick={() => handleDecision(false)} disabled={submitting}>
-				Stop
+				Stop <kbd>Esc</kbd>
 			</button>
 		</div>
 	)
@@ -186,7 +209,8 @@ function InfraConfigGate({
 	event: Extract<EngineEvent, { type: "infra_config_prompt" }>
 	onResolved: (summary: string) => void
 }) {
-	const [mode, setMode] = useState<"local" | "cloud" | "claim">("local")
+	const isLocal = event.runtime === "docker"
+	const [mode, setMode] = useState<"local" | "cloud" | "claim">(isLocal ? "local" : "claim")
 	const [databaseUrl, setDatabaseUrl] = useState("")
 	const [electricUrl, setElectricUrl] = useState("https://api.electric-sql.cloud")
 	const [sourceId, setSourceId] = useState("")
@@ -239,7 +263,7 @@ function InfraConfigGate({
 				payload.sourceId = sourceId
 				payload.secret = secret
 				payload.claimId = claimId
-				parts.push(`Quick Start (Cloud) — claim: ${claimUrl}`)
+				parts.push(`Provisioned — claim: ${claimUrl}`)
 			} else if (mode === "cloud") {
 				payload.mode = "cloud"
 				payload.databaseUrl = databaseUrl
@@ -276,39 +300,38 @@ function InfraConfigGate({
 			<h3>Setup {event.projectName}</h3>
 
 			<p className="gate-summary">Infrastructure</p>
-			<div className="question">
-				<div className="gate-radio-group">
-					<label className="gate-radio">
-						<input
-							type="radio"
-							name="infra-mode"
-							checked={mode === "claim"}
-							onChange={() => setMode("claim")}
-							disabled={submitting}
-						/>
-						Quick Start (Cloud)
-					</label>
-					<label className="gate-radio">
-						<input
-							type="radio"
-							name="infra-mode"
-							checked={mode === "local"}
-							onChange={() => setMode("local")}
-							disabled={submitting}
-						/>
-						Local (Docker)
-					</label>
-					<label className="gate-radio">
-						<input
-							type="radio"
-							name="infra-mode"
-							checked={mode === "cloud"}
-							onChange={() => setMode("cloud")}
-							disabled={submitting}
-						/>
-						Electric Cloud (BYO)
-					</label>
-				</div>
+			<div className="gate-option-group">
+				<button
+					type="button"
+					className={`gate-option ${mode === "claim" ? "active" : ""}`}
+					onClick={() => setMode("claim")}
+					disabled={submitting}
+				>
+					<span className="gate-option-title">Provision</span>
+					<span className="gate-option-desc">
+						Auto-provision database &amp; Electric Cloud (72h)
+					</span>
+				</button>
+				{isLocal && (
+					<button
+						type="button"
+						className={`gate-option ${mode === "local" ? "active" : ""}`}
+						onClick={() => setMode("local")}
+						disabled={submitting}
+					>
+						<span className="gate-option-title">Local</span>
+						<span className="gate-option-desc">Run with Docker Compose on your machine</span>
+					</button>
+				)}
+				<button
+					type="button"
+					className={`gate-option ${mode === "cloud" ? "active" : ""}`}
+					onClick={() => setMode("cloud")}
+					disabled={submitting}
+				>
+					<span className="gate-option-title">Bring your own</span>
+					<span className="gate-option-desc">Provide your own database &amp; Electric details</span>
+				</button>
 			</div>
 			{mode === "claim" && (
 				<div className="question">

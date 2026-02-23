@@ -53,6 +53,7 @@ export type InfraConfig =
 
 export interface CreateSandboxOpts {
 	apiKey?: string
+	oauthToken?: string
 	ghToken?: string
 	projectName?: string
 	infra?: InfraConfig
@@ -108,6 +109,6 @@ export interface SandboxProvider {
 	createFromRepo(
 		sessionId: string,
 		repoUrl: string,
-		opts?: { branch?: string; apiKey?: string; ghToken?: string },
+		opts?: { branch?: string; apiKey?: string; oauthToken?: string; ghToken?: string },
 	): Promise<SandboxHandle>
 }

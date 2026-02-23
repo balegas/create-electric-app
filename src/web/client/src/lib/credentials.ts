@@ -6,6 +6,7 @@
  */
 
 const ANTHROPIC_KEY = "electric-agent:anthropic-api-key"
+const OAUTH_TOKEN_KEY = "electric-agent:oauth-token"
 const GH_TOKEN_KEY = "electric-agent:gh-token"
 
 export function getApiKey(): string | null {
@@ -22,6 +23,22 @@ export function clearApiKey(): void {
 
 export function hasApiKey(): boolean {
 	return !!getApiKey()
+}
+
+export function getOauthToken(): string | null {
+	return localStorage.getItem(OAUTH_TOKEN_KEY)
+}
+
+export function setOauthToken(token: string): void {
+	localStorage.setItem(OAUTH_TOKEN_KEY, token)
+}
+
+export function clearOauthToken(): void {
+	localStorage.removeItem(OAUTH_TOKEN_KEY)
+}
+
+export function hasAnyAuth(): boolean {
+	return !!getApiKey() || !!getOauthToken()
 }
 
 export function getGhToken(): string | null {

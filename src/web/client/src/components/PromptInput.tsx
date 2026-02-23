@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react"
+import { useEscapeKey } from "../hooks/useKeyboardShortcut"
 
 interface PromptInputProps {
 	onSubmit: (text: string) => void
@@ -28,6 +29,12 @@ export function PromptInput({
 			textareaRef.current.style.height = "auto"
 		}
 	}, [value, onSubmit])
+
+	const handleCancel = useCallback(() => {
+		if (isRunning && onCancel) onCancel()
+	}, [isRunning, onCancel])
+
+	useEscapeKey(handleCancel, !isRunning)
 
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {

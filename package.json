@@ -16,6 +16,7 @@
     "build:web": "vite build --config src/web/client/vite.config.ts",
     "dev": "tsc --watch",
     "dev:web": "vite --config src/web/client/vite.config.ts",
+    "dev:all": "npm run dev & npm run dev:web & npm run serve & wait",
     "check": "biome check src/",
     "check:fix": "biome check --write src/",
     "start": "node dist/index.js",

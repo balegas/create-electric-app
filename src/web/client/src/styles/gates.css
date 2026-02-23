@@ -149,6 +149,18 @@
 	background: rgba(248, 81, 73, 0.1);
 }
 
+.gate-btn kbd {
+	display: inline-block;
+	font-family: var(--font-mono);
+	font-size: 10px;
+	padding: 1px 4px;
+	margin-left: 4px;
+	border-radius: 3px;
+	background: rgba(255, 255, 255, 0.08);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	opacity: 0.6;
+}
+
 /* Continue gate — compact banner */
 .gate-continue {
 	display: flex;
@@ -176,7 +188,7 @@
 /* Radio group for publish visibility etc. */
 .gate-radio-group {
 	display: flex;
-	gap: 16px;
+	gap: 12px;
 	margin-top: 4px;
 	padding: 4px 0;
 }
@@ -184,19 +196,85 @@
 .gate-radio {
 	display: inline-flex;
 	align-items: center;
-	gap: 8px;
-	font-family: var(--font-sans);
+	gap: 6px;
+	font-family: var(--font-mono);
 	font-size: 13px;
 	color: var(--text);
 	cursor: pointer;
-	line-height: 1;
+	line-height: 1.4;
+	padding: 4px 10px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	transition:
+		background 0.15s,
+		border-color 0.15s;
 }
 
-.gate-radio input[type="radio"] {
+.gate-radio:hover {
+	background: var(--bg-hover);
+}
+
+.gate-radio:has(input:checked) {
+	border-color: var(--brand-2);
+	background: var(--bg-hover);
+}
+
+.gate-radio input[type="radio"],
+.gate-radio input[type="checkbox"] {
 	width: auto;
 	margin: 0;
 	vertical-align: middle;
 	accent-color: var(--brand-2);
+}
+
+/* Infra mode option buttons */
+.gate-option-group {
+	display: flex;
+	gap: 8px;
+	margin: 8px 0;
+}
+
+.gate-option {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: transparent;
+	cursor: pointer;
+	text-align: left;
+	transition:
+		background 0.15s,
+		border-color 0.15s;
+}
+
+.gate-option:hover {
+	background: var(--bg-hover);
+}
+
+.gate-option.active {
+	border-color: var(--brand-2);
+	background: var(--bg-hover);
+}
+
+.gate-option:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.gate-option-title {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.gate-option-desc {
+	font-size: 11px;
+	color: var(--text-subtle);
+	line-height: 1.3;
 }
 
 /* Resolved gate — expandable details */
