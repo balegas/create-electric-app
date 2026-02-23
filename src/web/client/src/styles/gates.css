@@ -277,54 +277,57 @@
 	line-height: 1.3;
 }
 
-/* Resolved gate — expandable details */
-.gate-resolved-details {
+/* Resolved gate — expanded non-editable state */
+.gate-answered {
 	margin: 0;
-	padding: 0;
 }
 
-.gate-resolved-details summary {
+.gate-answered-header {
 	display: flex;
 	align-items: center;
 	gap: 0;
 	padding: 3px 0;
-	cursor: pointer;
 	font-family: var(--font-mono);
 	font-size: 13px;
-	user-select: none;
-	list-style: none;
 	line-height: 1.6;
 }
 
-.gate-resolved-details summary::-webkit-details-marker {
-	display: none;
-}
-
-.gate-resolved-details summary:hover .gate-resolved-label {
-	text-decoration: underline;
-	color: var(--text-muted);
+.gate-answered-header .prefix {
+	font-weight: 600;
+	margin-right: 6px;
 }
 
 .gate-resolved-label {
 	color: var(--text-subtle);
 }
 
-.gate-resolved-details summary .prefix {
-	font-weight: 600;
-	margin-right: 6px;
+.gate-answered .gate-prompt,
+.gate-answered .gate-plan,
+.gate-answered .gate-continue {
+	opacity: 0.65;
 }
 
-.gate-resolved-body {
-	padding: 4px 0 4px 16px;
-	border-left: 2px solid var(--border);
-	margin: 2px 0 4px 6px;
+/* Continue gate — resolved decision text */
+.gate-continue-decision {
+	color: var(--text-muted);
+	font-style: italic;
 }
 
-.gate-resolved-body pre {
+/* Resolved infra config — key-value summary */
+.gate-config-summary {
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+	padding: 8px 10px;
+	margin: 6px 0;
 	font-family: var(--font-mono);
 	font-size: 12px;
-	line-height: 1.5;
+	line-height: 1.6;
+	word-break: break-all;
 	color: var(--text-muted);
-	white-space: pre-wrap;
-	word-break: break-word;
+}
+
+.gate-config-summary a {
+	color: var(--brand-1);
+	word-break: break-all;
 }
