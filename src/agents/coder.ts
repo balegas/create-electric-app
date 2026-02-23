@@ -63,7 +63,7 @@ export async function runCoder(
 	const queryOptions: Record<string, unknown> = {
 		model: "claude-sonnet-4-6",
 		systemPrompt: coderPrompt,
-		maxThinkingTokens: 8192,
+		maxThinkingTokens: 4096,
 		allowedTools: [
 			"Read",
 			"Write",

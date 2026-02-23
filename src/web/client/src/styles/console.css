@@ -238,6 +238,27 @@
 	overflow-y: auto;
 }
 
+/* Waiting indicator */
+.waiting-indicator {
+	gap: 6px;
+	color: var(--text-subtle);
+	animation: fade-pulse 2s ease-in-out infinite;
+}
+
+.waiting-label {
+	font-style: italic;
+}
+
+@keyframes fade-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
+}
+
 /* Action group */
 .action-group {
 	margin: 4px 0;

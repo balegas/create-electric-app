@@ -261,6 +261,8 @@ export function SessionPage() {
 					<Console
 						sessionId={effectiveId ?? ""}
 						entries={entries}
+						isLive={isLive}
+						isComplete={isComplete}
 						onGateResolved={markGateResolved}
 					/>
 				)}
