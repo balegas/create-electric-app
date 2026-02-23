@@ -249,6 +249,20 @@ function patchViteConfig(projectDir: string): void {
 		)
 	}
 
+	// Fallback: ensure allowedHosts is always present even if the regex chain
+	// above didn't match (e.g. KPB template changed its default port or already
+	// had host: true). Without this, Vite blocks requests from Sprites hostnames
+	// like *.sprites.app.
+	if (!content.includes("allowedHosts")) {
+		if (content.match(/host:\s*/)) {
+			// Insert after host: line
+			content = content.replace(/(host:\s*[^,\n]+,?)/, '$1\n\t\tallowedHosts: "all",')
+		} else if (content.match(/server:\s*\{/)) {
+			// Insert at top of server block
+			content = content.replace(/(server:\s*\{)/, '$1\n\t\tallowedHosts: "all",')
+		}
+	}
+
 	// Add proxy for Electric shape API — works with both Caddy (external) and
 	// sandbox (no Caddy, Electric on localhost:3000) setups
 	if (!content.includes("proxy:")) {
