@@ -73,7 +73,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 						key={s.id}
 						session={s}
 						active={s.id === activeSessionId}
-						collapsed={collapsed}
 						onClick={() => navigate(`/session/${s.id}`)}
 						onDelete={() => handleDeleteSession(s.id)}
 					/>

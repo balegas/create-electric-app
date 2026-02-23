@@ -137,11 +137,16 @@
 	display: none;
 }
 
+.sidebar-collapsed .session-item {
+	gap: 0;
+}
+
 .sidebar-collapsed .session-item-details,
 .sidebar-collapsed .session-item-delete {
 	opacity: 0;
-	max-width: 0;
+	width: 0;
 	overflow: hidden;
+	pointer-events: none;
 }
 
 .sidebar-section-label {
