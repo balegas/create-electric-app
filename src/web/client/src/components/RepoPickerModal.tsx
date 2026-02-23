@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
+import { useEscapeKey } from "../hooks/useKeyboardShortcut"
 import { type GhBranch, type GhRepo, listBranches, listGithubRepos } from "../lib/api"
 
 interface RepoPickerModalProps {
@@ -74,6 +75,16 @@ export function RepoPickerModal({ onSelect, onClose }: RepoPickerModalProps) {
 			onSelect(selectedRepo.url, branchName)
 		}
 	}
+
+	// Escape goes back if viewing branches, otherwise closes the modal
+	const handleEscape = useCallback(() => {
+		if (selectedRepo) {
+			handleBack()
+		} else {
+			onClose()
+		}
+	}, [selectedRepo, onClose])
+	useEscapeKey(handleEscape)
 
 	const filtered = filter
 		? repos.filter((r) => r.nameWithOwner.toLowerCase().includes(filter.toLowerCase()))

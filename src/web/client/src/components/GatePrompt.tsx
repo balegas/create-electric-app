@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
+import { useEscapeKey, useKeyboardShortcut } from "../hooks/useKeyboardShortcut"
 import { type ProvisionResult, provisionElectric, respondToGate } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
@@ -92,17 +93,30 @@ function PlanGate({
 }) {
 	const [submitting, setSubmitting] = useState(false)
 
-	async function handleDecision(decision: "approve" | "revise" | "cancel") {
-		setSubmitting(true)
-		const labels = { approve: "Plan approved", revise: "Revision requested", cancel: "Cancelled" }
-		const summary = labels[decision]
-		try {
-			await respondToGate(sessionId, "approval", { decision, _summary: summary })
-			onResolved(summary)
-		} catch {
-			setSubmitting(false)
-		}
-	}
+	const handleDecision = useCallback(
+		async (decision: "approve" | "revise" | "cancel") => {
+			setSubmitting(true)
+			const labels = {
+				approve: "Plan approved",
+				revise: "Revision requested",
+				cancel: "Cancelled",
+			}
+			const summary = labels[decision]
+			try {
+				await respondToGate(sessionId, "approval", { decision, _summary: summary })
+				onResolved(summary)
+			} catch {
+				setSubmitting(false)
+			}
+		},
+		[sessionId, onResolved],
+	)
+
+	const approve = useCallback(() => handleDecision("approve"), [handleDecision])
+	const cancel = useCallback(() => handleDecision("cancel"), [handleDecision])
+
+	useKeyboardShortcut("Enter", approve, { disabled: submitting })
+	useEscapeKey(cancel, submitting)
 
 	return (
 		<div className="gate-plan">
@@ -115,7 +129,7 @@ function PlanGate({
 					onClick={() => handleDecision("approve")}
 					disabled={submitting}
 				>
-					Approve
+					Approve <kbd>Enter</kbd>
 				</button>
 				<button className="gate-btn" onClick={() => handleDecision("revise")} disabled={submitting}>
 					Revise
@@ -125,7 +139,7 @@ function PlanGate({
 					onClick={() => handleDecision("cancel")}
 					disabled={submitting}
 				>
-					Cancel
+					Cancel <kbd>Esc</kbd>
 				</button>
 			</div>
 		</div>
@@ -143,16 +157,25 @@ function ContinueGate({
 }) {
 	const [submitting, setSubmitting] = useState(false)
 
-	async function handleDecision(proceed: boolean) {
-		setSubmitting(true)
-		const summary = proceed ? "Continued" : "Stopped"
-		try {
-			await respondToGate(sessionId, "continue", { proceed, _summary: summary })
-			onResolved(summary)
-		} catch {
-			setSubmitting(false)
-		}
-	}
+	const handleDecision = useCallback(
+		async (proceed: boolean) => {
+			setSubmitting(true)
+			const summary = proceed ? "Continued" : "Stopped"
+			try {
+				await respondToGate(sessionId, "continue", { proceed, _summary: summary })
+				onResolved(summary)
+			} catch {
+				setSubmitting(false)
+			}
+		},
+		[sessionId, onResolved],
+	)
+
+	const continueAction = useCallback(() => handleDecision(true), [handleDecision])
+	const stopAction = useCallback(() => handleDecision(false), [handleDecision])
+
+	useKeyboardShortcut("Enter", continueAction, { disabled: submitting })
+	useEscapeKey(stopAction, submitting)
 
 	const isBudget = reason === "max_budget"
 
@@ -168,10 +191,10 @@ function ContinueGate({
 				onClick={() => handleDecision(true)}
 				disabled={submitting}
 			>
-				Continue
+				Continue <kbd>Enter</kbd>
 			</button>
 			<button className="gate-btn" onClick={() => handleDecision(false)} disabled={submitting}>
-				Stop
+				Stop <kbd>Esc</kbd>
 			</button>
 		</div>
 	)

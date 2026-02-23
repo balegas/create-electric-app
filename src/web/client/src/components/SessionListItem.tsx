@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { createPortal } from "react-dom"
+import { useEscapeKey, useKeyboardShortcut } from "../hooks/useKeyboardShortcut"
 import type { SessionInfo } from "../lib/api"
 
 interface SessionListItemProps {
@@ -58,6 +59,9 @@ function DeleteModal({
 	onConfirm: () => void
 	onCancel: () => void
 }) {
+	useEscapeKey(onCancel)
+	useKeyboardShortcut("Enter", onConfirm)
+
 	return createPortal(
 		<div className="modal-overlay" onClick={onCancel}>
 			<div className="modal-card" onClick={(e) => e.stopPropagation()}>

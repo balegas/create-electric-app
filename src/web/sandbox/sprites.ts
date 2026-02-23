@@ -118,6 +118,8 @@ export class SpritesSandboxProvider implements SandboxProvider {
 
 		if (opts?.apiKey) {
 			envVars.ANTHROPIC_API_KEY = opts.apiKey
+		} else if (opts?.oauthToken) {
+			envVars.CLAUDE_CODE_OAUTH_TOKEN = opts.oauthToken
 		}
 
 		if (opts?.ghToken) {
@@ -369,7 +371,7 @@ export class SpritesSandboxProvider implements SandboxProvider {
 	async createFromRepo(
 		sessionId: string,
 		repoUrl: string,
-		opts?: { branch?: string; apiKey?: string; ghToken?: string },
+		opts?: { branch?: string; apiKey?: string; oauthToken?: string; ghToken?: string },
 	): Promise<SandboxHandle> {
 		const repoName =
 			repoUrl
@@ -379,6 +381,7 @@ export class SpritesSandboxProvider implements SandboxProvider {
 
 		const handle = await this.create(sessionId, {
 			apiKey: opts?.apiKey,
+			oauthToken: opts?.oauthToken,
 			ghToken: opts?.ghToken,
 			projectName: repoName,
 		})

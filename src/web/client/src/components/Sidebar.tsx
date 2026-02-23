@@ -61,15 +61,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 				<span className="sidebar-brand">Electric Agent</span>
 			</div>
 
-			<button type="button" className="sidebar-new-btn" onClick={() => navigate("/")}>
-				{collapsed ? "+" : "+ New Project"}
-			</button>
-
-			{!collapsed && sortedSessions.length > 0 && (
-				<div className="sidebar-section-label">Recent</div>
-			)}
-
 			<div className="sidebar-sessions">
+				<div className="session-item" onClick={() => navigate("/")} title="New App">
+					<span className="session-avatar new-project-avatar">+</span>
+					<div className="session-item-details">
+						<div className="session-item-name">New App</div>
+					</div>
+				</div>
 				{sortedSessions.map((s) => (
 					<SessionListItem
 						key={s.id}

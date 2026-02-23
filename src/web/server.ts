@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
@@ -221,6 +222,7 @@ export function createApp(config: ServerConfig) {
 			name?: string
 			baseDir?: string
 			apiKey?: string
+			oauthToken?: string
 			ghToken?: string
 		}
 
@@ -365,6 +367,7 @@ export function createApp(config: ServerConfig) {
 				streamEnv,
 				deferAgentStart: config.bridgeMode === "stdio",
 				apiKey: body.apiKey,
+				oauthToken: body.oauthToken,
 				ghToken: body.ghToken,
 			})
 			console.log(
@@ -989,12 +992,32 @@ export function createApp(config: ServerConfig) {
 		}
 	})
 
+	// Read Claude credentials from macOS Keychain (dev convenience)
+	app.get("/api/credentials/keychain", (c) => {
+		if (process.platform !== "darwin") {
+			return c.json({ apiKey: null })
+		}
+		try {
+			const raw = execFileSync(
+				"security",
+				["find-generic-password", "-s", "Claude Code-credentials", "-w"],
+				{ encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] },
+			).trim()
+			const parsed = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
+			const token = parsed.claudeAiOauth?.accessToken ?? null
+			return c.json({ oauthToken: token })
+		} catch {
+			return c.json({ oauthToken: null })
+		}
+	})
+
 	// Resume a project from a GitHub repo
 	app.post("/api/sessions/resume", async (c) => {
 		const body = (await c.req.json()) as {
 			repoUrl: string
 			branch?: string
 			apiKey?: string
+			oauthToken?: string
 			ghToken?: string
 		}
 		if (!body.repoUrl) {
@@ -1024,6 +1047,7 @@ export function createApp(config: ServerConfig) {
 			const handle = await config.sandbox.createFromRepo(sessionId, body.repoUrl, {
 				branch: body.branch,
 				apiKey: body.apiKey,
+				oauthToken: body.oauthToken,
 				ghToken: body.ghToken,
 			})
 

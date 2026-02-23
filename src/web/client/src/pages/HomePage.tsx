@@ -8,7 +8,7 @@ import { resumeFromGithub } from "../lib/api"
 
 export function HomePage() {
 	const {
-		hasApiKey,
+		authSource,
 		hasGhToken,
 		showSettings,
 		setShowSettings,
@@ -41,9 +41,9 @@ export function HomePage() {
 
 	return (
 		<>
-			{showSettings && hasApiKey !== null && (
+			{showSettings && (
 				<Settings
-					hasApiKey={hasApiKey}
+					authSource={authSource}
 					hasGhToken={hasGhToken ?? false}
 					onKeySaved={refreshSettings}
 					onClose={() => setShowSettings(false)}
@@ -57,11 +57,11 @@ export function HomePage() {
 					<PromptInput
 						onSubmit={handleNewProject}
 						placeholder={
-							hasApiKey === false
+							!authSource
 								? "Set an API key in Settings to get started..."
 								: "Describe the application you want to build..."
 						}
-						disabled={loading || hasApiKey === false}
+						disabled={loading || !authSource}
 					/>
 				</div>
 				{hasGhToken && (

@@ -319,6 +319,7 @@
 	width: 32px;
 	height: 32px;
 	margin: 4px;
+	flex-shrink: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -359,6 +360,15 @@
 		0 0 0 4px var(--text-subtle);
 }
 
+.new-project-avatar {
+	background: transparent !important;
+	outline: 1.5px dashed var(--text-subtle);
+	outline-offset: -1.5px;
+	color: var(--text-subtle) !important;
+	font-size: 16px;
+	font-weight: 400;
+}
+
 /* Session list item in sidebar */
 .session-item {
 	display: flex;
@@ -382,6 +392,11 @@
 .session-item-details {
 	flex: 1;
 	min-width: 0;
+	overflow: hidden;
+	opacity: 1;
+	transition:
+		opacity 0.15s ease,
+		max-width 0.2s ease;
 }
 
 .session-item-name {

@@ -65,7 +65,7 @@ export function SessionPage() {
 		sessions,
 		showSettings,
 		setShowSettings,
-		hasApiKey,
+		authSource,
 		hasGhToken,
 		refreshSettings,
 		refreshSessions,
@@ -190,9 +190,9 @@ export function SessionPage() {
 
 	return (
 		<>
-			{showSettings && hasApiKey !== null && (
+			{showSettings && (
 				<Settings
-					hasApiKey={hasApiKey}
+					authSource={authSource}
 					hasGhToken={hasGhToken ?? false}
 					onKeySaved={refreshSettings}
 					onClose={() => setShowSettings(false)}

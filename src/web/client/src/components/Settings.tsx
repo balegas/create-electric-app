@@ -1,16 +1,30 @@
 import { useCallback, useId, useState } from "react"
 import { createPortal } from "react-dom"
-import { setApiKey as saveApiKey, setGhToken as saveGhToken } from "../lib/credentials"
+import { useEscapeKey } from "../hooks/useKeyboardShortcut"
+import type { AuthSource } from "../layouts/AppShell"
+import {
+	clearApiKey,
+	clearGhToken,
+	clearOauthToken,
+	setApiKey as saveApiKey,
+	setGhToken as saveGhToken,
+} from "../lib/credentials"
 
 interface SettingsProps {
-	hasApiKey: boolean
+	authSource: AuthSource
 	hasGhToken: boolean
 	onKeySaved: () => void
 	onClose: () => void
 	onCopyLog?: () => void
 }
 
-export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog }: SettingsProps) {
+export function Settings({
+	authSource,
+	hasGhToken,
+	onKeySaved,
+	onClose,
+	onCopyLog,
+}: SettingsProps) {
 	const apiInputId = useId()
 	const ghInputId = useId()
 	const [apiKey, setApiKey] = useState("")
@@ -24,12 +38,23 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 		onKeySaved()
 	}, [apiKey, onKeySaved])
 
+	const handleClearApiKey = useCallback(() => {
+		clearApiKey()
+		clearOauthToken()
+		onKeySaved()
+	}, [onKeySaved])
+
 	const handleSaveGhPat = useCallback(() => {
 		if (!ghPat.trim()) return
 		saveGhToken(ghPat.trim())
 		setGhPat("")
 		onKeySaved()
 	}, [ghPat, onKeySaved])
+
+	const handleClearGhToken = useCallback(() => {
+		clearGhToken()
+		onKeySaved()
+	}, [onKeySaved])
 
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {
@@ -57,6 +82,8 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 		setTimeout(() => setCopied(false), 2000)
 	}, [onCopyLog])
 
+	useEscapeKey(onClose)
+
 	return createPortal(
 		<div className="modal-overlay" onClick={onClose}>
 			<div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -68,8 +95,12 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 						<label htmlFor={apiInputId} style={{ margin: 0 }}>
 							Anthropic API Key
 						</label>
-						<span className={`settings-status ${hasApiKey ? "active" : "missing"}`}>
-							{hasApiKey ? "API key set" : "No API key"}
+						<span className={`settings-status ${authSource ? "active" : "missing"}`}>
+							{authSource === "keychain"
+								? "Using Claude keychain"
+								: authSource === "api-key"
+									? "API key set"
+									: "No API key"}
 						</span>
 					</div>
 					<div className="settings-input-row">
@@ -79,16 +110,19 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 							value={apiKey}
 							onChange={(e) => setApiKey(e.target.value)}
 							onKeyDown={handleKeyDown}
-							placeholder={hasApiKey ? "Enter new key to override..." : "sk-ant-..."}
+							placeholder={authSource ? "Enter new key to override..." : "sk-ant-..."}
 						/>
-						<button
-							type="button"
-							onClick={handleSaveApiKey}
-							disabled={!apiKey.trim()}
-							className="primary"
-						>
-							Save
-						</button>
+						{apiKey.trim() ? (
+							<button type="button" onClick={handleSaveApiKey} className="primary">
+								Save
+							</button>
+						) : (
+							authSource && (
+								<button type="button" onClick={handleClearApiKey} className="btn btn-danger">
+									Remove
+								</button>
+							)
+						)}
 					</div>
 				</div>
 
@@ -113,14 +147,17 @@ export function Settings({ hasApiKey, hasGhToken, onKeySaved, onClose, onCopyLog
 							onKeyDown={handleGhKeyDown}
 							placeholder={hasGhToken ? "Enter new token to override..." : "ghp_..."}
 						/>
-						<button
-							type="button"
-							onClick={handleSaveGhPat}
-							disabled={!ghPat.trim()}
-							className="primary"
-						>
-							Save
-						</button>
+						{ghPat.trim() ? (
+							<button type="button" onClick={handleSaveGhPat} className="primary">
+								Save
+							</button>
+						) : (
+							hasGhToken && (
+								<button type="button" onClick={handleClearGhToken} className="btn btn-danger">
+									Remove
+								</button>
+							)
+						)}
 					</div>
 					<div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
 						Required scopes: <code>repo</code>, <code>read:user</code>. Create one at{" "}

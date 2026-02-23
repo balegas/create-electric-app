@@ -2,12 +2,19 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
-import { deleteSession, listSessions, type SessionInfo } from "../lib/api"
-import { hasApiKey as checkHasApiKey, hasGhToken as checkHasGhToken } from "../lib/credentials"
+import { deleteSession, fetchKeychainCredentials, listSessions, type SessionInfo } from "../lib/api"
+import {
+	hasApiKey as checkHasApiKey,
+	hasGhToken as checkHasGhToken,
+	getOauthToken,
+	setOauthToken,
+} from "../lib/credentials"
+
+export type AuthSource = "api-key" | "keychain" | null
 
 interface AppContextValue {
 	sessions: SessionInfo[]
-	hasApiKey: boolean | null
+	authSource: AuthSource
 	hasGhToken: boolean | null
 	showSettings: boolean
 	setShowSettings: (v: boolean | ((prev: boolean) => boolean)) => void
@@ -28,7 +35,7 @@ export function useAppContext() {
 
 export function AppShell() {
 	const [sessions, setSessions] = useState<SessionInfo[]>([])
-	const [hasApiKey, setHasApiKey] = useState<boolean | null>(null)
+	const [authSource, setAuthSource] = useState<AuthSource>(null)
 	const [hasGhToken, setHasGhToken] = useState<boolean | null>(null)
 	const [showSettings, setShowSettings] = useState(false)
 	const [loading] = useState(false)
@@ -73,12 +80,33 @@ export function AppShell() {
 		}
 	}, [])
 
-	const refreshSettings = useCallback(() => {
-		const apiKey = checkHasApiKey()
+	const refreshSettings = useCallback(async () => {
 		const ghToken = checkHasGhToken()
-		setHasApiKey(apiKey)
 		setHasGhToken(ghToken)
-		if (!apiKey) setShowSettings(true)
+
+		// Check local credentials first
+		if (checkHasApiKey()) {
+			setAuthSource("api-key")
+			return
+		}
+		if (getOauthToken()) {
+			setAuthSource("keychain")
+			return
+		}
+
+		// Try loading OAuth token from macOS Keychain via server
+		try {
+			const { oauthToken } = await fetchKeychainCredentials()
+			if (oauthToken) {
+				setOauthToken(oauthToken)
+				setAuthSource("keychain")
+				return
+			}
+		} catch {
+			// Server not reachable or not on macOS — ignore
+		}
+		setAuthSource(null)
+		setShowSettings(true)
 	}, [])
 
 	useEffect(() => {
@@ -112,7 +140,7 @@ export function AppShell() {
 
 	const ctx: AppContextValue = {
 		sessions,
-		hasApiKey,
+		authSource,
 		hasGhToken,
 		showSettings,
 		setShowSettings,
@@ -136,10 +164,20 @@ export function AppShell() {
 					onClick={() => setShowSettings((v) => !v)}
 					title="Settings"
 				>
-					<svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16" aria-label="Settings">
+					<svg
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						width="16"
+						height="16"
+						aria-label="Settings"
+					>
 						<title>Settings</title>
-						<path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492ZM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0Z" />
-						<path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319Zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.422 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.422 1.6-1.185 1.184l-.292-.159a1.873 1.873 0 0 0-2.692 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.693-1.115l-.291.16c-.764.415-1.6-.422-1.184-1.185l.159-.292A1.873 1.873 0 0 0 2.98 9.796l-.318-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 4.096 5.24l-.16-.291c-.415-.764.422-1.6 1.185-1.184l.292.159A1.873 1.873 0 0 0 8.1 2.897l.094-.318Z" />
+						<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+						<circle cx="12" cy="12" r="3" />
 					</svg>
 				</button>
 			</div>
