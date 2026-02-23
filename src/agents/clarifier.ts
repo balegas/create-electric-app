@@ -116,20 +116,19 @@ Respond with ONLY a JSON object (no markdown code fences, no other text) in this
 }
 
 Scoring guidelines:
-- 80-100: Clear enough to start building. The user wants a specific type of app (e.g. "a todo app", "a kanban board", "a chat app"). Even short descriptions like "a todo list" score 80+ because the data model and interactions are well-understood.
-- 50-79: Somewhat clear but missing important context. The description mentions a domain but is ambiguous about what the app actually does.
-- 0-49: Too vague to proceed. E.g. "make me an app" or "something with data".
+- 80-100: Very clear and detailed. The description specifies both the app type AND key features, interactions, or data model details. E.g. "a kanban board with multiple boards, drag-and-drop columns, and card labels" or "a todo app with categories, due dates, and shared lists".
+- 50-79: Recognizable app type but light on specifics. E.g. "a todo app", "a chat app", "a project tracker". The general idea is clear but asking 1-2 questions would meaningfully improve the result.
+- 0-49: Too vague to proceed. E.g. "make me an app", "something with data", "a dashboard".
 
-Be generous with scoring. If you can reasonably infer the data model and features from common knowledge of the app type, score 80+. Simple, well-known app types (todo list, notes app, chat, kanban, etc.) should always score 80+.
+Score based on how much detail the user provided, not on how much you could infer. A bare app-type name like "a todo list" should score in the 50-70 range — the concept is known, but we don't know which features matter to this user.
 
-If confidence >= 50, return an empty questions array.
-If confidence < 50, ask 2-4 specific questions. At least one question should be about how the app should leverage Electric's real-time sync capabilities, e.g.:
-- Should changes sync in real-time between multiple users?
-- Should the app work offline and sync when reconnected?
-- Are there specific data views that should update live (e.g. dashboards, feeds)?
-Other questions can focus on:
-- What are the main entities/data objects?
-- What are the key user interactions?`,
+If confidence >= 70, return an empty questions array.
+If confidence < 70, ask 1-3 targeted questions to fill in the gaps. Focus on what would most improve the plan:
+- What are the key features or interactions? (e.g. drag-and-drop, categories, search)
+- What are the main entities/data objects and their relationships?
+- Should the app support multi-user collaboration with real-time sync?
+- Should it work offline and sync when reconnected?
+Keep questions concise and specific to the described app type — avoid generic questions.`,
 			},
 		}
 	}

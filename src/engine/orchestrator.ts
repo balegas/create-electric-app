@@ -110,7 +110,7 @@ export async function runNew(opts: {
 		])
 		if (!inferredName) inferredName = earlyName
 
-		if (evaluation.confidence < 50) {
+		if (evaluation.confidence < 70) {
 			emit({
 				type: "log",
 				level: "plan",
