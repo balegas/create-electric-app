@@ -658,10 +658,33 @@ export function createApp(config: ServerConfig) {
 			return c.json({ error: "No pending gate found" }, 404)
 		}
 
+		// Build structured details for the infra_config gate so the UI can
+		// display them on both live sessions and session replay.
+		let details: Record<string, string> | undefined
+		if (gate === "infra_config") {
+			const modeLabels: Record<string, string> = {
+				claim: "Provisioned (Cloud)",
+				local: "Local (Docker)",
+				cloud: "Electric Cloud (BYO)",
+			}
+			details = { Infrastructure: modeLabels[body.mode as string] ?? String(body.mode) }
+			if (body.mode === "cloud" || body.mode === "claim") {
+				if (body.databaseUrl) details["Connection string"] = body.databaseUrl as string
+				if (body.sourceId) details["Source ID"] = body.sourceId as string
+			}
+			if (body.mode === "claim" && body.claimId) {
+				details["Claim link"] = getClaimUrl(body.claimId as string)
+			}
+			if (body.repoAccount && (body.repoName as string)?.trim()) {
+				details.Repository = `${body.repoAccount}/${body.repoName}`
+				details.Visibility = (body.repoVisibility as string) || "private"
+			}
+		}
+
 		// Persist gate resolution so replays mark the gate as resolved
 		try {
 			const bridge = getOrCreateBridge(config, sessionId)
-			await bridge.emit({ type: "gate_resolved", gate, summary, ts: ts() })
+			await bridge.emit({ type: "gate_resolved", gate, summary, details, ts: ts() })
 		} catch {
 			// Non-critical
 		}

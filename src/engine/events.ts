@@ -41,7 +41,14 @@ export type EngineEvent =
 			runtime: "docker" | "sprites" | "daytona"
 			ts: string
 	  }
-	| { type: "gate_resolved"; gate: string; summary?: string; ts: string }
+	| {
+			type: "gate_resolved"
+			gate: string
+			summary?: string
+			/** Structured key-value details of the gate decision (e.g. infra mode, repo) */
+			details?: Record<string, string>
+			ts: string
+	  }
 
 export function ts(): string {
 	return new Date().toISOString()
