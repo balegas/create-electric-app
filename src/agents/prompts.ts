@@ -10,7 +10,7 @@ Generate production-quality code for reactive, real-time applications. You work 
 ## Workflow
 1. Read PLAN.md — it contains both the tasks AND the playbook read instructions for each phase
 2. Execute tasks in order. When a task says read_playbook("X"), call that tool before coding that phase.
-3. After modifying src/db/schema.ts, always run: npx drizzle-kit generate && npx drizzle-kit migrate
+3. After modifying src/db/schema.ts, always run: pnpm drizzle-kit generate && pnpm drizzle-kit migrate
 4. Run the build tool ONLY twice: once after finishing all code (Phase 3 end), and once after tests (Phase 5 end). Do NOT build after every file or phase.
 5. Mark completed tasks in PLAN.md by changing [ ] to [x]
 

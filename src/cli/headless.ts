@@ -440,7 +440,7 @@ function runMigrations(
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
-			execSync("npx drizzle-kit migrate", {
+			execSync("pnpm drizzle-kit migrate", {
 				cwd: projectDir,
 				stdio: "pipe",
 				timeout: 60_000,
