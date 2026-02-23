@@ -114,13 +114,18 @@ export class SpritesSandboxProvider implements SandboxProvider {
 			}
 		}
 
-		// Write env vars to a profile file so all commands inherit them
+		// Write env vars to a profile file so all commands inherit them.
+		// NOTE: sprite.exec() splits the command string by whitespace, so shell
+		// features (pipes, redirects, heredocs) don't work. Use execFile with
+		// explicit args to run through bash -c instead.
 		const envLines = Object.entries(envVars)
 			.map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
 			.join("\n")
-		await sprite.exec(`cat > /etc/profile.d/electric-agent.sh << 'ENVEOF'\n${envLines}\nENVEOF`)
-		// Also source into the current shell for immediate availability
-		await sprite.exec(`bash -c 'source /etc/profile.d/electric-agent.sh'`)
+		const b64 = Buffer.from(envLines).toString("base64")
+		await sprite.execFile("bash", [
+			"-c",
+			`echo ${b64} | base64 -d > /etc/profile.d/electric-agent.sh`,
+		])
 
 		const projectDir = `/home/agent/workspace/${projectName}`
 		await sprite.exec(`mkdir -p ${projectDir}`)
@@ -166,7 +171,7 @@ export class SpritesSandboxProvider implements SandboxProvider {
 
 		// Kill any running agent process — the bridge will restart it
 		try {
-			await sprite.exec("pkill -f 'electric-agent headless' || true")
+			await sprite.execFile("bash", ["-c", "pkill -f 'electric-agent headless' || true"])
 		} catch {
 			// Process may not be running
 		}
@@ -174,6 +179,20 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		const newHandle: SandboxHandle = { ...handle }
 		this.handles.set(handle.sessionId, newHandle)
 		return newHandle
+	}
+
+	/**
+	 * Launch the headless agent process in the sprite without blocking.
+	 * Uses spawn() (event-based API) instead of execFile() which waits for exit.
+	 */
+	async startAgent(handle: SandboxHandle): Promise<void> {
+		const sprite = this.getSprite(handle)
+		const cmd = sprite.spawn("bash", [
+			"-c",
+			"source /etc/profile.d/npm-global.sh 2>/dev/null; source /etc/profile.d/electric-agent.sh && electric-agent headless > /tmp/agent-stdout.log 2> /tmp/agent-stderr.log",
+		])
+		await cmd.start()
+		// Don't await cmd.wait() — we want the agent to run in the background
 	}
 
 	/** Get the underlying Sprite SDK object for bridge communication */
@@ -195,7 +214,10 @@ export class SpritesSandboxProvider implements SandboxProvider {
 
 	async exec(handle: SandboxHandle, command: string): Promise<string> {
 		const sprite = this.getSprite(handle)
-		const result = await sprite.exec(`source /etc/profile.d/electric-agent.sh && ${command}`)
+		const result = await sprite.execFile("bash", [
+			"-c",
+			`source /etc/profile.d/npm-global.sh 2>/dev/null; source /etc/profile.d/electric-agent.sh && ${command}`,
+		])
 		return (
 			typeof result.stdout === "string" ? result.stdout : result.stdout.toString("utf-8")
 		).trim()
@@ -206,9 +228,10 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		if (!sprite) return []
 
 		try {
-			const result = await sprite.exec(
+			const result = await sprite.execFile("bash", [
+				"-c",
 				`find ${dir} -type f -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/dist/*' -not -path '*/.next/*' -not -path '*/.cache/*' -not -path '*/.electric/*' -not -name 'pnpm-lock.yaml' -not -name 'package-lock.json'`,
-			)
+			])
 			const stdout =
 				typeof result.stdout === "string" ? result.stdout : result.stdout.toString("utf-8")
 			return stdout

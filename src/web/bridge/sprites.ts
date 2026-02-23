@@ -73,7 +73,10 @@ export class SpritesStdioBridge implements SessionBridge {
 		// Create a persistent session in the sprite so we can reconnect if needed
 		this.cmd = this.sprite.createSession(
 			"bash",
-			["-c", "source /etc/profile.d/electric-agent.sh && electric-agent headless"],
+			[
+				"-c",
+				"source /etc/profile.d/npm-global.sh 2>/dev/null; source /etc/profile.d/electric-agent.sh && electric-agent headless",
+			],
 			{ detachable: true, sessionId: SPRITES_SESSION_ID },
 		)
 

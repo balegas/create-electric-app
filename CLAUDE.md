@@ -50,6 +50,26 @@ npm run push:sandbox:daytona     # build linux/amd64 + push to Daytona + create 
 - The sandbox image uses a **multi-stage Alpine build** to minimize size (~940MB vs ~1.6GB with Debian).
 - Code changes require rebuilding the image for them to take effect in containers.
 
+### Sprites (Fly.io cloud sandboxes)
+
+Sprites are cloud micro-VMs managed via the `@fly/sprites` SDK and the `sprite` CLI.
+
+**CLI usage** (installed at `~/.local/bin/sprite`):
+```bash
+sprite list                          # list all active sprites
+sprite destroy -force <sprite-name>  # destroy a sprite (flags BEFORE the name)
+sprite exec <sprite-name> -- <cmd>   # execute a command in a sprite
+```
+
+**Important**: The `sprite` CLI uses Go-style flags — flags must come **before** positional arguments (e.g., `sprite destroy -force ea-abc123`, NOT `sprite destroy ea-abc123 -force`).
+
+**SDK gotchas** (`@fly/sprites` JS SDK):
+- `sprite.exec(command)` splits the command string by whitespace (`command.trim().split(/\s+/)`), so **all shell features are broken** (pipes, redirects, `&&`, quoted args, heredocs).
+- Always use `sprite.execFile("bash", ["-c", "..."])` for anything needing shell interpretation.
+- `sprite.createSession()` forces `tty: true`, which merges stdout/stderr and adds terminal control characters — avoid for structured output (NDJSON).
+- Sprite names follow the pattern `ea-{sessionId first 12 chars}`.
+- Node.js in sprites uses nvm at `/.sprite/languages/node/nvm/`. The npm global bin is NOT in the default PATH — commands must source `/etc/profile.d/npm-global.sh` first.
+
 ## Verification Checklist
 
 Before committing, always run:
@@ -233,3 +253,7 @@ The following secrets are configured on the GitHub repository (set via `gh secre
 - **Gate categories**: Server-side gates (`checkpoint`, `publish`, `infra_config`, `repo_setup`) resolve in-process. Container-forwarded gates (`clarification`, `approval`, `continue`, `revision`) are written to container stdin. Adding a new gate requires choosing the right category and updating the `serverGates` set in `server.ts`.
 - **Hook denial format**: Must return `{ hookSpecificOutput: { permissionDecision: "deny" } }` — not just a boolean.
 - **`initGit` in scaffold**: The scaffold's `skipGit` option controls whether git init runs during scaffolding. In headless/sandbox mode, git is initialized early in `headless.ts` before `runNew()`.
+- **Sprites `exec()` splits by whitespace**: Never use `sprite.exec()` for commands with shell features. Use `sprite.execFile("bash", ["-c", "..."])` instead. This applies to the SDK, not the CLI.
+- **Sprites CLI flag order**: The `sprite` CLI uses Go-style flags — flags must come before positional arguments (e.g., `sprite destroy -force <name>`).
+- **Sprites PATH**: npm global binaries (like `electric-agent`) are not in PATH by default. Always source `/etc/profile.d/npm-global.sh` before running them.
+- **GitHub token flow**: API keys and GH tokens are stored in the browser's localStorage, sent to the server via POST body (`ghToken` field) or `X-GH-Token` header (GET requests), and passed explicitly to `gh` CLI functions. Do not rely on ambient `GH_TOKEN` env vars on the server.

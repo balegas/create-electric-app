@@ -270,9 +270,9 @@ export function createApp(config: ServerConfig) {
 
 		// Gather GitHub accounts for the merged setup gate
 		let ghAccounts: { login: string; type: "user" | "org" }[] = []
-		if (isGhAuthenticated()) {
+		if (isGhAuthenticated(body.ghToken)) {
 			try {
-				ghAccounts = ghListAccounts()
+				ghAccounts = ghListAccounts(body.ghToken)
 			} catch {
 				// gh not available — no repo setup
 			}
@@ -345,7 +345,14 @@ export function createApp(config: ServerConfig) {
 				infra = { mode: "local" }
 			}
 
-			// 2. Create sandbox
+			// 2. Create sandbox — emit progress events so the UI shows feedback
+			await bridge.emit({
+				type: "log",
+				level: "build",
+				message: `Creating ${config.sandbox.runtime} sandbox...`,
+				ts: ts(),
+			})
+
 			// Only pass stream env vars when using hosted stream bridge (not stdio)
 			const streamEnv =
 				config.bridgeMode === "stdio" ? undefined : getStreamEnvVars(sessionId, config.streamConfig)
@@ -363,6 +370,14 @@ export function createApp(config: ServerConfig) {
 			console.log(
 				`[session:${sessionId}] Sandbox created: projectDir=${handle.projectDir} port=${handle.port} previewUrl=${handle.previewUrl ?? "none"}`,
 			)
+
+			await bridge.emit({
+				type: "log",
+				level: "done",
+				message: `Sandbox ready (${config.sandbox.runtime})`,
+				ts: ts(),
+			})
+
 			updateSessionInfo(config.dataDir, sessionId, {
 				appPort: handle.port,
 				sandboxProjectDir: handle.projectDir,
@@ -370,10 +385,41 @@ export function createApp(config: ServerConfig) {
 				...(claimId ? { claimId } : {}),
 			})
 
-			// 3. If stdio bridge mode, create the stdio bridge now that the sandbox exists
+			// 3. If stdio bridge mode, create the stdio bridge now that the sandbox exists.
+			// If stream bridge mode with Sprites, launch the agent process in the sprite
+			// (it connects directly to the hosted Durable Stream via DS_URL env vars).
 			if (config.bridgeMode === "stdio") {
 				console.log(`[session:${sessionId}] Creating stdio bridge...`)
 				bridge = createStdioBridge(config, sessionId)
+			} else if (config.sandbox.runtime === "sprites") {
+				await bridge.emit({
+					type: "log",
+					level: "build",
+					message: "Starting agent in sandbox...",
+					ts: ts(),
+				})
+				console.log(`[session:${sessionId}] Starting agent process in sprite...`)
+				try {
+					const spritesProvider = config.sandbox as SpritesSandboxProviderType
+					await spritesProvider.startAgent(handle)
+					// Give the agent time to start and connect to the stream
+					await new Promise((r) => setTimeout(r, 3000))
+					console.log(`[session:${sessionId}] Agent process launched in sprite`)
+					await bridge.emit({
+						type: "log",
+						level: "done",
+						message: "Agent started",
+						ts: ts(),
+					})
+				} catch (err) {
+					console.error(`[session:${sessionId}] Failed to start agent in sprite:`, err)
+					await bridge.emit({
+						type: "log",
+						level: "error",
+						message: `Failed to start agent: ${err instanceof Error ? err.message : "unknown error"}`,
+						ts: ts(),
+					})
+				}
 			}
 
 			// 4. Log repo config
@@ -911,8 +957,9 @@ export function createApp(config: ServerConfig) {
 
 	// List GitHub accounts (personal + orgs)
 	app.get("/api/github/accounts", (c) => {
+		const token = c.req.header("X-GH-Token") || undefined
 		try {
-			const accounts = ghListAccounts()
+			const accounts = ghListAccounts(token)
 			return c.json({ accounts })
 		} catch (e) {
 			return c.json({ error: e instanceof Error ? e.message : "Failed to list accounts" }, 500)
@@ -921,8 +968,9 @@ export function createApp(config: ServerConfig) {
 
 	// List GitHub repos for the authenticated user
 	app.get("/api/github/repos", (c) => {
+		const token = c.req.header("X-GH-Token") || undefined
 		try {
-			const repos = ghListRepos()
+			const repos = ghListRepos(50, token)
 			return c.json({ repos })
 		} catch (e) {
 			return c.json({ error: e instanceof Error ? e.message : "Failed to list repos" }, 500)
@@ -932,8 +980,9 @@ export function createApp(config: ServerConfig) {
 	app.get("/api/github/repos/:owner/:repo/branches", (c) => {
 		const owner = c.req.param("owner")
 		const repo = c.req.param("repo")
+		const token = c.req.header("X-GH-Token") || undefined
 		try {
-			const branches = ghListBranches(`${owner}/${repo}`)
+			const branches = ghListBranches(`${owner}/${repo}`, token)
 			return c.json({ branches })
 		} catch (e) {
 			return c.json({ error: e instanceof Error ? e.message : "Failed to list branches" }, 500)

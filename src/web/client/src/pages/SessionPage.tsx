@@ -246,7 +246,7 @@ export function SessionPage() {
 						<span>Setting up your project...</span>
 					</div>
 				) : !isLive && !isComplete ? (
-					<div style={{ padding: 16 }}>
+					<div style={{ padding: 16, flex: 1 }}>
 						<Skeleton variant="block" />
 						<Skeleton variant="line" width="80%" />
 						<Skeleton variant="line" width="60%" />
