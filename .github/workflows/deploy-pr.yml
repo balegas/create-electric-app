@@ -34,43 +34,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      checks: read
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       APP_NAME: electric-agent-pr-${{ github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@v4
-
-      # When the PR touches agent code, wait for the CI "Publish Preview Package"
-      # job to finish so the StackBlitz preview URL is available before we comment.
-      - name: Wait for publish-preview CI check
-        if: needs.detect-changes.outputs.agent == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          SHA="${{ github.event.pull_request.head.sha }}"
-          echo "Agent code changed — waiting for Publish Preview Package check on $SHA ..."
-          for i in $(seq 1 40); do
-            RESULT=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
-              --jq '.check_runs[] | select(.name == "Publish Preview Package") | .status + ":" + (.conclusion // "pending")' \
-              2>/dev/null | head -1 || echo "not-found:pending")
-
-            STATUS="${RESULT%%:*}"
-            CONCLUSION="${RESULT##*:}"
-
-            if [ "$STATUS" = "completed" ] && [ "$CONCLUSION" = "success" ]; then
-              echo "Publish Preview Package check passed"
-              exit 0
-            elif [ "$STATUS" = "completed" ] && [ "$CONCLUSION" != "success" ]; then
-              echo "Publish Preview Package check failed (conclusion=$CONCLUSION)"
-              exit 1
-            fi
-
-            echo "  attempt $i/40: status=$STATUS conclusion=$CONCLUSION — retrying in 15s"
-            sleep 15
-          done
-          echo "Timed out waiting for Publish Preview Package (10 min)"
-          exit 1
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
