@@ -100,14 +100,16 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 
 	// Determine whether to show the waiting indicator:
 	// Show when the session is live, not complete, and no tool is currently loading
-	// or waiting on a gate. This covers the gap between API turns.
+	// or waiting on a gate. Don't show after assistant_message (Stop hook) —
+	// that means the turn ended and Claude is waiting for the next user prompt.
 	let showWaiting = false
 	let waitingSinceTs = ""
 	if (isLive && !isComplete && entries.length > 0) {
 		const last = entries[entries.length - 1]
 		const hasLoadingTool = last.kind === "tool_use" && last.tool_response === null
 		const hasUnresolvedGate = last.kind === "gate" && !last.resolved
-		if (!hasLoadingTool && !hasUnresolvedGate) {
+		const turnEnded = last.kind === "assistant_message"
+		if (!hasLoadingTool && !hasUnresolvedGate && !turnEnded) {
 			showWaiting = true
 			waitingSinceTs = prevTs || new Date().toISOString()
 		}
