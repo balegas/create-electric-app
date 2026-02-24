@@ -697,3 +697,36 @@
 	opacity: 0.5;
 	cursor: not-allowed;
 }
+
+/* Font size selector in settings */
+.font-size-options {
+	display: flex;
+	gap: 6px;
+}
+
+.font-size-option {
+	flex: 1;
+	padding: 8px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text-muted);
+	font-family: var(--font-sans);
+	font-size: 13px;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+
+.font-size-option:hover {
+	background: var(--bg-hover);
+	color: var(--text);
+}
+
+.font-size-option.active {
+	border-color: var(--brand-3);
+	color: var(--brand-1);
+	background: rgba(126, 120, 219, 0.1);
+}

@@ -63,8 +63,8 @@ export function HomePage() {
 					aria-label="Open menu"
 				>
 					<svg
-						width="18"
-						height="18"
+						width="22"
+						height="22"
 						viewBox="0 0 18 18"
 						fill="none"
 						stroke="currentColor"
