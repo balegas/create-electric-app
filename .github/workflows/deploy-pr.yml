@@ -73,6 +73,14 @@ jobs:
           sed 's/^app = .*/app = "'"$APP_NAME"'"/' fly.toml > fly.pr.toml
           sed -i 's/min_machines_running = 1/min_machines_running = 0/' fly.pr.toml
 
+      - name: Clear stale machine leases
+        run: |
+          MACHINES=$(flyctl machines list --app "$APP_NAME" --json -q 2>/dev/null | jq -r '.[].id // empty' 2>/dev/null) || true
+          for MID in $MACHINES; do
+            echo "Clearing lease on machine $MID ..."
+            flyctl machines lease clear "$MID" --app "$APP_NAME" || true
+          done
+
       - name: Deploy
         run: flyctl deploy --remote-only --config fly.pr.toml --ha=false
 
