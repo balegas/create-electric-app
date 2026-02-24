@@ -1,11 +1,15 @@
 import { execSync } from "node:child_process"
 import fs from "node:fs"
+import { createRequire } from "node:module"
 import path from "node:path"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
 import { type OrchestratorCallbacks, runIterate, runNew } from "../engine/orchestrator.js"
 import { createStdioAdapter } from "../engine/stdio-adapter.js"
 import { createStreamAdapter } from "../engine/stream-adapter.js"
+
+const require = createRequire(import.meta.url)
+const { version: agentVersion } = require("../../package.json") as { version: string }
 
 /**
  * Handler for `electric-agent headless`.
@@ -36,6 +40,15 @@ export async function headlessCommand(): Promise<void> {
 	}
 
 	const { readConfig, waitForCommand, callbacks, close } = adapter
+
+	// Log agent version so it's visible in the UI stream
+	callbacks.onEvent({
+		type: "log",
+		level: "done",
+		message: `electric-agent@${agentVersion}`,
+		ts: ts(),
+	})
+	process.stderr.write(`[headless] electric-agent@${agentVersion}\n`)
 
 	let config: Awaited<ReturnType<typeof readConfig>>
 	try {

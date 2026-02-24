@@ -74,7 +74,7 @@ export async function bootstrapSprite(sprite: Sprite, opts?: BootstrapOptions): 
 		"!gh auth git-credential",
 	])
 
-	console.log(`[sprites-bootstrap] Bootstrap complete`)
+	console.log(`[sprites-bootstrap] Bootstrap complete (electric-agent@${version})`)
 }
 
 /**
@@ -94,7 +94,9 @@ export async function ensureBootstrapped(sprite: Sprite, opts?: BootstrapOptions
 		const checkpoints = await sprite.listCheckpoints()
 		const bootstrapped = checkpoints.find((cp) => cp.comment === comment)
 		if (bootstrapped) {
-			console.log(`[sprites-bootstrap] Restoring from checkpoint "${bootstrapped.id}"...`)
+			console.log(
+				`[sprites-bootstrap] Restoring from checkpoint "${bootstrapped.id}" (electric-agent@${version})`,
+			)
 			const response = await sprite.restoreCheckpoint(bootstrapped.id)
 			// Consume the NDJSON response stream to completion
 			await consumeStream(response)

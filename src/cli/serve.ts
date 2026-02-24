@@ -1,3 +1,4 @@
+import { createRequire } from "node:module"
 import { DaytonaSandboxProvider } from "../web/sandbox/daytona.js"
 import { getSnapshotStatus } from "../web/sandbox/daytona-registry.js"
 import { DockerSandboxProvider } from "../web/sandbox/docker.js"
@@ -5,6 +6,9 @@ import { SpritesSandboxProvider } from "../web/sandbox/sprites.js"
 import type { SandboxProvider } from "../web/sandbox/types.js"
 import { startWebServer } from "../web/server.js"
 import { getStreamConfig } from "../web/streams.js"
+
+const require = createRequire(import.meta.url)
+const { version } = require("../../package.json") as { version: string }
 
 export async function serveCommand(opts: {
 	port?: number
@@ -92,7 +96,7 @@ export async function serveCommand(opts: {
 
 	await startWebServer({ port, dataDir, sandbox, streamConfig, bridgeMode })
 
-	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
+	console.log(`\nelectric-agent@${version} — Web UI ready at http://127.0.0.1:${port}`)
 
 	if (opts.open) {
 		const { exec } = await import("node:child_process")
