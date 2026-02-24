@@ -40,11 +40,7 @@ export async function proxyElectricRequest(
 ): Promise<Response> {
 	const url = prepareElectricUrl(request, tableName)
 
-	const response = await fetch(url, {
-		headers: {
-			"Accept-Encoding": request.headers.get("Accept-Encoding") || "",
-		},
-	})
+	const response = await fetch(url)
 
 	return new Response(response.body, {
 		status: response.status,
