@@ -8,7 +8,7 @@ The refactoring is done in two phases. Each phase has a test plan that must pass
 
 ---
 
-## Phase 0: Rename EngineEvent types to match Claude Code hooks
+## Phase 1: Rename EngineEvent types to match Claude Code hooks
 
 **Goal**: Rename our event types and fields to align with Claude Code's hook vocabulary, while keeping the app fully functional end-to-end.
 
@@ -107,9 +107,9 @@ Field renames within `ConsoleEntry`:
 6. Run `npm run build` to verify full build
 7. Run `npm test` to verify existing tests pass
 
-### Phase 0 test plan
+### Phase 1 test plan
 
-Before moving to Phase 1, **all of these must pass**:
+Before moving to Phase 2, **all of these must pass**:
 
 ```bash
 # 1. Type-check (zero errors)
@@ -142,18 +142,18 @@ Acceptance criteria:
 
 ---
 
-## Phase 1: Hook-to-stream bridge (future — after Phase 0 approval)
+## Phase 2: Hook-to-stream bridge (future — after Phase 1)
 
-_Planned but not started. Details in the earlier discussion. Depends on Phase 0 being complete and tested._
-
----
-
-## Phase 2: Session registration + local sessions (future)
-
-_Planned but not started. Depends on Phase 1._
+_Planned but not started. Details in the earlier discussion. Depends on Phase 1 being complete and tested._
 
 ---
 
-## Phase 3: Docker integration test for local bridge (future)
+## Phase 3: Session registration + local sessions (future)
 
 _Planned but not started. Depends on Phase 2._
+
+---
+
+## Phase 4: Docker integration test for local bridge (future)
+
+_Planned but not started. Depends on Phase 3._
