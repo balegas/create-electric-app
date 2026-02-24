@@ -1,6 +1,6 @@
 {
   "name": "electric-agent",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "CLI tool that turns natural-language app descriptions into running reactive Electric SQL + TanStack DB applications",
   "repository": {
     "type": "git",
