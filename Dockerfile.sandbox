@@ -43,3 +43,9 @@ RUN adduser -D -s /bin/bash agent && \
 
 USER agent
 WORKDIR /home/agent/workspace
+
+# Configure git — gh as credential helper so `git push` authenticates via GH_TOKEN
+RUN git config --global user.name "electric-agent" && \
+    git config --global user.email "agent@electric-sql.com" && \
+    git config --global init.defaultBranch main && \
+    git config --global credential.helper '!gh auth git-credential'

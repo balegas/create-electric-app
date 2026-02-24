@@ -62,6 +62,18 @@ export async function bootstrapSprite(sprite: Sprite, opts?: BootstrapOptions): 
 	await sprite.execFile("git", ["config", "--global", "user.email", "agent@electric-sql.com"])
 	await sprite.execFile("git", ["config", "--global", "init.defaultBranch", "main"])
 
+	// Configure gh as the git credential helper so `git push` authenticates
+	// via GH_TOKEN. Without this, HTTPS pushes fail in the sandbox because
+	// there's no interactive terminal for git to prompt for credentials.
+	// Note: gh auth setup-git only writes the credential.helper config —
+	// it doesn't need GH_TOKEN at this point. The token is read at push time.
+	await sprite.execFile("git", [
+		"config",
+		"--global",
+		"credential.helper",
+		"!gh auth git-credential",
+	])
+
 	console.log(`[sprites-bootstrap] Bootstrap complete`)
 }
 
