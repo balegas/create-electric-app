@@ -25,25 +25,25 @@ function serializeEntries(entries: ConsoleEntry[]): string {
 	const lines: string[] = []
 	for (const entry of entries) {
 		switch (entry.kind) {
-			case "user_message":
+			case "user_prompt":
 				lines.push(`## User\n\n${entry.message}\n`)
 				break
-			case "text":
+			case "assistant_message":
 				lines.push(`## Assistant\n\n${entry.text}\n`)
 				break
 			case "log":
 				lines.push(`[${entry.level}] ${entry.message}`)
 				break
-			case "tool": {
-				lines.push(`### Tool: ${entry.toolName}`)
+			case "tool_use": {
+				lines.push(`### Tool: ${entry.tool_name}`)
 				lines.push("**Input:**")
 				lines.push("```json")
-				lines.push(JSON.stringify(entry.input, null, 2))
+				lines.push(JSON.stringify(entry.tool_input, null, 2))
 				lines.push("```")
-				if (entry.output != null) {
+				if (entry.tool_response != null) {
 					lines.push("**Output:**")
 					lines.push("```")
-					lines.push(entry.output)
+					lines.push(entry.tool_response)
 					lines.push("```")
 				}
 				lines.push("")

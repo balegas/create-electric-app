@@ -2,7 +2,7 @@ import { useState } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
 import { ToolExecution } from "./ToolExecution"
 
-type ToolEntry = Extract<ConsoleEntry, { kind: "tool" }>
+type ToolEntry = Extract<ConsoleEntry, { kind: "tool_use" }>
 
 interface ActionGroupProps {
 	entries: ToolEntry[]
@@ -10,31 +10,31 @@ interface ActionGroupProps {
 }
 
 function getToolSummary(entry: ToolEntry): string {
-	const { toolName, input } = entry
-	if (toolName === "Write" || toolName === "Edit") {
-		return (input.file_path as string) || "unknown file"
+	const { tool_name, tool_input } = entry
+	if (tool_name === "Write" || tool_name === "Edit") {
+		return (tool_input.file_path as string) || "unknown file"
 	}
-	if (toolName === "Read") {
-		return (input.file_path as string) || "unknown file"
+	if (tool_name === "Read") {
+		return (tool_input.file_path as string) || "unknown file"
 	}
-	if (toolName === "Bash") {
-		return ((input.command as string) || "").slice(0, 60)
+	if (tool_name === "Bash") {
+		return ((tool_input.command as string) || "").slice(0, 60)
 	}
-	if (toolName === "Glob") {
-		return (input.pattern as string) || "*"
+	if (tool_name === "Glob") {
+		return (tool_input.pattern as string) || "*"
 	}
-	if (toolName === "Grep") {
-		return (input.pattern as string) || ""
+	if (tool_name === "Grep") {
+		return (tool_input.pattern as string) || ""
 	}
-	return toolName
+	return tool_name
 }
 
 function getStatus(entry: ToolEntry, isLast: boolean): "pending" | "running" | "done" | "failed" {
-	if (entry.output === null) {
+	if (entry.tool_response === null) {
 		return isLast ? "running" : "pending"
 	}
 	// Simple heuristic: check if output contains error indicators
-	const out = entry.output.toLowerCase()
+	const out = entry.tool_response.toLowerCase()
 	if (out.includes("error:") || out.includes("failed") || out.startsWith("error")) {
 		return "failed"
 	}
@@ -68,7 +68,7 @@ export function ActionGroup({ entries, durations }: ActionGroupProps) {
 	const [collapsed, setCollapsed] = useState(false)
 	const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
 
-	const doneCount = entries.filter((e) => e.output !== null).length
+	const doneCount = entries.filter((e) => e.tool_response !== null).length
 	const total = entries.length
 	const allDone = doneCount === total
 
@@ -90,13 +90,13 @@ export function ActionGroup({ entries, durations }: ActionGroupProps) {
 						const isExpanded = expandedIdx === i
 
 						return (
-							<div key={entry.toolUseId || `action-${i}`}>
+							<div key={entry.tool_use_id || `action-${i}`}>
 								<div
 									className={`action-item ${isExpanded ? "expanded" : ""}`}
 									onClick={() => setExpandedIdx(isExpanded ? null : i)}
 								>
 									<StatusIcon status={status} />
-									<span className="action-item-name">{entry.toolName}</span>
+									<span className="action-item-name">{entry.tool_name}</span>
 									<span className="action-item-summary">{getToolSummary(entry)}</span>
 									{durations[i] && <span className="action-item-duration">{durations[i]}</span>}
 								</div>

@@ -9,7 +9,7 @@
  *
  * Agent → Server (stdout):
  *   { type: "log", level: "task", message: "...", ts: "..." }
- *   { type: "session_complete", success: true, ts: "..." }
+ *   { type: "session_end", success: true, ts: "..." }
  *
  * Stderr is used for non-protocol diagnostics only.
  */

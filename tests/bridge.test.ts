@@ -73,13 +73,13 @@ describe("NDJSON protocol", () => {
 		const events: EngineEvent[] = [
 			{ type: "log", level: "task", message: "First", ts: "t1" },
 			{
-				type: "tool_start",
-				toolName: "bash",
-				toolUseId: "123",
-				input: { command: "pnpm build" },
+				type: "pre_tool_use",
+				tool_name: "bash",
+				tool_use_id: "123",
+				tool_input: { command: "pnpm build" },
 				ts: "t2",
 			},
-			{ type: "session_complete", success: true, ts: "t3" },
+			{ type: "session_end", success: true, ts: "t3" },
 		]
 		const ndjson = `${events.map((e) => JSON.stringify(e)).join("\n")}\n`
 		const lines = ndjson.trim().split("\n")
@@ -116,7 +116,7 @@ const answers = await callbacks.onClarificationNeeded(["What color?"], "Need cla
 process.stdout.write(JSON.stringify({ type: "log", level: "done", message: "got answers: " + answers.join(","), ts: "t3" }) + "\\n")
 
 // Signal completion
-process.stdout.write(JSON.stringify({ type: "session_complete", success: true, ts: "t4" }) + "\\n")
+process.stdout.write(JSON.stringify({ type: "session_end", success: true, ts: "t4" }) + "\\n")
 
 close()
 `
@@ -172,7 +172,7 @@ close()
 							proc.stdin!.write(`${gateResponse}\n`)
 						}
 
-						if (event.type === "session_complete") {
+						if (event.type === "session_end") {
 							clearTimeout(timeout)
 							resolve()
 						}
@@ -224,9 +224,9 @@ close()
 				"Should have received gate response answers",
 			)
 
-			// Last event: session_complete
+			// Last event: session_end
 			const lastEvent = collectedEvents[collectedEvents.length - 1]
-			assert.equal(lastEvent.type, "session_complete")
+			assert.equal(lastEvent.type, "session_end")
 
 			proc.kill("SIGTERM")
 		} finally {

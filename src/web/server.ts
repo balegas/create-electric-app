@@ -8,6 +8,7 @@ import { serveStatic } from "@hono/node-server/serve-static"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { inferProjectName } from "../agents/clarifier.js"
+import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
 import { resolveProjectDir } from "../engine/orchestrator.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "../git/index.js"
@@ -156,6 +157,89 @@ function detectGitOp(
 	return null
 }
 
+/**
+ * Map a Claude Code hook event JSON payload to an EngineEvent.
+ *
+ * After Phase 1 renames, the mapping is nearly 1:1. Claude Code passes
+ * hook data on stdin as JSON with a `hook_event_name` field.
+ *
+ * Returns null for unknown hook types (caller should silently skip).
+ */
+function mapHookToEngineEvent(body: Record<string, unknown>): EngineEvent | null {
+	const hookName = body.hook_event_name as string | undefined
+	const now = ts()
+
+	switch (hookName) {
+		case "SessionStart":
+			return {
+				type: "session_start",
+				session_id: (body.session_id as string) || "",
+				cwd: body.cwd as string | undefined,
+				ts: now,
+			}
+
+		case "PreToolUse":
+			return {
+				type: "pre_tool_use",
+				tool_name: (body.tool_name as string) || "unknown",
+				tool_use_id: (body.tool_use_id as string) || `hook_${Date.now()}`,
+				tool_input: (body.tool_input as Record<string, unknown>) || {},
+				ts: now,
+			}
+
+		case "PostToolUse":
+			return {
+				type: "post_tool_use",
+				tool_use_id: (body.tool_use_id as string) || "",
+				tool_name: body.tool_name as string | undefined,
+				tool_response: (body.tool_response as string) || "",
+				ts: now,
+			}
+
+		case "PostToolUseFailure":
+			return {
+				type: "post_tool_use_failure",
+				tool_use_id: (body.tool_use_id as string) || "",
+				tool_name: (body.tool_name as string) || "unknown",
+				error: (body.error as string) || "Unknown error",
+				ts: now,
+			}
+
+		case "Stop":
+			return {
+				type: "assistant_message",
+				text: (body.last_assistant_message as string) || "",
+				ts: now,
+			}
+
+		case "SessionEnd":
+			return {
+				type: "session_end",
+				success: true,
+				ts: now,
+			}
+
+		case "UserPromptSubmit":
+			return {
+				type: "user_prompt",
+				message: (body.prompt as string) || "",
+				ts: now,
+			}
+
+		case "SubagentStart":
+		case "SubagentStop":
+			return {
+				type: "log",
+				level: "task",
+				message: `${hookName}: ${(body.agent_type as string) || "agent"}`,
+				ts: now,
+			}
+
+		default:
+			return null
+	}
+}
+
 export function createApp(config: ServerConfig) {
 	const app = new Hono()
 
@@ -215,6 +299,72 @@ export function createApp(config: ServerConfig) {
 		return c.json(session)
 	})
 
+	// --- Local Claude Code session endpoints ---
+
+	// Create a local session (no sandbox, just a stream + session index entry).
+	// Used for the hook-to-stream bridge: Claude Code running locally forwards
+	// hook events to the web UI via POST /api/sessions/:id/hook-event.
+	app.post("/api/sessions/local", async (c) => {
+		const body = (await c.req.json().catch(() => ({}))) as { description?: string }
+
+		const sessionId = crypto.randomUUID()
+
+		// Create the durable stream
+		const conn = sessionStream(config, sessionId)
+		try {
+			await DurableStream.create({
+				url: conn.url,
+				headers: conn.headers,
+				contentType: "application/json",
+			})
+		} catch (err) {
+			console.error(`[local-session] Failed to create durable stream:`, err)
+			return c.json({ error: "Failed to create event stream" }, 500)
+		}
+
+		// Record session (no sandbox, no appPort)
+		const session: SessionInfo = {
+			id: sessionId,
+			projectName: "local-session",
+			sandboxProjectDir: "",
+			description: body.description || "Local Claude Code session",
+			createdAt: new Date().toISOString(),
+			lastActiveAt: new Date().toISOString(),
+			status: "running",
+		}
+		addSession(config.dataDir, session)
+
+		// Pre-create a bridge so hook-event can emit to it immediately
+		getOrCreateBridge(config, sessionId)
+
+		console.log(`[local-session] Created session: ${sessionId}`)
+		return c.json({ sessionId }, 201)
+	})
+
+	// Receive a hook event from Claude Code (via forward.sh) and write it
+	// to the session's durable stream as an EngineEvent.
+	app.post("/api/sessions/:id/hook-event", async (c) => {
+		const sessionId = c.req.param("id")
+		const body = (await c.req.json()) as Record<string, unknown>
+
+		const bridge = getOrCreateBridge(config, sessionId)
+
+		// Map Claude Code hook JSON → EngineEvent
+		const hookEvent = mapHookToEngineEvent(body)
+		if (!hookEvent) {
+			return c.json({ ok: true }) // Unknown hook type — silently skip
+		}
+
+		try {
+			await bridge.emit(hookEvent)
+		} catch (err) {
+			console.error(`[hook-event] Failed to emit:`, err)
+			return c.json({ error: "Failed to write event" }, 500)
+		}
+
+		return c.json({ ok: true })
+	})
+
 	// Start new project
 	app.post("/api/sessions", async (c) => {
 		const body = (await c.req.json()) as {
@@ -268,7 +418,7 @@ export function createApp(config: ServerConfig) {
 		addSession(config.dataDir, session)
 
 		// Write user prompt to the stream so it shows in the UI
-		await bridge.emit({ type: "user_message", message: body.description, ts: ts() })
+		await bridge.emit({ type: "user_prompt", message: body.description, ts: ts() })
 
 		// Gather GitHub accounts for the merged setup gate
 		let ghAccounts: { login: string; type: "user" | "org" }[] = []
@@ -517,7 +667,7 @@ export function createApp(config: ServerConfig) {
 
 		if (isStartCmd || isStopCmd || isRestartCmd) {
 			const bridge = getOrCreateBridge(config, sessionId)
-			await bridge.emit({ type: "user_message", message: body.request, ts: ts() })
+			await bridge.emit({ type: "user_prompt", message: body.request, ts: ts() })
 
 			try {
 				const handle = config.sandbox.get(sessionId)
@@ -549,7 +699,7 @@ export function createApp(config: ServerConfig) {
 		const gitOp = detectGitOp(body.request)
 		if (gitOp) {
 			const bridge = getOrCreateBridge(config, sessionId)
-			await bridge.emit({ type: "user_message", message: body.request, ts: ts() })
+			await bridge.emit({ type: "user_prompt", message: body.request, ts: ts() })
 
 			const handle = config.sandbox.get(sessionId)
 			if (!handle || !config.sandbox.isAlive(handle)) {
@@ -572,7 +722,7 @@ export function createApp(config: ServerConfig) {
 
 		// Write user prompt to the stream
 		const bridge = getOrCreateBridge(config, sessionId)
-		await bridge.emit({ type: "user_message", message: body.request, ts: ts() })
+		await bridge.emit({ type: "user_prompt", message: body.request, ts: ts() })
 
 		updateSessionInfo(config.dataDir, sessionId, { status: "running" })
 

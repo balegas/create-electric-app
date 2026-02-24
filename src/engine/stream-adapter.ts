@@ -43,8 +43,8 @@ interface StreamMessage {
  * Stream protocol:
  *   Server → Agent: { source: "server", type: "command", command: "new", ... }
  *                    { source: "server", type: "gate_response", gate: "approval", ... }
- *   Agent → Server: { source: "agent", type: "tool_start", ... }
- *                    { source: "agent", type: "session_complete", ... }
+ *   Agent → Server: { source: "agent", type: "pre_tool_use", ... }
+ *                    { source: "agent", type: "session_end", ... }
  */
 export function createStreamAdapter(streamUrl: string, secret: string) {
 	const headers: Record<string, string> = {

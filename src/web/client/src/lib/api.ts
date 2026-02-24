@@ -93,6 +93,14 @@ export function getSession(id: string) {
 	return request<SessionInfo>(`/sessions/${id}`)
 }
 
+/** Create a local session for Claude Code hook forwarding (no sandbox). */
+export function createLocalSession(description?: string) {
+	return request<{ sessionId: string }>("/sessions/local", {
+		method: "POST",
+		body: { description },
+	})
+}
+
 export function createSession(description: string, name?: string) {
 	return request<{ sessionId: string; streamUrl: string; appPort?: number }>("/sessions", {
 		method: "POST",

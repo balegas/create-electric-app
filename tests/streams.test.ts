@@ -394,10 +394,11 @@ describe("streams — bridge roundtrip", () => {
 			type: "infra_config_prompt",
 			projectName: "test-project",
 			ghAccounts: [],
+			runtime: "docker",
 			ts: new Date().toISOString(),
 		})
 		await bridge.emit({
-			type: "user_message",
+			type: "user_prompt",
 			message: "build a todo app",
 			ts: new Date().toISOString(),
 		})
@@ -433,14 +434,14 @@ describe("streams — bridge roundtrip", () => {
 		)
 		assert.equal(
 			(proxyFiltered[1] as Record<string, unknown>).type,
-			"user_message",
-			"user_message should NOT be filtered",
+			"user_prompt",
+			"user_prompt should NOT be filtered",
 		)
 
 		bridge.close()
 	})
 
-	it("bridge.onComplete() fires on session_complete", async () => {
+	it("bridge.onComplete() fires on session_end", async () => {
 		const sessionId = uniqueSessionId()
 		const conn = server.connection(sessionId)
 		await ensureStream(conn.url, conn.headers)
@@ -462,7 +463,7 @@ describe("streams — bridge roundtrip", () => {
 		await agentWriter.append(
 			JSON.stringify({
 				source: "agent",
-				type: "session_complete",
+				type: "session_end",
 				success: true,
 				ts: new Date().toISOString(),
 			}),

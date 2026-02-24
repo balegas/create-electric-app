@@ -20,31 +20,31 @@ export function useSession(sessionId: string | null) {
 						{ kind: "log" as const, level: event.level, message: event.message, ts: event.ts },
 					]
 
-				case "user_message":
-					return [...prev, { kind: "user_message" as const, message: event.message }]
+				case "user_prompt":
+					return [...prev, { kind: "user_prompt" as const, message: event.message }]
 
-				case "tool_start":
+				case "pre_tool_use":
 					return [
 						...prev,
 						{
-							kind: "tool" as const,
-							toolName: event.toolName,
-							toolUseId: event.toolUseId,
-							input: event.input,
-							output: null,
+							kind: "tool_use" as const,
+							tool_name: event.tool_name,
+							tool_use_id: event.tool_use_id,
+							tool_input: event.tool_input,
+							tool_response: null,
 							agent: event.agent,
 							ts: event.ts,
 						},
 					]
 
-				case "tool_result": {
+				case "post_tool_use": {
 					const updated = [...prev]
 					for (let i = updated.length - 1; i >= 0; i--) {
 						const entry = updated[i]
-						if (entry.kind === "tool" && entry.toolUseId === event.toolUseId) {
+						if (entry.kind === "tool_use" && entry.tool_use_id === event.tool_use_id) {
 							updated[i] = {
 								...entry,
-								output: event.output,
+								tool_response: event.tool_response,
 								agent: entry.agent || event.agent,
 							}
 							break
@@ -53,17 +53,39 @@ export function useSession(sessionId: string | null) {
 					return updated
 				}
 
-				case "assistant_text":
+				case "post_tool_use_failure": {
+					// Treat failures like post_tool_use but with the error as the response
+					const updated = [...prev]
+					for (let i = updated.length - 1; i >= 0; i--) {
+						const entry = updated[i]
+						if (entry.kind === "tool_use" && entry.tool_use_id === event.tool_use_id) {
+							updated[i] = {
+								...entry,
+								tool_response: `Error: ${event.error}`,
+								agent: entry.agent || event.agent,
+							}
+							break
+						}
+					}
+					return updated
+				}
+
+				case "assistant_message":
 					return [
 						...prev,
-						{ kind: "text" as const, text: event.text, agent: event.agent, ts: event.ts },
+						{
+							kind: "assistant_message" as const,
+							text: event.text,
+							agent: event.agent,
+							ts: event.ts,
+						},
 					]
 
 				case "assistant_thinking":
 					return [
 						...prev,
 						{
-							kind: "thinking" as const,
+							kind: "assistant_thinking" as const,
 							text: event.text,
 							agent: event.agent,
 							ts: event.ts,
@@ -109,7 +131,8 @@ export function useSession(sessionId: string | null) {
 				}
 
 				case "cost_update":
-				case "session_complete":
+				case "session_end":
+				case "session_start":
 				case "phase_complete":
 				case "app_ready":
 					return prev
@@ -125,7 +148,7 @@ export function useSession(sessionId: string | null) {
 		if (event.type === "app_ready") {
 			setAppReady(true)
 		}
-		if (event.type === "session_complete") {
+		if (event.type === "session_end") {
 			setIsComplete(true)
 			// Only toast for live events (not replayed catch-up), and only once per session
 			if (liveRef.current && !toastShownRef.current) {

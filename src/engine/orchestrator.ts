@@ -252,7 +252,7 @@ export async function runNew(opts: {
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "unknown error"
 			emit({ type: "log", level: "error", message: `Repo creation failed: ${msg}`, ts: ts() })
-			emit({ type: "session_complete", success: false, ts: ts() })
+			emit({ type: "session_end", success: false, ts: ts() })
 			return { projectDir }
 		}
 	}
@@ -295,7 +295,7 @@ export async function runNew(opts: {
 		if (decision === "cancel") {
 			emit({ type: "log", level: "error", message: "Cancelled by user", ts: ts() })
 			emit({
-				type: "session_complete",
+				type: "session_end",
 				success: false,
 				ts: ts(),
 			})
@@ -344,7 +344,7 @@ export async function runNew(opts: {
 				message: "Stopped by user. Run 'electric-agent iterate' to continue later.",
 				ts: ts(),
 			})
-			emit({ type: "session_complete", success: true, ts: ts() })
+			emit({ type: "session_end", success: true, ts: ts() })
 			return { sessionId: result.sessionId, projectDir }
 		}
 		emit({ type: "log", level: "task", message: "Continuing coder agent...", ts: ts() })
@@ -402,7 +402,7 @@ export async function runNew(opts: {
 		errors: result.errors,
 		ts: ts(),
 	})
-	emit({ type: "session_complete", success: result.success, ts: ts() })
+	emit({ type: "session_end", success: result.success, ts: ts() })
 	return { sessionId: result.sessionId, projectDir }
 }
 

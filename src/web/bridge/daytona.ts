@@ -150,8 +150,8 @@ export class DaytonaSessionBridge implements SessionBridge {
 				}
 			}
 
-			// Detect session_complete
-			if (event.type === "session_complete" && "success" in event) {
+			// Detect session_end
+			if (event.type === "session_end" && "success" in event) {
 				const success = (event as EngineEvent & { success: boolean }).success
 				for (const cb of this.completeCallbacks) {
 					try {

@@ -78,10 +78,10 @@ export async function headlessCommand(): Promise<void> {
 				const ghCmd = "gh auth status"
 				const ghToolUseId = `early-gh-${Date.now()}`
 				callbacks.onEvent({
-					type: "tool_start",
-					toolName: "bash",
-					toolUseId: ghToolUseId,
-					input: { command: ghCmd },
+					type: "pre_tool_use",
+					tool_name: "bash",
+					tool_use_id: ghToolUseId,
+					tool_input: { command: ghCmd },
 					ts: ts(),
 				})
 				try {
@@ -91,9 +91,9 @@ export async function headlessCommand(): Promise<void> {
 						env: { ...process.env },
 					}).trim()
 					callbacks.onEvent({
-						type: "tool_result",
-						toolUseId: ghToolUseId,
-						output: ghOut || "(ok)",
+						type: "post_tool_use",
+						tool_use_id: ghToolUseId,
+						tool_response: ghOut || "(ok)",
 						ts: ts(),
 					})
 				} catch (e) {
@@ -102,9 +102,9 @@ export async function headlessCommand(): Promise<void> {
 						(e as Record<string, string>)?.stdout ||
 						"auth check failed"
 					callbacks.onEvent({
-						type: "tool_result",
-						toolUseId: ghToolUseId,
-						output: `Error: ${stderr}`,
+						type: "post_tool_use",
+						tool_use_id: ghToolUseId,
+						tool_response: `Error: ${stderr}`,
 						ts: ts(),
 					})
 					callbacks.onEvent({
@@ -167,7 +167,7 @@ export async function headlessCommand(): Promise<void> {
 
 			const gitSuccess = executeGitOp(config, callbacks.onEvent)
 			callbacks.onEvent({
-				type: "session_complete",
+				type: "session_end",
 				success: gitSuccess,
 				ts: ts(),
 			})
@@ -184,8 +184,8 @@ export async function headlessCommand(): Promise<void> {
 		return
 	}
 
-	// Emit session_complete for the initial command
-	callbacks.onEvent({ type: "session_complete", success: true, ts: ts() })
+	// Emit session_end for the initial command
+	callbacks.onEvent({ type: "session_end", success: true, ts: ts() })
 
 	// Keep listening for iterate commands (Vite HMR picks up changes live)
 	if (process.env.SANDBOX_MODE === "1") {
@@ -241,7 +241,7 @@ async function listenForIterations(
 					message: "git command requires projectDir and gitOp",
 					ts: ts(),
 				})
-				callbacks.onEvent({ type: "session_complete", success: false, ts: ts() })
+				callbacks.onEvent({ type: "session_end", success: false, ts: ts() })
 				continue
 			}
 
@@ -251,7 +251,7 @@ async function listenForIterations(
 				{ ...gitCmd, projectDir: projectDir || gitCmd.projectDir },
 				callbacks.onEvent,
 			)
-			callbacks.onEvent({ type: "session_complete", success: gitSuccess, ts: ts() })
+			callbacks.onEvent({ type: "session_end", success: gitSuccess, ts: ts() })
 			continue
 		}
 
@@ -289,7 +289,7 @@ async function listenForIterations(
 				runMigrations(iterateDir, callbacks.onEvent)
 			}
 
-			callbacks.onEvent({ type: "session_complete", success: true, ts: ts() })
+			callbacks.onEvent({ type: "session_end", success: true, ts: ts() })
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Unknown error"
 			callbacks.onEvent({
@@ -298,7 +298,7 @@ async function listenForIterations(
 				message: `Iteration failed: ${msg}`,
 				ts: ts(),
 			})
-			callbacks.onEvent({ type: "session_complete", success: false, ts: ts() })
+			callbacks.onEvent({ type: "session_end", success: false, ts: ts() })
 		}
 	}
 }
@@ -316,7 +316,13 @@ function executeGitOp(
 	const toolUseId = `git-${op}-${Date.now()}`
 
 	function run(cmd: string): string {
-		emit({ type: "tool_start", toolName: "bash", toolUseId, input: { command: cmd }, ts: ts() })
+		emit({
+			type: "pre_tool_use",
+			tool_name: "bash",
+			tool_use_id: toolUseId,
+			tool_input: { command: cmd },
+			ts: ts(),
+		})
 		try {
 			const output = execSync(cmd, {
 				cwd,
@@ -325,13 +331,23 @@ function executeGitOp(
 				env: { ...process.env },
 				stdio: ["pipe", "pipe", "pipe"],
 			}).trim()
-			emit({ type: "tool_result", toolUseId, output: output || "(ok)", ts: ts() })
+			emit({
+				type: "post_tool_use",
+				tool_use_id: toolUseId,
+				tool_response: output || "(ok)",
+				ts: ts(),
+			})
 			return output
 		} catch (e) {
 			const stderr = (e as Record<string, string>)?.stderr || ""
 			const stdout = (e as Record<string, string>)?.stdout || ""
 			const detail = stderr || stdout || (e instanceof Error ? e.message : "Command failed")
-			emit({ type: "tool_result", toolUseId, output: `Error: ${detail}`, ts: ts() })
+			emit({
+				type: "post_tool_use",
+				tool_use_id: toolUseId,
+				tool_response: `Error: ${detail}`,
+				ts: ts(),
+			})
 			throw new Error(detail)
 		}
 	}

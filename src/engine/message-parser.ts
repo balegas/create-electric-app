@@ -20,7 +20,7 @@ export function sdkMessageToEvents(
 		for (const block of content) {
 			if ("text" in block && block.text) {
 				const text = block.text as string
-				events.push({ type: "assistant_text", text, agent, ts: ts() })
+				events.push({ type: "assistant_message", text, agent, ts: ts() })
 			} else if ("thinking" in block && block.thinking) {
 				events.push({
 					type: "assistant_thinking",
@@ -31,13 +31,13 @@ export function sdkMessageToEvents(
 			} else if ("name" in block) {
 				const name = block.name as string
 				const input = (block.input || {}) as Record<string, unknown>
-				const toolUseId = (block.id || `tool_${Date.now()}`) as string
+				const tool_use_id = (block.id || `tool_${Date.now()}`) as string
 
 				events.push({
-					type: "tool_start",
-					toolName: name,
-					toolUseId,
-					input,
+					type: "pre_tool_use",
+					tool_name: name,
+					tool_use_id,
+					tool_input: input,
 					agent,
 					ts: ts(),
 				})
@@ -54,7 +54,7 @@ export function sdkMessageToEvents(
 					(block as Record<string, unknown>).type === "tool_result"
 				) {
 					const b = block as Record<string, unknown>
-					const toolUseId = (b.tool_use_id || "") as string
+					const tool_use_id = (b.tool_use_id || "") as string
 					const content = b.content
 					const texts: string[] = []
 					if (typeof content === "string") {
@@ -67,9 +67,9 @@ export function sdkMessageToEvents(
 						}
 					}
 					events.push({
-						type: "tool_result",
-						toolUseId,
-						output: texts.join("\n"),
+						type: "post_tool_use",
+						tool_use_id,
+						tool_response: texts.join("\n"),
 						agent,
 						ts: ts(),
 					})

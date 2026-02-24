@@ -36,7 +36,7 @@ export function ConsoleLogEntry({
 export function ConsoleUserMessage({
 	entry,
 }: {
-	entry: Extract<ConsoleEntryType, { kind: "user_message" }>
+	entry: Extract<ConsoleEntryType, { kind: "user_prompt" }>
 }) {
 	return (
 		<div className="console-entry user-message">
@@ -52,7 +52,7 @@ export function ConsoleThinkingEntry({
 	entry,
 	duration,
 }: {
-	entry: Extract<ConsoleEntryType, { kind: "thinking" }>
+	entry: Extract<ConsoleEntryType, { kind: "assistant_thinking" }>
 	duration: string | null
 }) {
 	const label = entry.agent || "agent"
@@ -76,7 +76,7 @@ export function ConsoleTextEntry({
 	entry,
 	duration,
 }: {
-	entry: Extract<ConsoleEntryType, { kind: "text" }>
+	entry: Extract<ConsoleEntryType, { kind: "assistant_message" }>
 	duration: string | null
 }) {
 	const label = entry.agent || "agent"

@@ -13,25 +13,25 @@ export function useFileTracker(entries: ConsoleEntry[]): Map<string, FileState> 
 		const files = new Map<string, FileState>()
 
 		for (const entry of entries) {
-			if (entry.kind !== "tool") continue
+			if (entry.kind !== "tool_use") continue
 
-			const filePath = entry.input.file_path as string | undefined
+			const filePath = entry.tool_input.file_path as string | undefined
 			if (!filePath) continue
 
-			if (entry.toolName === "Write") {
-				const content = (entry.input.content as string) ?? null
+			if (entry.tool_name === "Write") {
+				const content = (entry.tool_input.content as string) ?? null
 				files.set(filePath, {
 					path: filePath,
 					content,
 					operation: "write",
 					partial: false,
 				})
-			} else if (entry.toolName === "Edit") {
+			} else if (entry.tool_name === "Edit") {
 				const existing = files.get(filePath)
 				if (existing?.content && !existing.partial) {
 					// Try to apply the edit in-place
-					const oldStr = entry.input.old_string as string | undefined
-					const newStr = entry.input.new_string as string | undefined
+					const oldStr = entry.tool_input.old_string as string | undefined
+					const newStr = entry.tool_input.new_string as string | undefined
 					if (oldStr && newStr !== undefined && existing.content.includes(oldStr)) {
 						files.set(filePath, {
 							...existing,

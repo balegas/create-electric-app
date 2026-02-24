@@ -18,7 +18,7 @@ interface ConsoleProps {
 }
 
 function getEntryTs(entry: ConsoleEntry): string | undefined {
-	if (entry.kind === "user_message") return undefined
+	if (entry.kind === "user_prompt") return undefined
 	return entry.ts
 }
 
@@ -87,7 +87,7 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 	let prevTs: string | null = null
 	for (const entry of entries) {
 		const ts = getEntryTs(entry)
-		if (entry.kind === "user_message" || !ts) {
+		if (entry.kind === "user_prompt" || !ts) {
 			durations.push(null)
 		} else if (prevTs) {
 			const ms = new Date(ts).getTime() - new Date(prevTs).getTime()
@@ -105,7 +105,7 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 	let waitingSinceTs = ""
 	if (isLive && !isComplete && entries.length > 0) {
 		const last = entries[entries.length - 1]
-		const hasLoadingTool = last.kind === "tool" && last.output === null
+		const hasLoadingTool = last.kind === "tool_use" && last.tool_response === null
 		const hasUnresolvedGate = last.kind === "gate" && !last.resolved
 		if (!hasLoadingTool && !hasUnresolvedGate) {
 			showWaiting = true
@@ -120,19 +120,19 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 				switch (entry.kind) {
 					case "log":
 						return <ConsoleLogEntry key={`log-${i}`} entry={entry} duration={duration} />
-					case "user_message":
+					case "user_prompt":
 						return <ConsoleUserMessage key={`user-${i}`} entry={entry} />
-					case "tool":
+					case "tool_use":
 						return (
 							<ToolExecution
-								key={entry.toolUseId || `tool-${i}`}
+								key={entry.tool_use_id || `tool-${i}`}
 								entry={entry}
 								duration={duration}
 							/>
 						)
-					case "text":
+					case "assistant_message":
 						return <ConsoleTextEntry key={`text-${i}`} entry={entry} duration={duration} />
-					case "thinking":
+					case "assistant_thinking":
 						return <ConsoleThinkingEntry key={`thinking-${i}`} entry={entry} duration={duration} />
 					case "gate":
 						return (

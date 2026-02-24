@@ -54,7 +54,7 @@ export interface SessionBridge {
 
 	/**
 	 * Register a callback for session completion.
-	 * Fired when a `session_complete` event is received from the agent.
+	 * Fired when a `session_end` event is received from the agent.
 	 */
 	onComplete(cb: (success: boolean) => void): void
 
