@@ -60,6 +60,26 @@ export class SpritesSandboxProvider implements SandboxProvider {
 	}
 
 	/**
+	 * Set the sprite URL auth to public so it's accessible without a login form.
+	 * The JS SDK doesn't expose this yet, so we call the REST API directly.
+	 * Equivalent to: sprite url -s <name> update --auth public
+	 */
+	private async setSpriteAuthPublic(spriteName: string): Promise<void> {
+		const url = `${this.baseURL}/v1/sprites/${encodeURIComponent(spriteName)}/url`
+		const resp = await fetch(url, {
+			method: "PUT",
+			headers: {
+				Authorization: `Bearer ${this.token}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ auth: "public" }),
+		})
+		if (!resp.ok) {
+			console.warn(`[sprites] Failed to set auth public (${resp.status}): ${await resp.text()}`)
+		}
+	}
+
+	/**
 	 * Set network policy to allow all outbound connections.
 	 * The JS SDK doesn't expose this yet, so we call the REST API directly.
 	 */
@@ -96,8 +116,11 @@ export class SpritesSandboxProvider implements SandboxProvider {
 			region: DEFAULT_REGION,
 		})
 
-		// Enable outbound internet access
-		await this.setNetworkPolicyAllowAll(spriteName)
+		// Enable outbound internet access + make URL publicly accessible
+		await Promise.all([
+			this.setNetworkPolicyAllowAll(spriteName),
+			this.setSpriteAuthPublic(spriteName),
+		])
 
 		// Bootstrap (or restore from checkpoint).
 		// When AGENT_PACKAGE_URL is set (e.g. PR preview), install from that URL
