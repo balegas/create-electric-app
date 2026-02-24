@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 
 import "dotenv/config"
+import { createRequire } from "node:module"
 import { Command } from "commander"
 import { headlessCommand } from "./cli/headless.js"
 import { serveCommand } from "./cli/serve.js"
+
+const require = createRequire(import.meta.url)
+const { version } = require("../package.json") as { version: string }
 
 const program = new Command()
 
@@ -12,7 +16,7 @@ program
 	.description(
 		"Turn natural-language app descriptions into running reactive Electric SQL + TanStack DB applications",
 	)
-	.version("0.1.0")
+	.version(version)
 	.option("--verbose", "Enable verbose logging")
 
 program

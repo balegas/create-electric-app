@@ -70,6 +70,23 @@ sprite exec <sprite-name> -- <cmd>   # execute a command in a sprite
 - Sprite names follow the pattern `ea-{sessionId first 12 chars}`.
 - Node.js in sprites uses nvm at `/.sprite/languages/node/nvm/`. The npm global bin is NOT in the default PATH — commands must source `/etc/profile.d/npm-global.sh` first.
 
+### Releasing (npm)
+
+Publishing is managed by [Changesets](https://github.com/changesets/changesets) with automated CI via GitHub Actions.
+
+**Automated workflow (recommended):**
+1. Add a changeset to your PR: `npx changeset` (select bump type + summary)
+2. Merge the PR to `main`
+3. The `release.yml` workflow creates a "chore: version packages" PR (bumps version, updates CHANGELOG)
+4. Merge the version PR → workflow publishes to npm via OIDC trusted publishing
+
+**Manual workflow:** `npx changeset version && npm run release` (requires `npm login --auth-type=web`)
+
+**What needs redeploying after a new npm release:**
+- **Fly.io (server + SPA)**: Only redeploy if you changed server code (`src/web/`), the React SPA (`src/web/client/`), or bootstrap logic (`sprites-bootstrap.ts`). The Fly.io image runs the server, not the agent.
+- **Sprites**: Nothing — sprites auto-pick up new npm versions. The bootstrap checkpoint includes the package version (`bootstrapped:X.Y.Z`), so a new release invalidates old checkpoints and triggers a fresh `npm install -g electric-agent`.
+- **Docker sandbox image**: Rebuild (`npm run build:sandbox`) if agent code changed. The agent is baked into the image.
+
 ## Verification Checklist
 
 Before committing, always run:
