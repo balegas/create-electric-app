@@ -178,14 +178,53 @@ function mapHookToEngineEvent(body: Record<string, unknown>): EngineEvent | null
 				ts: now,
 			}
 
-		case "PreToolUse":
+		case "PreToolUse": {
+			const toolName = (body.tool_name as string) || "unknown"
+			const toolUseId = (body.tool_use_id as string) || `hook_${Date.now()}`
+			const toolInput = (body.tool_input as Record<string, unknown>) || {}
+
+			if (toolName === "TodoWrite") {
+				return {
+					type: "todo_write",
+					tool_use_id: toolUseId,
+					todos:
+						(toolInput.todos as Array<{
+							id: string
+							content: string
+							status: string
+							priority?: string
+						}>) || [],
+					ts: now,
+				}
+			}
+
+			if (toolName === "AskUserQuestion") {
+				const questions = toolInput.questions as
+					| Array<{
+							question: string
+							options?: Array<{ label: string; description?: string }>
+					  }>
+					| undefined
+				const firstQuestion = questions?.[0]
+				return {
+					type: "ask_user_question",
+					tool_use_id: toolUseId,
+					question: firstQuestion?.question || (toolInput.question as string) || "",
+					options: firstQuestion?.options as
+						| Array<{ label: string; description?: string }>
+						| undefined,
+					ts: now,
+				}
+			}
+
 			return {
 				type: "pre_tool_use",
-				tool_name: (body.tool_name as string) || "unknown",
-				tool_use_id: (body.tool_use_id as string) || `hook_${Date.now()}`,
-				tool_input: (body.tool_input as Record<string, unknown>) || {},
+				tool_name: toolName,
+				tool_use_id: toolUseId,
+				tool_input: toolInput,
 				ts: now,
 			}
+		}
 
 		case "PostToolUse":
 			return {
@@ -343,6 +382,7 @@ export function createApp(config: ServerConfig) {
 
 	// Receive a hook event from Claude Code (via forward.sh) and write it
 	// to the session's durable stream as an EngineEvent.
+	// For AskUserQuestion, this blocks until the user answers in the web UI.
 	app.post("/api/sessions/:id/hook-event", async (c) => {
 		const sessionId = c.req.param("id")
 		const body = (await c.req.json()) as Record<string, unknown>
@@ -360,6 +400,35 @@ export function createApp(config: ServerConfig) {
 		} catch (err) {
 			console.error(`[hook-event] Failed to emit:`, err)
 			return c.json({ error: "Failed to write event" }, 500)
+		}
+
+		// AskUserQuestion: block until the user answers via the web UI
+		if (hookEvent.type === "ask_user_question") {
+			const toolUseId = hookEvent.tool_use_id
+			console.log(`[hook-event] Blocking for ask_user_question gate: ${toolUseId}`)
+			try {
+				const gateTimeout = 5 * 60 * 1000 // 5 minutes
+				const answer = await Promise.race([
+					createGate<{ answer: string }>(sessionId, `ask_user_question:${toolUseId}`),
+					new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error("AskUserQuestion gate timed out")), gateTimeout),
+					),
+				])
+				console.log(`[hook-event] ask_user_question gate resolved: ${toolUseId}`)
+				return c.json({
+					hookSpecificOutput: {
+						hookEventName: "PreToolUse",
+						permissionDecision: "allow",
+						updatedInput: {
+							questions: (body.tool_input as Record<string, unknown>)?.questions,
+							answers: { [hookEvent.question]: answer.answer },
+						},
+					},
+				})
+			} catch (err) {
+				console.error(`[hook-event] ask_user_question gate error:`, err)
+				return c.json({ ok: true }) // Don't block Claude Code on timeout
+			}
 		}
 
 		return c.json({ ok: true })
@@ -750,6 +819,27 @@ export function createApp(config: ServerConfig) {
 
 		// Client may pass a human-readable summary of the decision for replay display
 		const summary = (body._summary as string) || undefined
+
+		// AskUserQuestion gates: resolve the blocking hook-event and emit gate_resolved
+		if (gate === "ask_user_question") {
+			const toolUseId = body.toolUseId as string
+			if (!toolUseId) {
+				return c.json({ error: "toolUseId is required for ask_user_question" }, 400)
+			}
+			const answer = (body.answer as string) || ""
+			const resolved = resolveGate(sessionId, `ask_user_question:${toolUseId}`, { answer })
+			if (!resolved) {
+				return c.json({ error: "No pending ask_user_question gate found" }, 404)
+			}
+			// Emit gate_resolved for replay
+			try {
+				const bridge = getOrCreateBridge(config, sessionId)
+				await bridge.emit({ type: "gate_resolved", gate: "ask_user_question", summary, ts: ts() })
+			} catch {
+				// Non-critical
+			}
+			return c.json({ ok: true })
+		}
 
 		// Server-side gates are resolved in-process (they run on the server, not inside the container)
 		const serverGates = new Set(["infra_config"])

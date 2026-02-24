@@ -92,6 +92,24 @@ export function useSession(sessionId: string | null) {
 						},
 					]
 
+				case "todo_write": {
+					// Upsert: replace existing todo_widget if one exists, otherwise append
+					const existingIdx = prev.findIndex((e) => e.kind === "todo_widget")
+					const todoEntry = {
+						kind: "todo_widget" as const,
+						tool_use_id: event.tool_use_id,
+						todos: event.todos,
+						ts: event.ts,
+					}
+					if (existingIdx >= 0) {
+						const updated = [...prev]
+						updated[existingIdx] = todoEntry
+						return updated
+					}
+					return [...prev, todoEntry]
+				}
+
+				case "ask_user_question":
 				case "clarification_needed":
 				case "plan_ready":
 				case "continue_needed":

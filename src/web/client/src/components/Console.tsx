@@ -7,6 +7,7 @@ import {
 	ConsoleUserMessage,
 } from "./ConsoleEntry"
 import { GatePrompt } from "./GatePrompt"
+import { TodoWidget } from "./TodoWidget"
 import { ToolExecution } from "./ToolExecution"
 
 interface ConsoleProps {
@@ -136,6 +137,8 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 						return <ConsoleTextEntry key={`text-${i}`} entry={entry} duration={duration} />
 					case "assistant_thinking":
 						return <ConsoleThinkingEntry key={`thinking-${i}`} entry={entry} duration={duration} />
+					case "todo_widget":
+						return <TodoWidget key={`todo-${i}`} entry={entry} />
 					case "gate":
 						return (
 							<GatePrompt

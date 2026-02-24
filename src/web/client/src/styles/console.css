@@ -386,3 +386,53 @@
 	border-top: 1px solid var(--border);
 	background: var(--bg);
 }
+
+/* Todo widget */
+.todo-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.todo-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 0;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--text-muted);
+}
+
+.todo-status-icon {
+	width: 16px;
+	text-align: center;
+	flex-shrink: 0;
+	font-size: 14px;
+}
+
+.todo-status-done {
+	color: var(--green);
+}
+
+.todo-status-progress {
+	color: var(--brand-1);
+}
+
+.todo-status-pending {
+	color: var(--text-subtle);
+}
+
+.todo-content {
+	flex: 1;
+}
+
+.todo-priority {
+	font-size: 11px;
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--text-subtle);
+	flex-shrink: 0;
+}

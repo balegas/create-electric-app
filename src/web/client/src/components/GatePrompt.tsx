@@ -619,6 +619,109 @@ function InfraConfigGate({
 	)
 }
 
+function AskUserQuestionGate({
+	sessionId,
+	event,
+	onResolved,
+	resolved,
+	resolvedSummary,
+}: {
+	sessionId: string
+	event: Extract<EngineEvent, { type: "ask_user_question" }>
+	onResolved: (summary: string) => void
+	resolved?: boolean
+	resolvedSummary?: string
+}) {
+	const [answer, setAnswer] = useState("")
+	const [selectedOption, setSelectedOption] = useState<string | null>(null)
+	const [submitting, setSubmitting] = useState(false)
+	const disabled = submitting || !!resolved
+
+	// For resolved state, use either local selection or the summary from replay
+	const chosenAnswer = selectedOption || resolvedSummary || ""
+
+	async function handleOptionClick(label: string) {
+		setSelectedOption(label)
+		setSubmitting(true)
+		try {
+			await respondToGate(sessionId, "ask_user_question", {
+				toolUseId: event.tool_use_id,
+				answer: label,
+				_summary: label,
+			})
+			onResolved(label)
+		} catch {
+			setSelectedOption(null)
+			setSubmitting(false)
+		}
+	}
+
+	async function handleSubmit() {
+		if (!answer.trim()) return
+		setSubmitting(true)
+		const summary = answer.trim().slice(0, 80)
+		try {
+			await respondToGate(sessionId, "ask_user_question", {
+				toolUseId: event.tool_use_id,
+				answer: answer.trim(),
+				_summary: summary,
+			})
+			onResolved(summary)
+		} catch {
+			setSubmitting(false)
+		}
+	}
+
+	return (
+		<div className="gate-prompt">
+			<h3>Question</h3>
+			<p className="gate-summary">{event.question}</p>
+			{event.options && event.options.length > 0 ? (
+				<div className="gate-option-group-vert">
+					{event.options.map((opt) => {
+						const isChosen = resolved && opt.label === chosenAnswer
+						return (
+							<button
+								key={opt.label}
+								type="button"
+								className={`gate-option ${isChosen ? "selected" : ""}`}
+								onClick={() => handleOptionClick(opt.label)}
+								disabled={disabled}
+							>
+								<span className="gate-option-title">{opt.label}</span>
+								{opt.description && <span className="gate-option-desc">{opt.description}</span>}
+							</button>
+						)
+					})}
+				</div>
+			) : resolved ? (
+				<div className="gate-answer-summary">{chosenAnswer}</div>
+			) : (
+				<div className="question">
+					<textarea
+						value={answer}
+						onChange={(e) => setAnswer(e.target.value)}
+						disabled={disabled}
+						rows={3}
+						placeholder="Type your answer..."
+					/>
+				</div>
+			)}
+			{!resolved && !event.options?.length && (
+				<div className="gate-actions">
+					<button
+						className="gate-btn gate-btn-primary"
+						onClick={handleSubmit}
+						disabled={disabled || !answer.trim()}
+					>
+						{submitting ? "Submitting..." : "Submit"}
+					</button>
+				</div>
+			)}
+		</div>
+	)
+}
+
 function resolvedLabel(type: string): string {
 	switch (type) {
 		case "clarification_needed":
@@ -629,6 +732,8 @@ function resolvedLabel(type: string): string {
 			return "Project configured"
 		case "continue_needed":
 			return "Decision made"
+		case "ask_user_question":
+			return "Question answered"
 		default:
 			return "Decision made"
 	}
@@ -685,6 +790,17 @@ export function GatePrompt({
 					onResolved={resolve}
 					resolved={resolved}
 					resolvedDetails={entry.resolvedDetails}
+				/>
+			)
+			break
+		case "ask_user_question":
+			content = (
+				<AskUserQuestionGate
+					sessionId={sessionId}
+					event={entry.event}
+					onResolved={resolve}
+					resolved={resolved}
+					resolvedSummary={resolvedSummary}
 				/>
 			)
 			break

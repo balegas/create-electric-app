@@ -252,6 +252,11 @@
 	cursor: not-allowed;
 }
 
+.gate-option.selected {
+	border-color: var(--green);
+	opacity: 1;
+}
+
 .gate-option-title {
 	font-family: var(--font-mono);
 	font-size: 13px;
@@ -318,4 +323,28 @@
 .gate-config-summary a {
 	color: var(--brand-1);
 	word-break: break-all;
+}
+
+/* Free-form answer display (resolved state) */
+.gate-answer-summary {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--text-muted);
+	padding: 6px 10px;
+	margin: 8px 0;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+}
+
+/* Vertical option group for AskUserQuestion */
+.gate-option-group-vert {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 8px 0;
+}
+
+.gate-option-group-vert .gate-option {
+	flex: none;
 }

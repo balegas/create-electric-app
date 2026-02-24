@@ -56,6 +56,19 @@ export type EngineEvent =
 			ts: string
 	  }
 	| { type: "app_ready"; port?: number; ts: string }
+	| {
+			type: "todo_write"
+			tool_use_id: string
+			todos: Array<{ id: string; content: string; status: string; priority?: string }>
+			ts: string
+	  }
+	| {
+			type: "ask_user_question"
+			tool_use_id: string
+			question: string
+			options?: Array<{ label: string; description?: string }>
+			ts: string
+	  }
 	| { type: "git_checkpoint"; commitHash: string; message: string; ts: string }
 	| {
 			type: "infra_config_prompt"
@@ -87,11 +100,22 @@ export type ConsoleEntry =
 	| { kind: "assistant_message"; text: string; agent?: string; ts: string }
 	| { kind: "assistant_thinking"; text: string; agent?: string; ts: string }
 	| {
+			kind: "todo_widget"
+			tool_use_id: string
+			todos: Array<{ id: string; content: string; status: string; priority?: string }>
+			ts: string
+	  }
+	| {
 			kind: "gate"
 			event: Extract<
 				EngineEvent,
 				{
-					type: "clarification_needed" | "plan_ready" | "continue_needed" | "infra_config_prompt"
+					type:
+						| "clarification_needed"
+						| "plan_ready"
+						| "continue_needed"
+						| "infra_config_prompt"
+						| "ask_user_question"
 				}
 			>
 			resolved: boolean

@@ -59,6 +59,19 @@ export type EngineEvent =
 			ts: string
 	  }
 	| { type: "app_ready"; port?: number; ts: string }
+	| {
+			type: "todo_write"
+			tool_use_id: string
+			todos: Array<{ id: string; content: string; status: string; priority?: string }>
+			ts: string
+	  }
+	| {
+			type: "ask_user_question"
+			tool_use_id: string
+			question: string
+			options?: Array<{ label: string; description?: string }>
+			ts: string
+	  }
 	| { type: "git_checkpoint"; commitHash: string; message: string; ts: string }
 	| {
 			type: "infra_config_prompt"
