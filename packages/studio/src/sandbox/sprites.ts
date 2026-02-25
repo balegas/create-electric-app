@@ -118,10 +118,7 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		})
 
 		// Enable outbound internet access and public URL access (no login page)
-		await Promise.all([
-			this.setNetworkPolicyAllowAll(spriteName),
-			this.setUrlPublic(spriteName),
-		])
+		await Promise.all([this.setNetworkPolicyAllowAll(spriteName), this.setUrlPublic(spriteName)])
 
 		// Bootstrap (or restore from checkpoint).
 		// When AGENT_PACKAGE_URL is set (e.g. PR preview), install from that URL
