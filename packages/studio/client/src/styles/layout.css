@@ -447,6 +447,12 @@
 	flex-shrink: 0;
 }
 
+.invite-code-label {
+	font-size: 12px;
+	color: var(--text-subtle);
+	flex-shrink: 0;
+}
+
 /* Invite code pill */
 .invite-code-btn {
 	font-family: var(--font-mono);

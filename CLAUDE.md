@@ -49,6 +49,12 @@ node packages/agent/dist/index.js headless       # headless NDJSON mode (used in
 - **`SANDBOX_RUNTIME=sprites`** — uses Fly.io Sprites cloud VMs. Requires `FLY_API_TOKEN`.
 - **`SANDBOX_RUNTIME=daytona`** — uses Daytona cloud sandboxes. Requires `DAYTONA_API_KEY`.
 
+For shared sessions with multiple SSE streams, run Caddy for HTTP/2:
+```bash
+caddy run --config packages/studio/Caddyfile
+```
+Then open `https://localhost:4443`. Accept the self-signed cert on first visit.
+
 ### Deployment (Fly.io)
 
 ```bash

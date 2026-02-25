@@ -50,6 +50,7 @@
 		"dev": "tsc --watch",
 		"dev:web": "vite --config client/vite.config.ts",
 		"test": "node --import tsx --test tests/*.test.ts",
+		"dev:proxy": "caddy run --config Caddyfile --watch",
 		"clean": "rm -rf dist"
 	},
 	"license": "Apache-2.0",

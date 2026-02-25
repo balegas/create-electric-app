@@ -301,17 +301,15 @@ function LinkedSessionPanel({
 					Unlink
 				</button>
 			</div>
-			{expanded && (
-				<div className="shared-session-panel-body">
-					<Console
-						sessionId={sessionId}
-						entries={entries}
-						isLive={isLive}
-						isComplete={isComplete}
-						onGateResolved={markGateResolved}
-					/>
-				</div>
-			)}
+			<div className="shared-session-panel-body">
+				<Console
+					sessionId={sessionId}
+					entries={entries}
+					isLive={isLive}
+					isComplete={isComplete}
+					onGateResolved={markGateResolved}
+				/>
+			</div>
 		</div>
 	)
 }

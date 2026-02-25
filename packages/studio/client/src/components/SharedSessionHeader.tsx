@@ -46,6 +46,7 @@ export function SharedSessionHeader({
 				))}
 			</span>
 
+			<span className="invite-code-label">Join code:</span>
 			<button type="button" className="invite-code-btn" onClick={handleCopyCode}>
 				{copied ? "Copied!" : code}
 				{revoked && " (revoked)"}

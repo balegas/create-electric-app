@@ -94,6 +94,9 @@ export async function serveCommand(opts: {
 	await startWebServer({ port, dataDir, sandbox, streamConfig, bridgeMode, inferProjectName })
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
+	console.log(
+		`  → HTTPS (HTTP/2): https://localhost:4443  (run: caddy run --config packages/studio/Caddyfile)`,
+	)
 
 	if (opts.open) {
 		const { exec } = await import("node:child_process")
