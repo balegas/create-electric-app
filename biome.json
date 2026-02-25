@@ -18,7 +18,7 @@
   },
   "overrides": [
     {
-      "includes": ["src/studio/client/**"],
+      "includes": ["packages/studio/client/**"],
       "linter": {
         "rules": {
           "a11y": {

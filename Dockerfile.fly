@@ -2,16 +2,21 @@
 # Fly.io server deployment — Node.js Hono API server + React SPA
 # ---------------------------------------------------------------------------
 
-# Stage 1: Build TypeScript + React SPA
+# Stage 1: Build all packages
 FROM node:24-alpine AS builder
 
+RUN npm install -g pnpm@10
+
 WORKDIR /opt/app
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/protocol/package.json packages/protocol/
+COPY packages/studio/package.json packages/studio/
+COPY packages/agent/package.json packages/agent/
+RUN pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 # Remove dev dependencies after build
-RUN npm prune --production
+RUN pnpm prune --prod
 
 # Stage 2: Runtime image (minimal)
 FROM node:24-alpine
@@ -19,10 +24,16 @@ FROM node:24-alpine
 RUN apk add --no-cache git curl github-cli bash
 
 WORKDIR /opt/app
-COPY --from=builder /opt/app/dist ./dist
+COPY --from=builder /opt/app/packages/protocol/dist packages/protocol/dist
+COPY --from=builder /opt/app/packages/protocol/package.json packages/protocol/
+COPY --from=builder /opt/app/packages/studio/dist packages/studio/dist
+COPY --from=builder /opt/app/packages/studio/package.json packages/studio/
+COPY --from=builder /opt/app/packages/agent/dist packages/agent/dist
+COPY --from=builder /opt/app/packages/agent/package.json packages/agent/
+COPY --from=builder /opt/app/packages/agent/playbooks packages/agent/playbooks
 COPY --from=builder /opt/app/node_modules ./node_modules
 COPY --from=builder /opt/app/package.json ./package.json
-COPY --from=builder /opt/app/playbooks ./playbooks
+COPY --from=builder /opt/app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 # Data directory for session state
 RUN mkdir -p /data/.electric-agent
@@ -32,4 +43,4 @@ ENV DATA_DIR=/data/.electric-agent
 
 EXPOSE 8080
 
-CMD ["node", "dist/index.js", "serve", "--port", "8080", "--data-dir", "/data/.electric-agent"]
+CMD ["node", "packages/agent/dist/index.js", "serve", "--port", "8080", "--data-dir", "/data/.electric-agent"]
