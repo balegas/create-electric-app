@@ -25,12 +25,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: Build
+        run: pnpm run build
+
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@v1
         with:
-          publish: pnpm run release
+          publish: pnpm publish -r --filter './packages/**' --no-git-checks --access public --provenance
+          version: pnpm exec changeset version
           title: "chore: version packages"
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
