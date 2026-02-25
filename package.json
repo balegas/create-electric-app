@@ -8,10 +8,10 @@
 	"packageManager": "pnpm@10.15.1",
 	"scripts": {
 		"build": "pnpm --recursive run build",
-		"typecheck": "pnpm --filter @electric-agent/protocol run build && pnpm --recursive run typecheck",
+		"typecheck": "pnpm run build && pnpm --recursive run typecheck",
 		"check": "biome check packages/protocol/src packages/studio/src packages/studio/client packages/studio/tests packages/agent/src packages/agent/tests",
 		"check:fix": "biome check --write packages/protocol/src packages/studio/src packages/studio/client packages/studio/tests packages/agent/src packages/agent/tests",
-		"test": "pnpm --recursive --if-present run test",
+		"test": "pnpm run build && pnpm --recursive --if-present run test",
 		"dev": "pnpm --recursive --if-present run dev",
 		"serve": "pnpm --filter @electric-agent/agent run serve",
 		"ci:version": "pnpm exec changeset version && pnpm install --lockfile-only",
