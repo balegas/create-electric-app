@@ -111,8 +111,10 @@ export function localStreamServer(): LocalStreamServer {
 			}
 		},
 		connection(sessionId: string): StreamConnectionInfo {
+			// Must match the URL format produced by getStreamConnectionInfo()
+			// with config.serviceId="__local__": /v1/stream/__local__/session/{id}
 			return {
-				url: `${serverUrl}/session/${sessionId}`,
+				url: `${serverUrl}/v1/stream/__local__/session/${sessionId}`,
 				headers: {},
 			}
 		},
