@@ -1,15 +1,20 @@
 # ---------------------------------------------------------------------------
-# Stage 1: Build electric-agent
+# Stage 1: Build electric-agent (headless — no studio needed)
 # ---------------------------------------------------------------------------
 FROM node:22-alpine AS builder
 
+RUN npm install -g pnpm@10
+
 WORKDIR /opt/electric-agent
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/protocol/package.json packages/protocol/
+COPY packages/studio/package.json packages/studio/
+COPY packages/agent/package.json packages/agent/
+RUN pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build:server
+RUN pnpm run build
 # Remove dev dependencies after build
-RUN npm prune --production
+RUN pnpm prune --prod
 
 # ---------------------------------------------------------------------------
 # Stage 2: Runtime image (minimal)
@@ -25,16 +30,22 @@ RUN npm install -g @anthropic-ai/claude-code
 # Install pnpm (used by generated projects)
 RUN npm install -g pnpm
 
-# Copy built electric-agent (production deps only)
+# Copy built packages (protocol + studio + agent)
 WORKDIR /opt/electric-agent
-COPY --from=builder /opt/electric-agent/dist ./dist
+COPY --from=builder /opt/electric-agent/packages/protocol/dist packages/protocol/dist
+COPY --from=builder /opt/electric-agent/packages/protocol/package.json packages/protocol/
+COPY --from=builder /opt/electric-agent/packages/studio/dist packages/studio/dist
+COPY --from=builder /opt/electric-agent/packages/studio/package.json packages/studio/
+COPY --from=builder /opt/electric-agent/packages/agent/dist packages/agent/dist
+COPY --from=builder /opt/electric-agent/packages/agent/package.json packages/agent/
+COPY --from=builder /opt/electric-agent/packages/agent/playbooks packages/agent/playbooks
+COPY --from=builder /opt/electric-agent/packages/agent/template packages/agent/template
 COPY --from=builder /opt/electric-agent/node_modules ./node_modules
 COPY --from=builder /opt/electric-agent/package.json ./package.json
-COPY --from=builder /opt/electric-agent/playbooks ./playbooks
-COPY --from=builder /opt/electric-agent/template ./template
+COPY --from=builder /opt/electric-agent/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 # Link the CLI globally so `electric-agent` is on PATH
-RUN npm link
+RUN cd packages/agent && npm link
 
 # Create non-root user (Claude CLI blocks --dangerously-skip-permissions as root)
 RUN adduser -D -s /bin/bash agent && \

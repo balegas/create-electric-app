@@ -1,0 +1,438 @@
+/* Console entries */
+.console-entry {
+	display: flex;
+	align-items: baseline;
+	gap: 0;
+	padding: 3px 0;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 1.6;
+}
+
+.console a {
+	color: var(--brand-1);
+	text-decoration: none;
+}
+
+.console a:hover {
+	text-decoration: underline;
+}
+
+.console-entry .prefix {
+	font-weight: 600;
+	margin-right: 6px;
+}
+
+.console-entry .prefix.plan {
+	color: var(--brand-1);
+}
+.console-entry .prefix.approve {
+	color: var(--brand-2);
+}
+.console-entry .prefix.task {
+	color: var(--blue);
+}
+.console-entry .prefix.build {
+	color: var(--brand-2);
+}
+.console-entry .prefix.fix {
+	color: var(--yellow);
+}
+.console-entry .prefix.done {
+	color: var(--green);
+}
+.console-entry .prefix.error {
+	color: var(--red);
+}
+.console-entry .prefix.debug {
+	color: var(--text-subtle);
+}
+
+/* Duration badge */
+.duration {
+	margin-left: auto;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	color: var(--text-subtle);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+/* User message */
+.user-message {
+	padding: 3px 0;
+	margin: 0;
+}
+
+/* Tool execution (inline minimalist) */
+.tool-inline {
+	margin: 0;
+	padding: 0;
+}
+
+.tool-inline summary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 0;
+	cursor: pointer;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--text-subtle);
+	user-select: none;
+	list-style: none;
+	line-height: 1.6;
+}
+
+.tool-inline summary::-webkit-details-marker {
+	display: none;
+}
+
+.tool-inline summary:hover .tool-inline-name {
+	text-decoration: underline;
+}
+
+.tool-inline summary:hover .tool-inline-summary {
+	text-decoration: underline;
+	color: var(--text-muted);
+}
+
+.tool-inline-agent {
+	font-weight: 600;
+	color: var(--blue);
+	font-size: 13px;
+}
+
+.tool-inline-name {
+	font-weight: 600;
+	color: var(--brand-1);
+	font-size: 13px;
+}
+
+.tool-inline-summary {
+	color: var(--text-subtle);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 600px;
+}
+
+.tool-inline-command {
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.spinner-inline {
+	width: 10px;
+	height: 10px;
+	border: 1.5px solid var(--border);
+	border-top-color: var(--brand-1);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+	flex-shrink: 0;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.tool-inline-body {
+	padding: 8px 0 8px 16px;
+	border-left: 2px solid var(--border);
+	margin: 2px 0 4px 6px;
+}
+
+.tool-inline-body pre {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	word-break: break-all;
+	max-height: 400px;
+	overflow-y: auto;
+}
+
+.tool-inline-body .section-label {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-subtle);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	margin: 8px 0 4px;
+}
+
+.tool-inline-body .section-label:first-child {
+	margin-top: 0;
+}
+
+/* Thinking (inline) */
+.thinking-inline {
+	margin: 0;
+	padding: 0;
+}
+
+.thinking-inline summary {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 0;
+	cursor: pointer;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--text-subtle);
+	user-select: none;
+	list-style: none;
+	line-height: 1.6;
+}
+
+.thinking-inline summary::-webkit-details-marker {
+	display: none;
+}
+
+.thinking-inline summary:hover .thinking-label,
+.thinking-inline summary:hover .thinking-preview {
+	text-decoration: underline;
+	color: var(--text-muted);
+}
+
+.thinking-label {
+	color: var(--brand-2);
+	font-size: 13px;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.thinking-inline summary:hover .thinking-label {
+	color: var(--brand-2);
+}
+
+.thinking-preview {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-subtle);
+	max-width: 600px;
+}
+
+.thinking-body {
+	padding: 8px 0 8px 16px;
+	border-left: 2px solid var(--border);
+	margin: 2px 0 4px 6px;
+}
+
+.thinking-body pre {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 400px;
+	overflow-y: auto;
+}
+
+/* Waiting indicator */
+.waiting-indicator {
+	gap: 6px;
+	color: var(--text-subtle);
+	animation: fade-pulse 2s ease-in-out infinite;
+}
+
+.waiting-label {
+	font-style: italic;
+}
+
+@keyframes fade-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
+}
+
+/* Action group */
+.action-group {
+	margin: 4px 0;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.action-group-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background: var(--bg-surface);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--text-muted);
+	cursor: pointer;
+	user-select: none;
+}
+
+.action-group-header:hover {
+	background: var(--bg-hover);
+}
+
+.action-group-title {
+	font-weight: 600;
+}
+
+.action-group-count {
+	color: var(--text-subtle);
+	font-size: 11px;
+}
+
+.action-group-toggle {
+	margin-left: auto;
+	color: var(--text-subtle);
+	font-size: 10px;
+}
+
+.action-group-list {
+	list-style: none;
+}
+
+.action-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 12px;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	cursor: pointer;
+	transition: background 0.1s;
+	border-top: 1px solid var(--border);
+}
+
+.action-item:hover {
+	background: var(--bg-hover);
+}
+
+.action-item.expanded {
+	background: var(--bg-surface);
+}
+
+/* Status icons (CSS-only) */
+.status-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.status-icon-pending {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	border: 1.5px solid var(--text-subtle);
+}
+
+.status-icon-running {
+	width: 10px;
+	height: 10px;
+	border: 1.5px solid var(--border);
+	border-top-color: var(--brand-1);
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.status-icon-done {
+	color: var(--green);
+	font-size: 13px;
+	line-height: 1;
+}
+
+.status-icon-failed {
+	color: var(--red);
+	font-size: 13px;
+	line-height: 1;
+}
+
+.action-item-name {
+	font-weight: 600;
+	color: var(--brand-1);
+	white-space: nowrap;
+}
+
+.action-item-summary {
+	color: var(--text-subtle);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.action-item-duration {
+	margin-left: auto;
+	font-size: 11px;
+	color: var(--text-subtle);
+	flex-shrink: 0;
+}
+
+.action-item-detail {
+	padding: 8px 12px 8px 34px;
+	border-top: 1px solid var(--border);
+	background: var(--bg);
+}
+
+/* Todo widget */
+.todo-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.todo-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 0;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--text-muted);
+}
+
+.todo-status-icon {
+	width: 16px;
+	text-align: center;
+	flex-shrink: 0;
+	font-size: 14px;
+}
+
+.todo-status-done {
+	color: var(--green);
+}
+
+.todo-status-progress {
+	color: var(--brand-1);
+}
+
+.todo-status-pending {
+	color: var(--text-subtle);
+}
+
+.todo-content {
+	flex: 1;
+}
+
+.todo-priority {
+	font-size: 11px;
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--text-subtle);
+	flex-shrink: 0;
+}

@@ -2,29 +2,45 @@
 
 ## Project
 
-`create-electric-app` — CLI tool (`electric-agent`) that generates reactive Electric SQL + TanStack DB applications from natural-language descriptions using the Claude Agent SDK. See `ARCHITECTURE.md` for the full system design.
+`electric-agent` — pnpm workspaces monorepo containing three packages that together generate reactive Electric SQL + TanStack DB applications from natural-language descriptions using the Claude Agent SDK. See `ARCHITECTURE.md` for the full system design.
+
+### Packages
+
+| Package | Description |
+|---|---|
+| `@electric-agent/protocol` | Shared event types (`EngineEvent`) and helpers — the contract between agent and studio |
+| `@electric-agent/studio` | General-purpose agent platform — web UI (Hono + React SPA), sandbox providers, session bridges |
+| `@electric-agent/agent` | Electric SQL code generation agent + CLI (`electric-agent`) |
 
 ## Build, Test & Run
 
 ```bash
-npm install                      # install dependencies
-npm run build                    # compile TypeScript → dist/ + build React SPA
-npm run build:server             # compile TypeScript only (no web client)
-npm run build:web                # build React SPA only (Vite)
-npm run dev                      # tsc --watch (server only)
-npm run dev:web                  # vite dev server (React SPA hot reload)
-npm run check                    # Biome lint + format check
-npm run check:fix                # auto-fix Biome issues
-npx tsc --noEmit                 # type-check without emitting
-npm test                         # run tests (node:test runner via tsx)
-npm run build:sandbox            # build Docker sandbox image
+pnpm install                     # install all workspace dependencies
+pnpm run build                   # build all packages (protocol → studio → agent)
+pnpm run typecheck               # type-check all packages
+pnpm run check                   # Biome lint + format check
+pnpm run check:fix               # auto-fix Biome issues
+pnpm run test                    # run all tests across packages
+```
+
+### Per-package commands
+
+```bash
+pnpm --filter @electric-agent/protocol run build
+pnpm --filter @electric-agent/studio run build        # tsc + vite build (React SPA)
+pnpm --filter @electric-agent/studio run build:server  # tsc only (no web client)
+pnpm --filter @electric-agent/studio run dev:web       # vite dev server (hot reload)
+pnpm --filter @electric-agent/agent run build
+pnpm --filter @electric-agent/agent run dev            # tsc --watch
+pnpm --filter @electric-agent/agent run test
+pnpm --filter @electric-agent/studio run test
 ```
 
 ### Running the app
 
 ```bash
-npm run serve                    # start web UI (Hono + DurableStreams + React SPA)
-node dist/index.js headless      # headless NDJSON mode (used inside Docker containers)
+pnpm --filter @electric-agent/agent run serve    # start web UI (Hono + DurableStreams + React SPA)
+node packages/agent/dist/index.js headless       # headless NDJSON mode (used inside Docker containers)
 ```
 
 ### Deployment (Fly.io)
@@ -89,15 +105,19 @@ Publishing is managed by [Changesets](https://github.com/changesets/changesets) 
 
 ## Verification Checklist
 
-Before committing, always run:
+**IMPORTANT: You MUST run these checks before every commit. CI will reject PRs that fail any of these.**
 
-1. `npm run check:fix` — auto-fix Biome lint + format issues (covers all files under `src/`, including `src/web/client/`)
-2. `npm run check` — verify no remaining lint or format errors (this is what CI runs)
-3. `npx tsc --noEmit` — type-check passes
-4. `npm run build` — full build succeeds (TypeScript + Vite)
-5. `npm test` — tests pass
+```bash
+pnpm run check:fix               # 1. Auto-fix Biome lint + format issues
+pnpm run check                   # 2. Verify zero remaining lint/format errors
+pnpm run typecheck               # 3. Type-check all packages
+pnpm run build                   # 4. Full build succeeds (TypeScript + Vite)
+pnpm run test                    # 5. Tests pass
+```
 
-**Important**: `npm run check` / `check:fix` runs Biome on **all** of `src/`, including the web client (`src/web/client/**`). CI will fail if any file has formatting or lint issues, so always run `check:fix` before committing.
+**Build order matters**: protocol must build before studio (needs declaration files), and studio must build before agent. `pnpm run build` handles this automatically via workspace dependency ordering.
+
+**Important**: `pnpm run check` / `check:fix` runs Biome on **all** of `packages/`, including the web client (`packages/studio/client/**`). CI will fail if any file has formatting or lint issues, so always run `check:fix` before committing. The `check` output must show **zero errors** (warnings are acceptable for pre-existing `noNonNullAssertion` in tests/templates only).
 
 ## Architecture
 
@@ -106,96 +126,87 @@ See `ARCHITECTURE.md` for the complete architecture reference. Keep it updated w
 ### Source Layout
 
 ```
-src/
-├── index.ts                     # CLI entry point (commander)
-├── cli/                         # Command implementations
-│   ├── headless.ts              # NDJSON stdin/stdout mode (runs inside containers)
-│   └── serve.ts                 # Web UI server startup
-├── engine/                      # Shared orchestration (used by CLI + web)
-│   ├── events.ts                # EngineEvent union type — single source of truth
-│   ├── orchestrator.ts          # runNew() + runIterate() with callback-driven I/O
-│   ├── message-parser.ts        # SDK message → EngineEvent[] conversion
-│   └── headless-adapter.ts      # OrchestratorCallbacks for NDJSON stdin/stdout
-├── agents/                      # Agent execution via Claude Agent SDK
-│   ├── clarifier.ts             # Description evaluation + project name inference
-│   ├── planner.ts               # Planner agent (Sonnet) — generates PLAN.md
-│   ├── coder.ts                 # Coder agent (Sonnet) — executes plan tasks
-│   ├── git-agent.ts             # Git agent (Haiku) — commits, push, PRs
-│   └── prompts.ts               # System prompt builders for all agents
-├── tools/                       # Custom MCP tools
-│   ├── server.ts                # electric-agent-tools MCP server (build + playbooks)
-│   ├── git-server.ts            # git-tools MCP server (9 git operations)
-│   ├── git.ts                   # Git tool implementations
-│   ├── build.ts                 # build tool — pnpm build + check + test
-│   └── playbook.ts              # read_playbook + list_playbooks tools
-├── hooks/                       # Agent SDK guardrail hooks
-│   ├── index.ts                 # Hook registry (coder + planner configs)
-│   ├── guardrail-inject.ts      # SessionStart: inject guardrails + ARCHITECTURE.md
-│   ├── write-protection.ts      # Block writes to config files
-│   ├── import-validation.ts     # Catch hallucinated imports
-│   ├── migration-validation.ts  # Auto-append REPLICA IDENTITY FULL
-│   ├── dependency-guard.ts      # Prevent dependency removal
-│   └── schema-consistency.ts    # Warn on bad Zod patterns
-├── git/                         # Server-side git helpers (used by web server)
-│   └── index.ts                 # gitStatus, ghListAccounts, ghListRepos, etc.
-├── scaffold/                    # Project scaffolding
-│   └── index.ts                 # KPB clone + template overlay + dep merge + install
-├── working-memory/              # Agent state persistence
-│   ├── session.ts               # Session state (phase, task, build status)
-│   └── errors.ts                # Error log with dedup detection
-├── progress/                    # CLI output
-│   └── reporter.ts              # Color-coded progress logging
-└── web/                         # Web UI server + client
-    ├── server.ts                # Hono API server (REST + static SPA)
-    ├── infra.ts                 # DurableStream server lifecycle
-    ├── gate.ts                  # Promise-based gate management
-    ├── sessions.ts              # Session index (JSON file)
-    ├── streams.ts               # Durable Streams connection config
-    ├── sandbox/                 # Container management
-    │   ├── types.ts             # SandboxProvider interface + types
-    │   ├── docker.ts            # DockerSandboxProvider implementation
-    │   ├── daytona.ts           # DaytonaSandboxProvider (cloud, snapshot-based)
-    │   ├── daytona-registry.ts  # Transient registry push + snapshot lifecycle
-    │   ├── daytona-push.ts      # CLI: build amd64 + push + create snapshot
-    │   ├── sprites.ts           # SpritesSandboxProvider (Fly.io Sprites)
-    │   ├── sprites-bootstrap.ts # Sprites bootstrap + checkpoint restore
-    │   └── index.ts             # Re-exports
-    ├── bridge/                  # Sandbox communication bridges
-    │   ├── types.ts             # SessionBridge interface
-    │   ├── hosted.ts            # HostedStreamBridge (Durable Streams)
-    │   ├── docker-stdio.ts      # DockerStdioBridge (stdin/stdout)
-    │   ├── daytona.ts           # DaytonaSessionBridge
-    │   ├── sprites.ts           # SpritesStdioBridge (Sprites SDK sessions)
-    │   └── index.ts             # Re-exports
-    └── client/                  # React SPA (built with Vite, deployed with server)
-        ├── index.html
-        ├── vite.config.ts
-        └── src/
-            ├── main.tsx
-            ├── router.tsx       # / (HomePage) and /session/:id (SessionPage)
-            ├── hooks/
-            │   └── useSession.ts   # Durable stream subscription + event reducer
-            ├── components/
-            │   ├── Console.tsx     # Scrolling event log
-            │   ├── ConsoleEntry.tsx
-            │   ├── ToolExecution.tsx
-            │   ├── GatePrompt.tsx  # All gate UI components
-            │   ├── PromptInput.tsx
-            │   ├── Sidebar.tsx
-            │   ├── FileTree.tsx
-            │   ├── FileViewer.tsx
-            │   ├── RightPanel.tsx
-            │   ├── GitControls.tsx
-            │   ├── Settings.tsx
-            │   └── Markdown.tsx
-            ├── layouts/
-            │   └── AppShell.tsx    # Sidebar + context provider
-            ├── pages/
-            │   ├── HomePage.tsx
-            │   └── SessionPage.tsx
-            └── lib/
-                ├── api.ts          # fetch wrappers for /api/*
-                └── event-types.ts  # Client-side EngineEvent + ConsoleEntry types
+packages/
+├── protocol/                        # @electric-agent/protocol
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── events.ts                # EngineEvent union type — single source of truth
+│       └── index.ts                 # Re-exports
+├── studio/                          # @electric-agent/studio
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── src/
+│   │   ├── server.ts                # Hono API server (REST + static SPA)
+│   │   ├── gate.ts                  # Promise-based gate management
+│   │   ├── sessions.ts              # Session index (JSON file)
+│   │   ├── streams.ts               # Durable Streams connection config
+│   │   ├── electric-api.ts          # Electric SQL provisioning API
+│   │   ├── git.ts                   # GitHub listing fns (ghListAccounts, etc.)
+│   │   ├── project-utils.ts         # resolveProjectDir utility
+│   │   ├── index.ts                 # Barrel exports
+│   │   ├── sandbox/                 # Container management providers
+│   │   │   ├── types.ts             # SandboxProvider interface
+│   │   │   ├── docker.ts            # DockerSandboxProvider
+│   │   │   ├── daytona.ts           # DaytonaSandboxProvider
+│   │   │   ├── daytona-registry.ts  # Transient registry + snapshots
+│   │   │   ├── sprites.ts           # SpritesSandboxProvider
+│   │   │   ├── sprites-bootstrap.ts # Sprites bootstrap + checkpoint
+│   │   │   └── index.ts             # Re-exports
+│   │   └── bridge/                  # Session communication bridges
+│   │       ├── types.ts             # SessionBridge interface
+│   │       ├── hosted.ts            # HostedStreamBridge (Durable Streams)
+│   │       ├── docker-stdio.ts      # DockerStdioBridge (stdin/stdout)
+│   │       ├── daytona.ts           # DaytonaSessionBridge
+│   │       ├── sprites.ts           # SpritesStdioBridge
+│   │       └── index.ts             # Re-exports
+│   ├── client/                      # React SPA (Vite, own build)
+│   │   ├── index.html
+│   │   ├── vite.config.ts
+│   │   └── src/
+│   │       ├── main.tsx
+│   │       ├── router.tsx
+│   │       ├── hooks/useSession.ts
+│   │       ├── components/          # Console, GatePrompt, FileTree, etc.
+│   │       ├── layouts/AppShell.tsx
+│   │       ├── pages/               # HomePage, SessionPage
+│   │       └── lib/
+│   │           ├── api.ts           # fetch wrappers for /api/*
+│   │           └── event-types.ts   # Re-exports EngineEvent from protocol
+│   └── tests/
+│       ├── hook-bridge.test.ts
+│       ├── streams.test.ts
+│       ├── sandbox.test.ts
+│       ├── sprites.test.ts
+│       ├── claim-api.test.ts
+│       └── local-stream-server.ts   # Test helper
+└── agent/                           # @electric-agent/agent
+    ├── package.json
+    ├── tsconfig.json
+    ├── src/
+    │   ├── index.ts                 # CLI entry point (commander)
+    │   ├── cli/
+    │   │   ├── headless.ts          # NDJSON stdin/stdout mode
+    │   │   └── serve.ts             # Web UI server startup
+    │   ├── engine/
+    │   │   ├── orchestrator.ts      # runNew() + runIterate()
+    │   │   ├── message-parser.ts    # SDK message → EngineEvent[]
+    │   │   ├── headless-adapter.ts  # OrchestratorCallbacks for NDJSON
+    │   │   └── stream-adapter.ts    # OrchestratorCallbacks for streams
+    │   ├── agents/                  # Clarifier, Planner, Coder, Git Agent
+    │   ├── tools/                   # MCP tool servers
+    │   ├── hooks/                   # Agent SDK guardrail hooks
+    │   ├── scaffold/                # Project scaffolding
+    │   ├── working-memory/          # Agent state persistence
+    │   ├── progress/                # CLI progress reporting
+    │   └── git/                     # Local git operations
+    ├── playbooks/                   # Runtime asset
+    ├── template/                    # Runtime asset
+    └── tests/
+        ├── scaffold.test.ts
+        ├── bridge.test.ts
+        ├── e2e-docker.test.ts
+        └── e2e-daytona.test.ts
 ```
 
 ## Key Patterns
@@ -208,42 +219,49 @@ src/
 - **MCP Tools**: Created via `tool()` + `createSdkMcpServer()`. Referenced as `mcp__<server>__<tool>` in `allowedTools`.
 - **Agent SDK**: Uses `query()` with async generators. Planner uses Sonnet (10 turns), Coder uses Sonnet (200 turns, $25), Git Agent uses Haiku (5 turns, $0.25).
 - **Session resumption**: Coder returns `session_id` from SDK, stored and passed as `{ resume: sessionId }` on subsequent runs.
+- **Workspace dependency graph**: `protocol` → `studio` → `agent`. Studio imports types from protocol; agent imports from both.
 
 ## Conventions
 
+- **pnpm workspaces** — `workspace:*` for internal package dependencies
 - **Biome 2.2.4** for linting/formatting — tabs, double quotes, no semicolons
 - **No `any`** — use `Record<string, unknown>` for untyped SDK inputs
 - Template literals preferred over string concatenation
 - `const` over `let` where possible
 - Imports sorted alphabetically (enforced by Biome)
-- **Event types must stay in sync**: `src/engine/events.ts` (server) and `src/web/client/src/lib/event-types.ts` (client) define the same `EngineEvent` union. When adding/removing event types, update both files plus the `useSession.ts` reducer and any `GatePrompt.tsx` gate components.
+- **Changesets** for versioning — each PR should include a changeset (`pnpm exec changeset`)
+- **Event types**: `EngineEvent` is defined in `@electric-agent/protocol`. Client re-exports it. When adding/removing event types, update the protocol package, the `useSession.ts` reducer, and any `GatePrompt.tsx` gate components.
 
 ## Adding New Features
 
 ### New agent
-1. Create `src/agents/<name>.ts` following the pattern in `git-agent.ts` (simplest) or `coder.ts` (full-featured)
-2. Add system prompt builder to `src/agents/prompts.ts`
-3. If it needs tools, create MCP server in `src/tools/`
+1. Create `packages/agent/src/agents/<name>.ts` following the pattern in `git-agent.ts` (simplest) or `coder.ts` (full-featured)
+2. Add system prompt builder to `packages/agent/src/agents/prompts.ts`
+3. If it needs tools, create MCP server in `packages/agent/src/tools/`
 4. Wire into `orchestrator.ts` or `headless.ts` depending on when it runs
 
 ### New MCP tool
-1. Create tool function in `src/tools/<name>.ts` using `tool()` from the Agent SDK
+1. Create tool function in `packages/agent/src/tools/<name>.ts` using `tool()` from the Agent SDK
 2. Add to an existing MCP server (or create a new one via `createSdkMcpServer()`)
 3. Add the `mcp__<server>__<tool>` name to the agent's `allowedTools` array
 
 ### New engine event
-1. Add type to `src/engine/events.ts`
-2. Add matching type to `src/web/client/src/lib/event-types.ts`
-3. Handle in `src/web/client/src/hooks/useSession.ts` `processEvent()` reducer
-4. If it's a gate event, add UI component in `GatePrompt.tsx`
+1. Add type to `packages/protocol/src/events.ts`
+2. Handle in `packages/studio/client/src/hooks/useSession.ts` `processEvent()` reducer
+3. If it's a gate event, add UI component in `GatePrompt.tsx`
 
 ### New guardrail hook
-1. Create hook in `src/hooks/<name>.ts`
-2. Register in `src/hooks/index.ts` under the appropriate agent config and matcher
+1. Create hook in `packages/agent/src/hooks/<name>.ts`
+2. Register in `packages/agent/src/hooks/index.ts` under the appropriate agent config and matcher
 
 ### New API route
-1. Add to `src/web/server.ts` in `createApp()`
-2. Add client wrapper in `src/web/client/src/lib/api.ts`
+1. Add to `packages/studio/src/server.ts` in `createApp()`
+2. Add client wrapper in `packages/studio/client/src/lib/api.ts`
+
+### New sandbox provider
+1. Create provider in `packages/studio/src/sandbox/<name>.ts` implementing `SandboxProvider`
+2. Add subpath export to `packages/studio/package.json`
+3. Wire into `packages/agent/src/cli/serve.ts` runtime selection
 
 ## CI / GitHub Actions Secrets
 
@@ -263,7 +281,8 @@ The following secrets are configured on the GitHub repository (set via `gh secre
 
 ## Common Gotchas
 
-- **EngineEvent sync**: Forgetting to update client-side `event-types.ts` when changing `events.ts` causes silent type mismatches at runtime.
+- **Build order**: Protocol must be built before studio can typecheck (workspace resolution needs `dist/`). Use `pnpm run build` which respects dependency order.
+- **EngineEvent sync**: `EngineEvent` lives in `@electric-agent/protocol`. Client re-exports it. When changing events, rebuild protocol before testing other packages.
 - **Sandbox image staleness**: Code changes require rebuilding the Docker image (`npm run build:sandbox` for local, `npm run push:sandbox:daytona` for Daytona). Easy to forget.
 - **Sandbox platform**: `build:sandbox` builds native (ARM on Mac), `push:sandbox:daytona` builds linux/amd64. Daytona will fail with "no matching manifest for linux/amd64" if you push an ARM image.
 - **Daytona snapshot caching**: `DaytonaSandboxProvider` caches the snapshot name in-memory after first resolve. Restart the server to pick up a new snapshot after re-pushing.
@@ -274,3 +293,4 @@ The following secrets are configured on the GitHub repository (set via `gh secre
 - **Sprites CLI flag order**: The `sprite` CLI uses Go-style flags — flags must come before positional arguments (e.g., `sprite destroy -force <name>`).
 - **Sprites PATH**: npm global binaries (like `electric-agent`) are not in PATH by default. Always source `/etc/profile.d/npm-global.sh` before running them.
 - **GitHub token flow**: API keys and GH tokens are stored in the browser's localStorage, sent to the server via POST body (`ghToken` field) or `X-GH-Token` header (GET requests), and passed explicitly to `gh` CLI functions. Do not rely on ambient `GH_TOKEN` env vars on the server.
+- **Studio subpath exports**: Studio exposes `./server`, `./streams`, `./sessions`, `./sandbox`, `./sandbox/*`, `./bridge`. Import from specific subpaths, not the barrel `@electric-agent/studio`.

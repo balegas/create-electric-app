@@ -1,0 +1,350 @@
+/* Gate prompts */
+.gate-prompt {
+	margin: 8px 0;
+	padding: 16px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--bg-surface);
+}
+
+.gate-prompt h3 {
+	font-family: var(--font-sans);
+	font-size: 15px;
+	font-weight: 600;
+	margin-bottom: 8px;
+	color: var(--brand-1);
+}
+
+.gate-prompt .gate-summary {
+	color: var(--text-muted);
+	font-size: 13px;
+	font-family: var(--font-sans);
+	margin-bottom: 12px;
+}
+
+/* Plan gate — unwrapped, inline with console */
+.gate-plan {
+	margin: 8px 0;
+}
+
+.gate-plan-body {
+	padding: 4px 0;
+}
+
+.gate-plan-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+	padding: 12px 0;
+	border-top: 1px solid var(--border);
+}
+
+/* Clarification gate */
+.gate-prompt .question {
+	margin-bottom: 8px;
+}
+
+.gate-prompt .question label {
+	display: block;
+	font-family: var(--font-sans);
+	font-size: 13px;
+	color: var(--text-muted);
+	margin-bottom: 4px;
+}
+
+.gate-prompt .question input,
+.gate-prompt .question select {
+	width: 100%;
+	padding: 6px 10px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	font-family: var(--font-mono);
+	font-size: 13px;
+}
+
+.gate-prompt .question select {
+	appearance: none;
+	-webkit-appearance: none;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 10px center;
+	padding-right: 30px;
+	cursor: pointer;
+}
+
+.gate-prompt .question select:hover {
+	border-color: var(--text-subtle);
+}
+
+.gate-prompt .question input:focus,
+.gate-prompt .question textarea:focus,
+.gate-prompt .question select:focus {
+	outline: none;
+	border-color: var(--brand-2);
+}
+
+.gate-prompt .question textarea {
+	width: 100%;
+	padding: 6px 10px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	resize: vertical;
+}
+
+/* Gate action buttons */
+.gate-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.gate-btn {
+	padding: 6px 16px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		border-color 0.15s;
+}
+
+.gate-btn:hover {
+	background: var(--bg-hover);
+}
+
+.gate-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.gate-btn-primary {
+	background: transparent;
+	border-color: var(--brand-3);
+	color: var(--brand-1);
+	font-weight: 600;
+}
+
+.gate-btn-primary:hover {
+	background: var(--brand-2);
+	border-color: var(--brand-2);
+	color: #fff;
+}
+
+.gate-btn-danger {
+	border-color: var(--red);
+	color: var(--red);
+}
+
+.gate-btn-danger:hover {
+	background: rgba(248, 81, 73, 0.1);
+}
+
+/* Continue gate — compact banner */
+.gate-continue {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 4px 0;
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--bg-surface);
+	font-family: var(--font-mono);
+	font-size: 13px;
+}
+
+.gate-continue-text {
+	color: var(--text-muted);
+	flex: 1;
+}
+
+.gate-continue .gate-btn {
+	padding: 4px 12px;
+	font-size: 12px;
+}
+
+/* Radio group for publish visibility etc. */
+.gate-radio-group {
+	display: flex;
+	gap: 12px;
+	margin-top: 4px;
+	padding: 4px 0;
+}
+
+.gate-radio {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--text);
+	cursor: pointer;
+	line-height: 1.4;
+	padding: 4px 10px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	transition:
+		background 0.15s,
+		border-color 0.15s;
+}
+
+.gate-radio:hover {
+	background: var(--bg-hover);
+}
+
+.gate-radio:has(input:checked) {
+	border-color: var(--brand-2);
+	background: var(--bg-hover);
+}
+
+.gate-radio input[type="radio"],
+.gate-radio input[type="checkbox"] {
+	width: auto;
+	margin: 0;
+	vertical-align: middle;
+	accent-color: var(--brand-2);
+}
+
+/* Infra mode option buttons */
+.gate-option-group {
+	display: flex;
+	gap: 8px;
+	margin: 8px 0;
+}
+
+.gate-option {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 10px 12px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: transparent;
+	cursor: pointer;
+	text-align: left;
+	transition:
+		background 0.15s,
+		border-color 0.15s;
+}
+
+.gate-option:hover {
+	background: var(--bg-hover);
+}
+
+.gate-option.active {
+	border-color: var(--brand-2);
+	background: var(--bg-hover);
+}
+
+.gate-option:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.gate-option.selected {
+	border-color: var(--green);
+	opacity: 1;
+}
+
+.gate-option-title {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text);
+}
+
+.gate-option-desc {
+	font-size: 11px;
+	color: var(--text-subtle);
+	line-height: 1.3;
+}
+
+/* Resolved gate — expanded non-editable state */
+.gate-answered {
+	margin: 0;
+}
+
+.gate-answered-header {
+	display: flex;
+	align-items: center;
+	gap: 0;
+	padding: 3px 0;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 1.6;
+}
+
+.gate-answered-header .prefix {
+	font-weight: 600;
+	margin-right: 6px;
+}
+
+.gate-resolved-label {
+	color: var(--text-subtle);
+}
+
+.gate-answered .gate-prompt,
+.gate-answered .gate-plan,
+.gate-answered .gate-continue {
+	opacity: 0.65;
+}
+
+/* Continue gate — resolved decision text */
+.gate-continue-decision {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+/* Resolved infra config — key-value summary */
+.gate-config-summary {
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+	padding: 8px 10px;
+	margin: 6px 0;
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 1.6;
+	word-break: break-all;
+	color: var(--text-muted);
+}
+
+.gate-config-summary a {
+	color: var(--brand-1);
+	word-break: break-all;
+}
+
+/* Free-form answer display (resolved state) */
+.gate-answer-summary {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	color: var(--text-muted);
+	padding: 6px 10px;
+	margin: 8px 0;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+}
+
+/* Vertical option group for AskUserQuestion */
+.gate-option-group-vert {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 8px 0;
+}
+
+.gate-option-group-vert .gate-option {
+	flex: none;
+}

@@ -1,0 +1,115 @@
+import { useState } from "react"
+import type { ConsoleEntry } from "../lib/event-types"
+import { ToolExecution } from "./ToolExecution"
+
+type ToolEntry = Extract<ConsoleEntry, { kind: "tool_use" }>
+
+interface ActionGroupProps {
+	entries: ToolEntry[]
+	durations: (string | null)[]
+}
+
+function getToolSummary(entry: ToolEntry): string {
+	const { tool_name, tool_input } = entry
+	if (tool_name === "Write" || tool_name === "Edit") {
+		return (tool_input.file_path as string) || "unknown file"
+	}
+	if (tool_name === "Read") {
+		return (tool_input.file_path as string) || "unknown file"
+	}
+	if (tool_name === "Bash") {
+		return ((tool_input.command as string) || "").slice(0, 60)
+	}
+	if (tool_name === "Glob") {
+		return (tool_input.pattern as string) || "*"
+	}
+	if (tool_name === "Grep") {
+		return (tool_input.pattern as string) || ""
+	}
+	return tool_name
+}
+
+function getStatus(entry: ToolEntry, isLast: boolean): "pending" | "running" | "done" | "failed" {
+	if (entry.tool_response === null) {
+		return isLast ? "running" : "pending"
+	}
+	// Simple heuristic: check if output contains error indicators
+	const out = entry.tool_response.toLowerCase()
+	if (out.includes("error:") || out.includes("failed") || out.startsWith("error")) {
+		return "failed"
+	}
+	return "done"
+}
+
+function StatusIcon({ status }: { status: string }) {
+	switch (status) {
+		case "pending":
+			return (
+				<span className="status-icon">
+					<span className="status-icon-pending" />
+				</span>
+			)
+		case "running":
+			return (
+				<span className="status-icon">
+					<span className="status-icon-running" />
+				</span>
+			)
+		case "done":
+			return <span className="status-icon status-icon-done">{"\u2713"}</span>
+		case "failed":
+			return <span className="status-icon status-icon-failed">{"\u2717"}</span>
+		default:
+			return null
+	}
+}
+
+export function ActionGroup({ entries, durations }: ActionGroupProps) {
+	const [collapsed, setCollapsed] = useState(false)
+	const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+
+	const doneCount = entries.filter((e) => e.tool_response !== null).length
+	const total = entries.length
+	const allDone = doneCount === total
+
+	return (
+		<div className="action-group">
+			<div className="action-group-header" onClick={() => setCollapsed((v) => !v)}>
+				<span className="action-group-title">Actions</span>
+				<span className="action-group-count">
+					{allDone ? `${total} complete` : `${doneCount} of ${total} complete`}
+				</span>
+				<span className="action-group-toggle">{collapsed ? "\u25B6" : "\u25BC"}</span>
+			</div>
+
+			{!collapsed && (
+				<div className="action-group-list">
+					{entries.map((entry, i) => {
+						const isLast = i === entries.length - 1
+						const status = getStatus(entry, isLast)
+						const isExpanded = expandedIdx === i
+
+						return (
+							<div key={entry.tool_use_id || `action-${i}`}>
+								<div
+									className={`action-item ${isExpanded ? "expanded" : ""}`}
+									onClick={() => setExpandedIdx(isExpanded ? null : i)}
+								>
+									<StatusIcon status={status} />
+									<span className="action-item-name">{entry.tool_name}</span>
+									<span className="action-item-summary">{getToolSummary(entry)}</span>
+									{durations[i] && <span className="action-item-duration">{durations[i]}</span>}
+								</div>
+								{isExpanded && (
+									<div className="action-item-detail">
+										<ToolExecution entry={entry} duration={durations[i]} />
+									</div>
+								)}
+							</div>
+						)
+					})}
+				</div>
+			)}
+		</div>
+	)
+}
