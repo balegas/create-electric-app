@@ -26,6 +26,9 @@
 		"clean": "rm -rf dist"
 	},
 	"license": "Apache-2.0",
+	"publishConfig": {
+		"access": "public"
+	},
 	"engines": {
 		"node": ">=24.0.0"
 	},

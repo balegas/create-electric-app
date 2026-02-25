@@ -49,6 +49,9 @@
 		"clean": "rm -rf dist"
 	},
 	"license": "Apache-2.0",
+	"publishConfig": {
+		"access": "public"
+	},
 	"dependencies": {
 		"@electric-agent/protocol": "workspace:*",
 		"@daytonaio/api-client": "^0.144.0",
