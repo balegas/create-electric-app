@@ -3,13 +3,13 @@ import "./setup-proxy.js"
 import { after, before, describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { DurableStream } from "@durable-streams/client"
-import { HostedStreamBridge } from "../src/web/bridge/hosted.js"
+import { HostedStreamBridge } from "../src/bridge/hosted.js"
 import {
 	getStreamConfig,
 	getStreamConnectionInfo,
 	getStreamEnvVars,
-} from "../src/web/streams.js"
-import type { StreamMessage } from "../src/web/bridge/types.js"
+} from "../src/studio/streams.js"
+import type { StreamMessage } from "../src/bridge/types.js"
 import type { EngineEvent } from "../src/engine/events.js"
 import { localStreamServer } from "./local-stream-server.js"
 

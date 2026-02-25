@@ -53,7 +53,7 @@ describe("provisionElectricResources", () => {
 		}) as typeof fetch
 
 		try {
-			const { provisionElectricResources } = await import("../src/web/electric-api.js")
+			const { provisionElectricResources } = await import("../src/studio/electric-api.js")
 			const result = await provisionElectricResources()
 
 			assert.equal(result.source_id, mockSourceId)
@@ -72,7 +72,7 @@ describe("provisionElectricResources", () => {
 		}) as typeof fetch
 
 		try {
-			const { provisionElectricResources } = await import("../src/web/electric-api.js")
+			const { provisionElectricResources } = await import("../src/studio/electric-api.js")
 			await assert.rejects(() => provisionElectricResources(), /Electric API error: 500/)
 		} finally {
 			globalThis.fetch = originalFetch
@@ -109,7 +109,7 @@ describe("provisionElectricResources", () => {
 		}) as typeof fetch
 
 		try {
-			const { provisionElectricResources } = await import("../src/web/electric-api.js")
+			const { provisionElectricResources } = await import("../src/studio/electric-api.js")
 			await assert.rejects(() => provisionElectricResources(), /Neon provisioning failed/)
 		} finally {
 			globalThis.fetch = originalFetch
@@ -124,7 +124,7 @@ describe("provisionElectricResources", () => {
 describe("InfraConfig claim mode", () => {
 	it("accepts claim mode with all required fields", () => {
 		// This is a compile-time check — if InfraConfig doesn't support claim mode, tsc will fail
-		const config: import("../src/web/sandbox/types.js").InfraConfig = {
+		const config: import("../src/sandbox/types.js").InfraConfig = {
 			mode: "claim",
 			databaseUrl: "postgresql://user:pass@host:5432/db",
 			electricUrl: "https://api.electric-sql.cloud",
@@ -142,7 +142,7 @@ describe("InfraConfig claim mode", () => {
 
 describe("Claim API integration (real)", { skip: !process.env.RUN_CLAIM_TESTS }, () => {
 	it("provisions real resources via the Claim API", async () => {
-		const { provisionElectricResources } = await import("../src/web/electric-api.js")
+		const { provisionElectricResources } = await import("../src/studio/electric-api.js")
 		const result = await provisionElectricResources()
 
 		assert.ok(result.source_id, "source_id should be present")

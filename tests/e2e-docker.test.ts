@@ -3,13 +3,13 @@ import "./setup-proxy.js"
 import assert from "node:assert/strict"
 import { execSync } from "node:child_process"
 import { before, describe, it } from "node:test"
-import { HostedStreamBridge } from "../src/web/bridge/hosted.js"
+import { HostedStreamBridge } from "../src/bridge/hosted.js"
 import type { EngineEvent } from "../src/engine/events.js"
 import {
 	getStreamConfig,
 	getStreamConnectionInfo,
 	getStreamEnvVars,
-} from "../src/web/streams.js"
+} from "../src/studio/streams.js"
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,11 +1,11 @@
 import { createRequire } from "node:module"
-import { DaytonaSandboxProvider } from "../web/sandbox/daytona.js"
-import { getSnapshotStatus } from "../web/sandbox/daytona-registry.js"
-import { DockerSandboxProvider } from "../web/sandbox/docker.js"
-import { SpritesSandboxProvider } from "../web/sandbox/sprites.js"
-import type { SandboxProvider } from "../web/sandbox/types.js"
-import { startWebServer } from "../web/server.js"
-import { getStreamConfig } from "../web/streams.js"
+import { DaytonaSandboxProvider } from "../sandbox/daytona.js"
+import { getSnapshotStatus } from "../sandbox/daytona-registry.js"
+import { DockerSandboxProvider } from "../sandbox/docker.js"
+import { SpritesSandboxProvider } from "../sandbox/sprites.js"
+import type { SandboxProvider } from "../sandbox/types.js"
+import { startWebServer } from "../studio/server.js"
+import { getStreamConfig } from "../studio/streams.js"
 
 const require = createRequire(import.meta.url)
 const { version } = require("../../package.json") as { version: string }

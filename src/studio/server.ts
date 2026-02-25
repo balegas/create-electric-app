@@ -8,21 +8,21 @@ import { serveStatic } from "@hono/node-server/serve-static"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { inferProjectName } from "../agents/clarifier.js"
+import { DaytonaSessionBridge } from "../bridge/daytona.js"
+import { DockerStdioBridge } from "../bridge/docker-stdio.js"
+import { HostedStreamBridge } from "../bridge/hosted.js"
+import { SpritesStdioBridge } from "../bridge/sprites.js"
+import type { SessionBridge } from "../bridge/types.js"
 import type { EngineEvent } from "../engine/events.js"
 import { ts } from "../engine/events.js"
 import { resolveProjectDir } from "../engine/orchestrator.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "../git/index.js"
-import { DaytonaSessionBridge } from "./bridge/daytona.js"
-import { DockerStdioBridge } from "./bridge/docker-stdio.js"
-import { HostedStreamBridge } from "./bridge/hosted.js"
-import { SpritesStdioBridge } from "./bridge/sprites.js"
-import type { SessionBridge } from "./bridge/types.js"
+import type { DaytonaSandboxProvider as DaytonaSandboxProviderType } from "../sandbox/daytona.js"
+import type { DockerSandboxProvider as DockerSandboxProviderType } from "../sandbox/docker.js"
+import type { InfraConfig, SandboxProvider } from "../sandbox/index.js"
+import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "../sandbox/sprites.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
-import type { DaytonaSandboxProvider as DaytonaSandboxProviderType } from "./sandbox/daytona.js"
-import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
-import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
-import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
 import {
 	addSession,
 	cleanupStaleSessions,
@@ -1438,7 +1438,7 @@ export function createApp(config: ServerConfig) {
 	// Serve static SPA files (if built)
 	const clientDir = path.resolve(
 		path.dirname(new URL(import.meta.url).pathname),
-		"../../dist/web/client",
+		"../../dist/studio/client",
 	)
 	if (fs.existsSync(clientDir)) {
 		app.use("/*", serveStatic({ root: clientDir }))

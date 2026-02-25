@@ -2,10 +2,10 @@ import "dotenv/config"
 import "../tests/setup-proxy.js"
 import { strict as assert } from "node:assert"
 import { describe, it } from "node:test"
-import { DaytonaSandboxProvider } from "../src/web/sandbox/daytona.js"
-import { getSnapshotStatus } from "../src/web/sandbox/daytona-registry.js"
-import { DockerSandboxProvider } from "../src/web/sandbox/docker.js"
-import type { SandboxHandle, SandboxProvider } from "../src/web/sandbox/types.js"
+import { DaytonaSandboxProvider } from "../src/sandbox/daytona.js"
+import { getSnapshotStatus } from "../src/sandbox/daytona-registry.js"
+import { DockerSandboxProvider } from "../src/sandbox/docker.js"
+import type { SandboxHandle, SandboxProvider } from "../src/sandbox/types.js"
 
 // ---------------------------------------------------------------------------
 // DockerSandboxProvider — unit tests (no Docker daemon needed)

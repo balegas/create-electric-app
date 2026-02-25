@@ -101,7 +101,7 @@ jobs:
         id: changes
         run: |
           # Skip sandbox build if only web client files changed
-          CHANGED=$(git diff --name-only HEAD~1 HEAD -- . ':!src/web/client' | head -1)
+          CHANGED=$(git diff --name-only HEAD~1 HEAD -- . ':!src/studio/client' | head -1)
           if [ -z "$CHANGED" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Only web client changes — skipping sandbox build"

@@ -27,7 +27,7 @@ jobs:
           filters: |
             agent:
               - 'src/**'
-              - '!src/web/client/**'
+              - '!src/studio/client/**'
 
   deploy:
     name: Deploy PR Preview

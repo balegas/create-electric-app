@@ -6,9 +6,9 @@
  */
 
 import { DurableStream } from "@durable-streams/client"
-import type { EngineEvent } from "../../engine/events.js"
-import { ts } from "../../engine/events.js"
-import type { StreamConnectionInfo } from "../streams.js"
+import type { EngineEvent } from "../engine/events.js"
+import { ts } from "../engine/events.js"
+import type { StreamConnectionInfo } from "../studio/streams.js"
 import type { AgentEvent, SessionBridge, StreamMessage } from "./types.js"
 
 export class HostedStreamBridge implements SessionBridge {

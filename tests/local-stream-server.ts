@@ -16,7 +16,7 @@
  */
 
 import { DurableStreamTestServer } from "@durable-streams/server"
-import type { StreamConfig, StreamConnectionInfo } from "../src/web/streams.js"
+import type { StreamConfig, StreamConnectionInfo } from "../src/studio/streams.js"
 
 export interface LocalStreamServer {
 	/** Start the server (no-op if using hosted) */

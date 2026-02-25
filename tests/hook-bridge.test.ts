@@ -6,9 +6,9 @@ import path from "node:path"
 import assert from "node:assert/strict"
 import { after, before, describe, it } from "node:test"
 import { DurableStream } from "@durable-streams/client"
-import { createApp } from "../src/web/server.js"
-import { cleanupStaleSessions, getSession, readSessionIndex } from "../src/web/sessions.js"
-import type { SandboxHandle, SandboxProvider } from "../src/web/sandbox/types.js"
+import { createApp } from "../src/studio/server.js"
+import { cleanupStaleSessions, getSession, readSessionIndex } from "../src/studio/sessions.js"
+import type { SandboxHandle, SandboxProvider } from "../src/sandbox/types.js"
 import { localStreamServer } from "./local-stream-server.js"
 
 // ---------------------------------------------------------------------------

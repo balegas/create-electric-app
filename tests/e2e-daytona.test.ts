@@ -2,14 +2,14 @@ import "dotenv/config"
 import "./setup-proxy.js"
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { HostedStreamBridge } from "../src/web/bridge/hosted.js"
-import { DaytonaSandboxProvider } from "../src/web/sandbox/daytona.js"
+import { HostedStreamBridge } from "../src/bridge/hosted.js"
+import { DaytonaSandboxProvider } from "../src/sandbox/daytona.js"
 import type { EngineEvent } from "../src/engine/events.js"
 import {
 	getStreamConfig,
 	getStreamConnectionInfo,
 	getStreamEnvVars,
-} from "../src/web/streams.js"
+} from "../src/studio/streams.js"
 
 // ---------------------------------------------------------------------------
 // Helpers

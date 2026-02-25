@@ -2,8 +2,8 @@ import "dotenv/config"
 import { strict as assert } from "node:assert"
 import * as readline from "node:readline"
 import { after, describe, it } from "node:test"
-import { SpritesSandboxProvider } from "../src/web/sandbox/sprites.js"
-import type { SandboxHandle, SandboxProvider } from "../src/web/sandbox/types.js"
+import { SpritesSandboxProvider } from "../src/sandbox/sprites.js"
+import type { SandboxHandle, SandboxProvider } from "../src/sandbox/types.js"
 
 // ---------------------------------------------------------------------------
 // SpritesSandboxProvider — unit tests (no FLY_API_TOKEN needed)

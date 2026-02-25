@@ -91,13 +91,13 @@ Publishing is managed by [Changesets](https://github.com/changesets/changesets) 
 
 Before committing, always run:
 
-1. `npm run check:fix` — auto-fix Biome lint + format issues (covers all files under `src/`, including `src/web/client/`)
+1. `npm run check:fix` — auto-fix Biome lint + format issues (covers all files under `src/`, including `src/studio/client/`)
 2. `npm run check` — verify no remaining lint or format errors (this is what CI runs)
 3. `npx tsc --noEmit` — type-check passes
 4. `npm run build` — full build succeeds (TypeScript + Vite)
 5. `npm test` — tests pass
 
-**Important**: `npm run check` / `check:fix` runs Biome on **all** of `src/`, including the web client (`src/web/client/**`). CI will fail if any file has formatting or lint issues, so always run `check:fix` before committing.
+**Important**: `npm run check` / `check:fix` runs Biome on **all** of `src/`, including the web client (`src/studio/client/**`). CI will fail if any file has formatting or lint issues, so always run `check:fix` before committing.
 
 ## Architecture
 
@@ -145,28 +145,27 @@ src/
 │   └── errors.ts                # Error log with dedup detection
 ├── progress/                    # CLI output
 │   └── reporter.ts              # Color-coded progress logging
-└── web/                         # Web UI server + client
+├── sandbox/                     # Container management (general-purpose)
+│   ├── types.ts                 # SandboxProvider interface + types
+│   ├── docker.ts                # DockerSandboxProvider implementation
+│   ├── daytona.ts               # DaytonaSandboxProvider (cloud, snapshot-based)
+│   ├── daytona-registry.ts      # Transient registry push + snapshot lifecycle
+│   ├── daytona-push.ts          # CLI: build amd64 + push + create snapshot
+│   ├── sprites.ts               # SpritesSandboxProvider (Fly.io Sprites)
+│   ├── sprites-bootstrap.ts     # Sprites bootstrap + checkpoint restore
+│   └── index.ts                 # Re-exports
+├── bridge/                      # Session communication bridges (general-purpose)
+│   ├── types.ts                 # SessionBridge interface
+│   ├── hosted.ts                # HostedStreamBridge (Durable Streams)
+│   ├── docker-stdio.ts          # DockerStdioBridge (stdin/stdout)
+│   ├── daytona.ts               # DaytonaSessionBridge
+│   ├── sprites.ts               # SpritesStdioBridge (Sprites SDK sessions)
+│   └── index.ts                 # Re-exports
+└── studio/                      # Web UI server + client
     ├── server.ts                # Hono API server (REST + static SPA)
-    ├── infra.ts                 # DurableStream server lifecycle
     ├── gate.ts                  # Promise-based gate management
     ├── sessions.ts              # Session index (JSON file)
     ├── streams.ts               # Durable Streams connection config
-    ├── sandbox/                 # Container management
-    │   ├── types.ts             # SandboxProvider interface + types
-    │   ├── docker.ts            # DockerSandboxProvider implementation
-    │   ├── daytona.ts           # DaytonaSandboxProvider (cloud, snapshot-based)
-    │   ├── daytona-registry.ts  # Transient registry push + snapshot lifecycle
-    │   ├── daytona-push.ts      # CLI: build amd64 + push + create snapshot
-    │   ├── sprites.ts           # SpritesSandboxProvider (Fly.io Sprites)
-    │   ├── sprites-bootstrap.ts # Sprites bootstrap + checkpoint restore
-    │   └── index.ts             # Re-exports
-    ├── bridge/                  # Sandbox communication bridges
-    │   ├── types.ts             # SessionBridge interface
-    │   ├── hosted.ts            # HostedStreamBridge (Durable Streams)
-    │   ├── docker-stdio.ts      # DockerStdioBridge (stdin/stdout)
-    │   ├── daytona.ts           # DaytonaSessionBridge
-    │   ├── sprites.ts           # SpritesStdioBridge (Sprites SDK sessions)
-    │   └── index.ts             # Re-exports
     └── client/                  # React SPA (built with Vite, deployed with server)
         ├── index.html
         ├── vite.config.ts
@@ -216,7 +215,7 @@ src/
 - Template literals preferred over string concatenation
 - `const` over `let` where possible
 - Imports sorted alphabetically (enforced by Biome)
-- **Event types must stay in sync**: `src/engine/events.ts` (server) and `src/web/client/src/lib/event-types.ts` (client) define the same `EngineEvent` union. When adding/removing event types, update both files plus the `useSession.ts` reducer and any `GatePrompt.tsx` gate components.
+- **Event types must stay in sync**: `src/engine/events.ts` (server) and `src/studio/client/src/lib/event-types.ts` (client) define the same `EngineEvent` union. When adding/removing event types, update both files plus the `useSession.ts` reducer and any `GatePrompt.tsx` gate components.
 
 ## Adding New Features
 
@@ -233,8 +232,8 @@ src/
 
 ### New engine event
 1. Add type to `src/engine/events.ts`
-2. Add matching type to `src/web/client/src/lib/event-types.ts`
-3. Handle in `src/web/client/src/hooks/useSession.ts` `processEvent()` reducer
+2. Add matching type to `src/studio/client/src/lib/event-types.ts`
+3. Handle in `src/studio/client/src/hooks/useSession.ts` `processEvent()` reducer
 4. If it's a gate event, add UI component in `GatePrompt.tsx`
 
 ### New guardrail hook
@@ -242,8 +241,8 @@ src/
 2. Register in `src/hooks/index.ts` under the appropriate agent config and matcher
 
 ### New API route
-1. Add to `src/web/server.ts` in `createApp()`
-2. Add client wrapper in `src/web/client/src/lib/api.ts`
+1. Add to `src/studio/server.ts` in `createApp()`
+2. Add client wrapper in `src/studio/client/src/lib/api.ts`
 
 ## CI / GitHub Actions Secrets
 

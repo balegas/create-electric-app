@@ -9,8 +9,8 @@
 import { type ChildProcess, spawn } from "node:child_process"
 import * as readline from "node:readline"
 import { DurableStream } from "@durable-streams/client"
-import type { EngineEvent } from "../../engine/events.js"
-import type { StreamConnectionInfo } from "../streams.js"
+import type { EngineEvent } from "../engine/events.js"
+import type { StreamConnectionInfo } from "../studio/streams.js"
 import type { SessionBridge, StreamMessage } from "./types.js"
 
 export class DockerStdioBridge implements SessionBridge {

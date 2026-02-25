@@ -1,4 +1,4 @@
-import type { EngineEvent } from "../../engine/events.js"
+import type { EngineEvent } from "../engine/events.js"
 
 /**
  * Bidirectional communication bridge between the web server and a sandbox.

@@ -9,8 +9,8 @@
 
 import type { Sandbox } from "@daytonaio/sdk"
 import { DurableStream } from "@durable-streams/client"
-import type { EngineEvent } from "../../engine/events.js"
-import type { StreamConnectionInfo } from "../streams.js"
+import type { EngineEvent } from "../engine/events.js"
+import type { StreamConnectionInfo } from "../studio/streams.js"
 import type { SessionBridge, StreamMessage } from "./types.js"
 
 const DAYTONA_SESSION_ID = "agent-session"
