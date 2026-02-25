@@ -21,7 +21,7 @@
     "check:fix": "biome check --write src/",
     "start": "node dist/index.js",
     "serve": "node dist/index.js serve",
-    "test": "node --import tsx --test tests/sandbox.test.ts tests/scaffold.test.ts tests/streams.test.ts tests/bridge.test.ts",
+    "test": "node --import tsx --test tests/sandbox.test.ts tests/scaffold.test.ts tests/streams.test.ts tests/bridge.test.ts tests/hook-bridge.test.ts",
     "test:e2e:docker": "node --import tsx --test tests/e2e-docker.test.ts",
     "build:sandbox": "docker build -f Dockerfile.sandbox -t electric-agent-sandbox .",
     "build:test-sandbox": "docker build -f Dockerfile.test-sandbox -t electric-agent-test-sandbox .",

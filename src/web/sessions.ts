@@ -18,6 +18,8 @@ export interface SessionInfo {
 	previewUrl?: string
 	/** Claim ID from the Electric Claim API — used for "claim into your account" */
 	claimId?: string
+	/** Claude Code's own session ID — maps Claude sessions to EA sessions */
+	claudeSessionId?: string
 	/** Git state — populated after scaffold or publish */
 	git?: {
 		branch: string
@@ -82,4 +84,29 @@ export function deleteSession(dataDir: string, sessionId: string): boolean {
 export function getSession(dataDir: string, sessionId: string): SessionInfo | undefined {
 	const index = readSessionIndex(dataDir)
 	return index.sessions.find((s) => s.id === sessionId)
+}
+
+/**
+ * Mark stale running sessions as "error".
+ * A session is stale if its status is "running" and lastActiveAt is older than thresholdMs.
+ * Returns the number of sessions cleaned up.
+ */
+export function cleanupStaleSessions(dataDir: string, thresholdMs = 2 * 60 * 60 * 1000): number {
+	const index = readSessionIndex(dataDir)
+	const now = Date.now()
+	let count = 0
+
+	for (const session of index.sessions) {
+		if (session.status !== "running") continue
+		const lastActive = new Date(session.lastActiveAt).getTime()
+		if (now - lastActive > thresholdMs) {
+			session.status = "error"
+			count++
+		}
+	}
+
+	if (count > 0) {
+		writeSessionIndex(dataDir, index)
+	}
+	return count
 }

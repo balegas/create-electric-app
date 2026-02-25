@@ -25,6 +25,7 @@ import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
 import {
 	addSession,
+	cleanupStaleSessions,
 	deleteSession,
 	getSession,
 	readSessionIndex,
@@ -325,8 +326,9 @@ export function createApp(config: ServerConfig) {
 		}
 	})
 
-	// List all sessions
+	// List all sessions (lazily clean up stale ones)
 	app.get("/api/sessions", (c) => {
+		cleanupStaleSessions(config.dataDir)
 		const index = readSessionIndex(config.dataDir)
 		return c.json(index)
 	})
@@ -380,6 +382,59 @@ export function createApp(config: ServerConfig) {
 		return c.json({ sessionId }, 201)
 	})
 
+	// Auto-register a local session on first hook event (SessionStart).
+	// Eliminates the manual `curl POST /api/sessions/local` step.
+	app.post("/api/sessions/auto", async (c) => {
+		const body = (await c.req.json()) as Record<string, unknown>
+		const hookName = body.hook_event_name as string | undefined
+
+		if (hookName !== "SessionStart") {
+			return c.json({ error: "Only SessionStart events can auto-register a session" }, 400)
+		}
+
+		const sessionId = crypto.randomUUID()
+
+		// Create the durable stream
+		const conn = sessionStream(config, sessionId)
+		try {
+			await DurableStream.create({
+				url: conn.url,
+				headers: conn.headers,
+				contentType: "application/json",
+			})
+		} catch (err) {
+			console.error(`[auto-session] Failed to create durable stream:`, err)
+			return c.json({ error: "Failed to create event stream" }, 500)
+		}
+
+		// Derive project name from cwd
+		const cwd = body.cwd as string | undefined
+		const projectName = cwd ? path.basename(cwd) : "local-session"
+		const claudeSessionId = body.session_id as string | undefined
+
+		const session: SessionInfo = {
+			id: sessionId,
+			projectName,
+			sandboxProjectDir: cwd || "",
+			description: `Local session: ${projectName}`,
+			createdAt: new Date().toISOString(),
+			lastActiveAt: new Date().toISOString(),
+			status: "running",
+			claudeSessionId: claudeSessionId || undefined,
+		}
+		addSession(config.dataDir, session)
+
+		// Create bridge and emit the SessionStart event
+		const bridge = getOrCreateBridge(config, sessionId)
+		const hookEvent = mapHookToEngineEvent(body)
+		if (hookEvent) {
+			await bridge.emit(hookEvent)
+		}
+
+		console.log(`[auto-session] Created session: ${sessionId} (project: ${projectName})`)
+		return c.json({ sessionId }, 201)
+	})
+
 	// Receive a hook event from Claude Code (via forward.sh) and write it
 	// to the session's durable stream as an EngineEvent.
 	// For AskUserQuestion, this blocks until the user answers in the web UI.
@@ -400,6 +455,16 @@ export function createApp(config: ServerConfig) {
 		} catch (err) {
 			console.error(`[hook-event] Failed to emit:`, err)
 			return c.json({ error: "Failed to write event" }, 500)
+		}
+
+		// Bump lastActiveAt on every hook event
+		updateSessionInfo(config.dataDir, sessionId, {})
+
+		// SessionEnd: mark session complete and close the bridge
+		if (hookEvent.type === "session_end") {
+			updateSessionInfo(config.dataDir, sessionId, { status: "complete" })
+			closeBridge(sessionId)
+			return c.json({ ok: true })
 		}
 
 		// AskUserQuestion: block until the user answers via the web UI
@@ -1409,6 +1474,12 @@ export async function startWebServer(opts: {
 	}
 
 	fs.mkdirSync(config.dataDir, { recursive: true })
+
+	// Clean up stale sessions from previous runs
+	const cleaned = cleanupStaleSessions(config.dataDir)
+	if (cleaned > 0) {
+		console.log(`[startup] Cleaned up ${cleaned} stale session(s)`)
+	}
 
 	const app = createApp(config)
 
