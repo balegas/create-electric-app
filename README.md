@@ -1,9 +1,31 @@
-# create-electric-app
+# electric-agent
 
 CLI tool that turns natural-language app descriptions into running reactive [Electric SQL](https://electric-sql.com/) + [TanStack DB](https://tanstack.com/db) applications using Claude as the code generation engine.
 
 ```bash
 electric-agent new "a project management app with boards and tasks"
+```
+
+## Monorepo Structure
+
+This is a pnpm workspaces monorepo with three packages:
+
+| Package | npm | Description |
+|---|---|---|
+| `@electric-agent/protocol` | [![npm](https://img.shields.io/npm/v/@electric-agent/protocol)](https://www.npmjs.com/package/@electric-agent/protocol) | Shared event types (`EngineEvent`) and helpers |
+| `@electric-agent/studio` | [![npm](https://img.shields.io/npm/v/@electric-agent/studio)](https://www.npmjs.com/package/@electric-agent/studio) | Web UI, sandbox providers, session bridges |
+| `@electric-agent/agent` | [![npm](https://img.shields.io/npm/v/@electric-agent/agent)](https://www.npmjs.com/package/@electric-agent/agent) | Electric SQL code generation agent + CLI |
+
+```
+packages/
+├── protocol/          # @electric-agent/protocol — event contract between agent and studio
+├── studio/            # @electric-agent/studio — Hono server, React SPA, sandbox management
+│   ├── src/           #   Server code (Hono API, streams, sessions, sandbox providers, bridges)
+│   └── client/        #   React SPA (Vite build)
+└── agent/             # @electric-agent/agent — CLI entry point, orchestrator, agents, tools
+    ├── src/           #   Agent code (orchestrator, planner, coder, hooks, scaffold)
+    ├── playbooks/     #   Runtime playbook assets
+    └── template/      #   Project template files
 ```
 
 ## How It Works
@@ -58,7 +80,7 @@ The agent follows a multi-phase pipeline to go from a text description to a runn
 │      ▼                                                              │
 │  Phase 5: Testing ─────── Zod schema smoke tests (no Docker)        │
 │                           + collection insert validation            │
-│                           + JSON round-trip tests                    │
+│                           + JSON round-trip tests                   │
 │                                                                     │
 │  After each phase: build tool runs pnpm build + check + test        │
 └──────────────────────────────┬──────────────────────────────────────┘
@@ -249,7 +271,7 @@ my-app/
 ├── docker-compose.yml          # Postgres + Electric + Caddy
 ├── Caddyfile                   # Reverse proxy (5173 → Vite 5174 + Electric 3000)
 ├── drizzle.config.ts           # Drizzle Kit config
-├── vitest.config.ts            # Vitest with @/ alias
+├── vitest.config.ts            # Vitest config
 ├── PLAN.md                     # Implementation plan (maintained across iterations)
 ├── drizzle/                    # Generated SQL migrations
 ├── src/
@@ -299,14 +321,28 @@ electric-agent --debug <command>          # Enable debug logging
 
 ## Development
 
+### Quick Start
+
 ```bash
-npm install                   # Install dependencies
-npm run build                 # Compile TypeScript + Vite client → dist/
-npm run build:server          # Compile TypeScript only
-npm run build:web             # Build Vite client only
-npm run check                 # Biome lint + format check
-npm run check:fix             # Auto-fix Biome issues
-npx tsc --noEmit              # Type-check without emitting
+pnpm install                     # Install all workspace dependencies
+pnpm run build                   # Build all packages (protocol → studio → agent)
+pnpm run typecheck               # Type-check all packages
+pnpm run check                   # Biome lint + format check
+pnpm run check:fix               # Auto-fix Biome issues
+pnpm run test                    # Run all tests
+```
+
+### Per-Package Commands
+
+```bash
+pnpm --filter @electric-agent/protocol run build
+pnpm --filter @electric-agent/studio run build        # tsc + vite build (React SPA)
+pnpm --filter @electric-agent/studio run build:server  # tsc only (no web client)
+pnpm --filter @electric-agent/studio run dev:web       # vite dev server (hot reload)
+pnpm --filter @electric-agent/agent run build
+pnpm --filter @electric-agent/agent run dev            # tsc --watch
+pnpm --filter @electric-agent/agent run test
+pnpm --filter @electric-agent/studio run test
 ```
 
 ### Running the Web UI
@@ -314,8 +350,8 @@ npx tsc --noEmit              # Type-check without emitting
 Build and start the server:
 
 ```bash
-npm run build
-npm run serve                 # http://127.0.0.1:4400
+pnpm run build
+pnpm run serve                   # http://127.0.0.1:4400
 ```
 
 ### Running with Sandbox Mode
@@ -325,16 +361,14 @@ Sandbox mode runs each session inside an isolated Docker container instead of on
 1. **Build the sandbox image** (one-time, rebuild after code changes):
 
    ```bash
-   npm run build:sandbox         # Builds electric-agent-sandbox Docker image
+   pnpm run build:sandbox         # Builds electric-agent-sandbox Docker image
    ```
 
 2. **Start the server in sandbox mode:**
 
    ```bash
-   npm run serve:sandbox         # http://127.0.0.1:4400
+   pnpm run serve -- --sandbox    # http://127.0.0.1:4400
    ```
-
-   Or equivalently: `npm run serve -- --sandbox`
 
 **Authentication** — the sandbox container needs access to the Claude API. Auth is resolved in this order:
 
@@ -349,69 +383,27 @@ On Linux, option 3 is not available — use an API key.
 For development with hot-reload, run these in separate terminals:
 
 ```bash
-npm run dev                   # Terminal 1: tsc --watch (recompiles server on change)
-npm run serve                 # Terminal 2: backend API + durable-streams (port 4400)
-npm run dev:web               # Terminal 3: Vite dev server with HMR (port 4401)
+pnpm --filter @electric-agent/agent run dev     # Terminal 1: tsc --watch (server)
+pnpm run serve                                  # Terminal 2: backend API (port 4400)
+pnpm --filter @electric-agent/studio run dev:web # Terminal 3: Vite HMR (port 4401)
 ```
 
 Open http://127.0.0.1:4401 for development (Vite with hot-reload, proxies `/api` to the backend).
 Open http://127.0.0.1:4400 for production-like mode (static build served by Hono).
 
-### Source Structure
+### Releasing
 
-```
-src/
-├── index.ts                  # CLI entry point (commander)
-├── cli/                      # Command implementations (new, iterate, serve, headless, up, down, status)
-├── engine/                   # Shared orchestration (used by CLI + web + headless)
-│   ├── events.ts             # EngineEvent union type — single source of truth
-│   ├── orchestrator.ts       # runNew() + runIterate() with callback-driven I/O
-│   ├── message-parser.ts     # SDK message → EngineEvent[] conversion
-│   ├── cli-adapter.ts        # OrchestratorCallbacks using readline (CLI mode)
-│   └── headless-adapter.ts   # OrchestratorCallbacks using NDJSON stdin/stdout
-├── agents/
-│   ├── planner.ts            # Planner agent (Opus) — generates PLAN.md
-│   ├── coder.ts              # Coder agent (Sonnet) — executes plan tasks
-│   ├── prompts.ts            # System prompt builders
-│   └── patterns.md           # Code patterns + hallucination guards (injected into coder prompt)
-├── tools/
-│   ├── server.ts             # MCP tool server wrapper
-│   ├── build.ts              # Build tool (pnpm build + check + test)
-│   └── playbook.ts           # Playbook reading tools
-├── git/                      # Git + GitHub CLI wrappers (checkpoint, publish, PR, clone)
-├── hooks/                    # Agent SDK guardrail hooks (6 hooks)
-├── scaffold/                 # KPB clone + template overlay + dep merge
-├── working-memory/           # Session state + error log persistence
-├── progress/                 # CLI output + build result reporting
-└── web/                      # Web UI server + client
-    ├── server.ts             # Hono API server (REST + static files, local + sandbox modes)
-    ├── docker.ts             # Docker container lifecycle for sandbox mode
-    ├── container-bridge.ts   # Container stdout → durable stream bridge
-    ├── infra.ts              # Durable streams server lifecycle
-    ├── gate.ts               # Promise-based gate management for user decisions
-    ├── sessions.ts           # Session index (JSON file)
-    └── client/               # React SPA (built with Vite)
-        ├── index.html
-        ├── vite.config.ts
-        └── src/
-            ├── main.tsx
-            ├── App.tsx
-            ├── hooks/useSession.ts
-            ├── components/
-            └── lib/
+Publishing is managed by [Changesets](https://github.com/changesets/changesets) with automated CI via GitHub Actions.
 
-template/                     # Files overlaid onto scaffold
-├── docker-compose.yml        # Postgres + Electric + Caddy
-├── vitest.config.ts          # Vitest config
-├── tests/helpers/            # Test utilities (schema-test-utils.ts)
-├── src/db/                   # Drizzle client, schema placeholder, utils (parseDates)
-├── src/components/           # ClientOnly.tsx
-└── src/lib/                  # electric-proxy.ts
-```
+1. Add a changeset to your PR: `pnpm exec changeset` (select bump type + summary)
+2. Merge the PR to `main`
+3. The `release.yml` workflow creates a "chore: version packages" PR
+4. Merge the version PR → workflow publishes to npm with OIDC provenance
 
 ## Prerequisites
 
-- Node.js >= 20
+- Node.js >= 24
+- pnpm >= 10
 - Docker (for generated projects and sandbox mode)
 - `ANTHROPIC_API_KEY` environment variable, or `claude login` on macOS
 - [GitHub CLI (`gh`)](https://cli.github.com/) — required for GitHub integration (publish, PR, resume)
