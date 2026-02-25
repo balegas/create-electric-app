@@ -347,12 +347,22 @@ pnpm --filter @electric-agent/studio run test
 
 ### Running the Web UI
 
+The server requires Durable Streams credentials. Create a `.env` file at the project root with:
+
+```bash
+DS_URL=...           # Durable Streams API URL
+DS_SERVICE_ID=...    # Durable Streams service ID
+DS_SECRET=...        # Durable Streams JWT secret
+```
+
 Build and start the server:
 
 ```bash
 pnpm run build
 pnpm run serve                   # http://127.0.0.1:4400
 ```
+
+By default, the server uses Docker sandboxes (`SANDBOX_RUNTIME=docker`). The server must run directly on the host (not inside a container) so it can access the Docker daemon.
 
 ### Running with Sandbox Mode
 

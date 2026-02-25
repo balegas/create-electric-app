@@ -38,10 +38,16 @@ pnpm --filter @electric-agent/studio run test
 
 ### Running the app
 
+The server requires `DS_URL`, `DS_SERVICE_ID`, and `DS_SECRET` env vars (Durable Streams credentials). Set them in a `.env` file at the project root or export them before starting.
+
 ```bash
 pnpm --filter @electric-agent/agent run serve    # start web UI (Hono + DurableStreams + React SPA)
 node packages/agent/dist/index.js headless       # headless NDJSON mode (used inside Docker containers)
 ```
+
+- **`SANDBOX_RUNTIME=docker`** (default) — runs sessions in Docker containers. The server must run on the host (not inside a container) so it can access the Docker daemon.
+- **`SANDBOX_RUNTIME=sprites`** — uses Fly.io Sprites cloud VMs. Requires `FLY_API_TOKEN`.
+- **`SANDBOX_RUNTIME=daytona`** — uses Daytona cloud sandboxes. Requires `DAYTONA_API_KEY`.
 
 ### Deployment (Fly.io)
 
