@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAppContext } from "../layouts/AppShell"
+import { createSharedSession } from "../lib/api"
 import { removeJoinedSharedSession } from "../lib/shared-session-store"
 import { SessionListItem } from "./SessionListItem"
 
@@ -102,6 +103,18 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		[refreshJoinedSharedSessions],
 	)
 
+	const handleCreateShared = useCallback(async () => {
+		const name = prompt("Shared session name:")
+		if (!name?.trim()) return
+		try {
+			const { code } = await createSharedSession(name.trim())
+			navigate(`/shared/${code}`)
+			onMobileClose?.()
+		} catch (err) {
+			console.error("Failed to create shared session:", err)
+		}
+	}, [navigate, onMobileClose])
+
 	return (
 		<aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
 			<div className="sidebar-header">
@@ -150,6 +163,13 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 				))}
 
 				<div className="sidebar-section-label">Shared</div>
+
+				<div className="session-item" onClick={handleCreateShared} title="Create shared session">
+					<span className="session-avatar new-project-avatar">+</span>
+					<div className="session-item-details">
+						<div className="session-item-name">Create</div>
+					</div>
+				</div>
 
 				{joinInputOpen ? (
 					<div className="sidebar-join-input">
