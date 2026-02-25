@@ -133,8 +133,12 @@ close()
 			const collectedEvents: EngineEvent[] = []
 			let stderrOutput = ""
 
+			if (!proc.stdout) {
+				throw new Error("proc.stdout is not available")
+			}
+
 			const rl = readline.createInterface({
-				input: proc.stdout!,
+				input: proc.stdout,
 				terminal: false,
 			})
 

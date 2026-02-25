@@ -77,7 +77,8 @@ describe(
 			"full roundtrip: create Daytona sandbox, send command, receive echo, destroy",
 			{ timeout: 180_000 },
 			async () => {
-				const config = streamConfig!
+				if (!streamConfig) throw new Error("streamConfig is not available")
+				const config = streamConfig
 				const sessionId = uniqueSessionId()
 				const conn = getStreamConnectionInfo(sessionId, config)
 				const streamEnv = getStreamEnvVars(sessionId, config)
@@ -140,7 +141,8 @@ describe(
 		)
 
 		it("Daytona sandbox echoes iterate commands", { timeout: 180_000 }, async () => {
-			const config = streamConfig!
+			if (!streamConfig) throw new Error("streamConfig is not available")
+			const config = streamConfig
 			const sessionId = uniqueSessionId()
 			const conn = getStreamConnectionInfo(sessionId, config)
 			const streamEnv = getStreamEnvVars(sessionId, config)

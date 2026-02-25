@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import { createRequire } from "node:module"
+import { Command } from "commander"
 import dotenv from "dotenv"
+import { headlessCommand } from "./cli/headless.js"
+import { serveCommand } from "./cli/serve.js"
 import { findUp } from "./find-env.js"
 
 dotenv.config({ path: findUp(".env") })
-import { Command } from "commander"
-import { headlessCommand } from "./cli/headless.js"
-import { serveCommand } from "./cli/serve.js"
 
 const require = createRequire(import.meta.url)
 const { version } = require("../package.json") as { version: string }

@@ -185,8 +185,9 @@ describe("DaytonaSandboxProvider — Daytona API connectivity", () => {
 	const target = process.env.DAYTONA_TARGET || "eu"
 
 	it("can instantiate provider with real credentials", { skip: !apiKey }, () => {
+		if (!apiKey) throw new Error("DAYTONA_API_KEY is not set")
 		const provider = new DaytonaSandboxProvider({
-			apiKey: apiKey!,
+			apiKey,
 			apiUrl,
 			target,
 		})
@@ -194,9 +195,10 @@ describe("DaytonaSandboxProvider — Daytona API connectivity", () => {
 	})
 
 	it("can list sandboxes (validates API key)", { skip: !apiKey, timeout: 30000 }, async () => {
+		if (!apiKey) throw new Error("DAYTONA_API_KEY is not set")
 		const { Daytona } = await import("@daytonaio/sdk")
 		const client = new Daytona({
-			apiKey: apiKey!,
+			apiKey,
 			apiUrl,
 			target,
 		})
@@ -209,9 +211,10 @@ describe("DaytonaSandboxProvider — Daytona API connectivity", () => {
 		"can get transient push access (validates registry API auth)",
 		{ skip: !apiKey, timeout: 30000 },
 		async () => {
+			if (!apiKey) throw new Error("DAYTONA_API_KEY is not set")
 			const { Configuration, DockerRegistryApi } = await import("@daytonaio/api-client")
 			const config = new Configuration({
-				accessToken: apiKey!,
+				accessToken: apiKey,
 				basePath: apiUrl,
 			})
 			const registryApi = new DockerRegistryApi(config)
@@ -227,9 +230,10 @@ describe("DaytonaSandboxProvider — Daytona API connectivity", () => {
 	)
 
 	it("can check snapshot status", { skip: !apiKey, timeout: 30000 }, async () => {
+		if (!apiKey) throw new Error("DAYTONA_API_KEY is not set")
 		const { Daytona } = await import("@daytonaio/sdk")
 		const client = new Daytona({
-			apiKey: apiKey!,
+			apiKey,
 			apiUrl,
 			target,
 		})

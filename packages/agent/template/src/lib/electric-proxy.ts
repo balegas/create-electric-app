@@ -43,16 +43,16 @@ export async function proxyElectricRequest(request: Request, tableName: string):
 			"Cache-Control":
 				response.headers.get("Cache-Control") || "no-cache, no-store, must-revalidate",
 			...(response.headers.get("Electric-Handle")
-				? { "Electric-Handle": response.headers.get("Electric-Handle")! }
+				? { "Electric-Handle": response.headers.get("Electric-Handle") as string }
 				: {}),
 			...(response.headers.get("Electric-Offset")
-				? { "Electric-Offset": response.headers.get("Electric-Offset")! }
+				? { "Electric-Offset": response.headers.get("Electric-Offset") as string }
 				: {}),
 			...(response.headers.get("Electric-Schema")
-				? { "Electric-Schema": response.headers.get("Electric-Schema")! }
+				? { "Electric-Schema": response.headers.get("Electric-Schema") as string }
 				: {}),
 			...(response.headers.get("Electric-Cursor")
-				? { "Electric-Cursor": response.headers.get("Electric-Cursor")! }
+				? { "Electric-Cursor": response.headers.get("Electric-Cursor") as string }
 				: {}),
 		},
 	})

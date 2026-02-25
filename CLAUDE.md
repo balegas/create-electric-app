@@ -105,17 +105,19 @@ Publishing is managed by [Changesets](https://github.com/changesets/changesets) 
 
 ## Verification Checklist
 
-Before committing, always run:
+**IMPORTANT: You MUST run these checks before every commit. CI will reject PRs that fail any of these.**
 
-1. `pnpm run check:fix` — auto-fix Biome lint + format issues
-2. `pnpm run check` — verify no remaining lint or format errors (this is what CI runs)
-3. `pnpm run typecheck` — type-check all packages
-4. `pnpm run build` — full build succeeds (TypeScript + Vite)
-5. `pnpm run test` — tests pass
+```bash
+pnpm run check:fix               # 1. Auto-fix Biome lint + format issues
+pnpm run check                   # 2. Verify zero remaining lint/format errors
+pnpm run typecheck               # 3. Type-check all packages
+pnpm run build                   # 4. Full build succeeds (TypeScript + Vite)
+pnpm run test                    # 5. Tests pass
+```
 
 **Build order matters**: protocol must build before studio (needs declaration files), and studio must build before agent. `pnpm run build` handles this automatically via workspace dependency ordering.
 
-**Important**: `pnpm run check` / `check:fix` runs Biome on **all** of `packages/`, including the web client (`packages/studio/client/**`). CI will fail if any file has formatting or lint issues, so always run `check:fix` before committing.
+**Important**: `pnpm run check` / `check:fix` runs Biome on **all** of `packages/`, including the web client (`packages/studio/client/**`). CI will fail if any file has formatting or lint issues, so always run `check:fix` before committing. The `check` output must show **zero errors** (warnings are acceptable for pre-existing `noNonNullAssertion` in tests/templates only).
 
 ## Architecture
 

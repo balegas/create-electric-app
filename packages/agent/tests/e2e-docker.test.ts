@@ -97,7 +97,8 @@ describe("e2e-docker — test sandbox via stream bridge", { skip: skipReason ?? 
 		"full roundtrip: create container, send command, receive echo, destroy",
 		{ timeout: 120_000 },
 		async () => {
-			const config = streamConfig!
+			if (!streamConfig) throw new Error("streamConfig is not available")
+			const config = streamConfig
 			const sessionId = uniqueSessionId()
 			const conn = getStreamConnectionInfo(sessionId, config)
 			const streamEnv = getStreamEnvVars(sessionId, config)
@@ -170,7 +171,8 @@ describe("e2e-docker — test sandbox via stream bridge", { skip: skipReason ?? 
 	)
 
 	it("test sandbox echoes iterate commands", { timeout: 60_000 }, async () => {
-		const config = streamConfig!
+		if (!streamConfig) throw new Error("streamConfig is not available")
+		const config = streamConfig
 		const sessionId = uniqueSessionId()
 		const conn = getStreamConnectionInfo(sessionId, config)
 		const streamEnv = getStreamEnvVars(sessionId, config)
