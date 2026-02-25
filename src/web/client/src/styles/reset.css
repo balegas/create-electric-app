@@ -140,3 +140,99 @@ body,
 *::-webkit-scrollbar-thumb:hover {
 	background: var(--text-subtle);
 }
+
+/* ---- Font size presets ---- */
+
+/* Large: +1px across the board */
+html[data-font-size="large"],
+html[data-font-size="large"] body,
+html[data-font-size="large"] #root {
+	font-size: 16px;
+}
+
+html[data-font-size="large"] .console-entry,
+html[data-font-size="large"] .tool-inline summary,
+html[data-font-size="large"] .thinking-inline summary,
+html[data-font-size="large"] .tool-inline-agent,
+html[data-font-size="large"] .tool-inline-name,
+html[data-font-size="large"] .tool-inline-command,
+html[data-font-size="large"] .action-group-header,
+html[data-font-size="large"] .action-item,
+html[data-font-size="large"] .session-item-name,
+html[data-font-size="large"] .tab-btn,
+html[data-font-size="large"] .session-header {
+	font-size: 14px;
+}
+
+html[data-font-size="large"] .hero-subtitle {
+	font-size: 18px;
+}
+
+html[data-font-size="large"] .hero-prompt .prompt-bar textarea,
+html[data-font-size="large"] .prompt-bar textarea {
+	font-size: 16px;
+}
+
+html[data-font-size="large"] .tool-inline-body pre,
+html[data-font-size="large"] .thinking-body pre {
+	font-size: 13px;
+}
+
+html[data-font-size="large"] .duration,
+html[data-font-size="large"] .session-item-meta,
+html[data-font-size="large"] .action-group-count,
+html[data-font-size="large"] .status-badge,
+html[data-font-size="large"] .settings-section-label,
+html[data-font-size="large"] .sidebar-section-label {
+	font-size: 12px;
+}
+
+/* Larger: +2px across the board */
+html[data-font-size="larger"],
+html[data-font-size="larger"] body,
+html[data-font-size="larger"] #root {
+	font-size: 17px;
+}
+
+html[data-font-size="larger"] .console-entry,
+html[data-font-size="larger"] .tool-inline summary,
+html[data-font-size="larger"] .thinking-inline summary,
+html[data-font-size="larger"] .tool-inline-agent,
+html[data-font-size="larger"] .tool-inline-name,
+html[data-font-size="larger"] .tool-inline-command,
+html[data-font-size="larger"] .action-group-header,
+html[data-font-size="larger"] .action-item,
+html[data-font-size="larger"] .session-item-name,
+html[data-font-size="larger"] .tab-btn,
+html[data-font-size="larger"] .session-header {
+	font-size: 15px;
+}
+
+html[data-font-size="larger"] .hero-subtitle {
+	font-size: 19px;
+}
+
+html[data-font-size="larger"] .hero-prompt .prompt-bar textarea,
+html[data-font-size="larger"] .prompt-bar textarea {
+	font-size: 17px;
+}
+
+html[data-font-size="larger"] .tool-inline-body pre,
+html[data-font-size="larger"] .thinking-body pre {
+	font-size: 14px;
+}
+
+html[data-font-size="larger"] .duration,
+html[data-font-size="larger"] .session-item-meta,
+html[data-font-size="larger"] .action-group-count,
+html[data-font-size="larger"] .status-badge,
+html[data-font-size="larger"] .settings-section-label,
+html[data-font-size="larger"] .sidebar-section-label {
+	font-size: 13px;
+}
+
+html[data-font-size="larger"] .btn,
+html[data-font-size="larger"] .modal-btn,
+html[data-font-size="larger"] .prompt-bar button {
+	font-size: 15px;
+}

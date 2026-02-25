@@ -68,8 +68,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 36px;
-		height: 36px;
+		width: 42px;
+		height: 42px;
 		border: none;
 		background: none;
 		color: var(--text-muted);
@@ -91,7 +91,7 @@
 	}
 
 	.session-header-name {
-		font-size: 13px;
+		font-size: 14px;
 		min-width: 0;
 		flex: 1;
 	}
@@ -107,8 +107,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 32px;
-		height: 32px;
+		width: 36px;
+		height: 36px;
 		border: none;
 		background: none;
 		color: var(--text-muted);
@@ -142,11 +142,11 @@
 		align-items: center;
 		gap: 8px;
 		width: 100%;
-		padding: 8px 12px;
+		padding: 10px 12px;
 		border: none;
 		background: none;
 		color: var(--text-muted);
-		font-size: 13px;
+		font-size: 14px;
 		font-family: var(--font-mono);
 		cursor: pointer;
 		border-radius: 6px;
@@ -174,8 +174,8 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		padding: 8px 20px;
-		font-size: 13px;
+		padding: 10px 20px;
+		font-size: 14px;
 		font-family: var(--font-mono);
 		color: var(--brand-1);
 		background: transparent;
@@ -230,30 +230,30 @@
 	}
 
 	.prompt-bar textarea {
-		padding: 8px 12px;
-		min-height: 40px;
-		font-size: 15px;
+		padding: 10px 12px;
+		min-height: 42px;
+		font-size: 16px;
 	}
 
 	.prompt-bar button {
-		padding: 6px 12px;
-		min-height: 36px;
-		font-size: 13px;
+		padding: 8px 14px;
+		min-height: 40px;
+		font-size: 14px;
 	}
 
 	/* ---- Mobile home topbar: hamburger + brand on home page ---- */
 	.mobile-home-topbar {
 		display: flex;
 		align-items: center;
-		padding: 6px 8px;
-		height: var(--topbar-height);
+		padding: 6px 10px;
+		height: 52px;
 		flex-shrink: 0;
 		border-bottom: 1px solid var(--border);
 		gap: 8px;
 	}
 
 	.mobile-topbar-logo {
-		height: 22px;
+		height: 26px;
 	}
 
 	/* ---- Hero: mobile-specific design ---- */
@@ -271,6 +271,7 @@
 	.hero-subtitle {
 		font-size: 15px;
 		margin-bottom: 24px;
+		white-space: nowrap;
 	}
 
 	.hero-prompt {
@@ -283,21 +284,21 @@
 
 	.hero-prompt .prompt-bar textarea {
 		min-height: 48px;
-		font-size: 15px;
+		font-size: 16px;
 		padding: 12px;
 	}
 
 	.hero-prompt .prompt-bar button {
 		min-height: 48px;
-		padding: 8px 16px;
-		font-size: 14px;
+		padding: 8px 18px;
+		font-size: 15px;
 		border-radius: 0 11px 11px 0;
 	}
 
 	.hero-resume-btn {
 		width: 100%;
 		padding: 12px 20px;
-		font-size: 14px;
+		font-size: 15px;
 	}
 
 	/* ---- Gates: inline stacked, full-width buttons ---- */
@@ -308,7 +309,7 @@
 	.gate-prompt .question input,
 	.gate-prompt .question textarea,
 	.gate-prompt .question select {
-		font-size: 14px;
+		font-size: 15px;
 		padding: 10px 12px;
 	}
 
@@ -391,8 +392,8 @@
 	}
 
 	.settings-input-row input {
-		font-size: 14px;
-		padding: 8px 12px;
+		font-size: 15px;
+		padding: 10px 12px;
 	}
 
 	.settings-input-row button {
@@ -418,16 +419,21 @@
 
 	/* ---- Global settings button: move to accommodate hamburger ---- */
 	.global-settings-btn {
-		top: 6px;
+		top: 8px;
 		right: 8px;
-		width: 36px;
-		height: 36px;
+		width: 40px;
+		height: 40px;
+	}
+
+	.global-settings-btn svg {
+		width: 20px;
+		height: 20px;
 	}
 
 	/* ---- Jump to bottom: touch-friendly ---- */
 	.jump-to-bottom {
 		padding: 10px 20px;
-		font-size: 12px;
+		font-size: 13px;
 	}
 
 	/* ---- Action groups ---- */

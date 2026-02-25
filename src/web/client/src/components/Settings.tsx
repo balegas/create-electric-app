@@ -3,10 +3,14 @@ import { createPortal } from "react-dom"
 import { useEscapeKey } from "../hooks/useKeyboardShortcut"
 import type { AuthSource } from "../layouts/AppShell"
 import {
+	applyFontSize,
 	clearApiKey,
 	clearGhToken,
 	clearOauthToken,
+	type FontSize,
+	getFontSize,
 	setApiKey as saveApiKey,
+	setFontSize as saveFontSize,
 	setGhToken as saveGhToken,
 } from "../lib/credentials"
 
@@ -30,6 +34,13 @@ export function Settings({
 	const [apiKey, setApiKey] = useState("")
 	const [ghPat, setGhPat] = useState("")
 	const [copied, setCopied] = useState(false)
+	const [fontSize, setFontSize] = useState<FontSize>(getFontSize)
+
+	const handleFontSize = useCallback((size: FontSize) => {
+		setFontSize(size)
+		saveFontSize(size)
+		applyFontSize(size)
+	}, [])
 
 	const handleSaveApiKey = useCallback(() => {
 		if (!apiKey.trim()) return
@@ -169,6 +180,25 @@ export function Settings({
 						>
 							github.com/settings/tokens
 						</a>
+					</div>
+				</div>
+
+				{/* Font size */}
+				<div className="settings-divider" />
+				<div className="settings-section-label">Display</div>
+				<div className="settings-field">
+					<label style={{ margin: 0, marginBottom: 8 }}>Font Size</label>
+					<div className="font-size-options">
+						{(["default", "large", "larger"] as const).map((size) => (
+							<button
+								key={size}
+								type="button"
+								className={`font-size-option${fontSize === size ? " active" : ""}`}
+								onClick={() => handleFontSize(size)}
+							>
+								{size === "default" ? "Default" : size === "large" ? "Large" : "Extra Large"}
+							</button>
+						))}
 					</div>
 				</div>
 
