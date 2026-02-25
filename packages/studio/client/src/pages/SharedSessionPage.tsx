@@ -13,14 +13,17 @@ import {
 	linkSession,
 	unlinkSession,
 } from "../lib/api"
+import { addJoinedSharedSession, removeJoinedSharedSession } from "../lib/shared-session-store"
+
 export function SharedSessionPage() {
 	const { code } = useParams<{ code: string }>()
 	const navigate = useNavigate()
-	const { sessions, refreshSessions } = useAppContext()
+	const { sessions, refreshSessions, refreshJoinedSharedSessions } = useAppContext()
 	const [sharedSessionId, setSharedSessionId] = useState<string | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [joining, setJoining] = useState(true)
-	const [showLinkPicker, setShowLinkPicker] = useState(false)
+	const [showLinkModal, setShowLinkModal] = useState(false)
+	const [expandedPanels, setExpandedPanels] = useState<Set<string>>(new Set())
 
 	// Join the shared session on mount
 	useEffect(() => {
@@ -54,6 +57,21 @@ export function SharedSessionPage() {
 
 	const sharedSession = useSharedSession(sharedSessionId)
 
+	// Save to localStorage once we have the session name
+	useEffect(() => {
+		if (code && sharedSession.name && sharedSessionId) {
+			addJoinedSharedSession({ id: sharedSessionId, code, name: sharedSession.name })
+			refreshJoinedSharedSessions()
+		}
+	}, [code, sharedSession.name, sharedSessionId, refreshJoinedSharedSessions])
+
+	// Auto-expand first panel when sessions are linked
+	useEffect(() => {
+		if (sharedSession.sessionIds.length > 0 && expandedPanels.size === 0) {
+			setExpandedPanels(new Set([sharedSession.sessionIds[0]]))
+		}
+	}, [sharedSession.sessionIds, expandedPanels.size])
+
 	const handleLeave = useCallback(async () => {
 		if (!sharedSessionId) return
 		try {
@@ -61,15 +79,21 @@ export function SharedSessionPage() {
 		} catch {
 			// Best effort
 		}
+		if (code) {
+			removeJoinedSharedSession(code)
+			refreshJoinedSharedSessions()
+		}
 		navigate("/")
-	}, [sharedSessionId, navigate])
+	}, [sharedSessionId, code, navigate, refreshJoinedSharedSessions])
 
 	const handleLinkSession = useCallback(
 		async (sessionId: string) => {
 			if (!sharedSessionId) return
 			try {
 				await linkSession(sharedSessionId, sessionId)
-				setShowLinkPicker(false)
+				setShowLinkModal(false)
+				// Auto-expand the newly linked panel
+				setExpandedPanels((prev) => new Set([...prev, sessionId]))
 			} catch (err) {
 				console.error("Failed to link session:", err)
 			}
@@ -82,12 +106,29 @@ export function SharedSessionPage() {
 			if (!sharedSessionId) return
 			try {
 				await unlinkSession(sharedSessionId, sessionId)
+				setExpandedPanels((prev) => {
+					const next = new Set(prev)
+					next.delete(sessionId)
+					return next
+				})
 			} catch (err) {
 				console.error("Failed to unlink session:", err)
 			}
 		},
 		[sharedSessionId],
 	)
+
+	const togglePanel = useCallback((sessionId: string) => {
+		setExpandedPanels((prev) => {
+			const next = new Set(prev)
+			if (next.has(sessionId)) {
+				next.delete(sessionId)
+			} else {
+				next.add(sessionId)
+			}
+			return next
+		})
+	}, [])
 
 	// Refresh sessions list for linking
 	useEffect(() => {
@@ -99,7 +140,7 @@ export function SharedSessionPage() {
 			<div className="shared-session-error">
 				<h2>Cannot join shared session</h2>
 				<p>{error}</p>
-				<button type="button" onClick={() => navigate("/")}>
+				<button type="button" className="btn" onClick={() => navigate("/")}>
 					Go Home
 				</button>
 			</div>
@@ -127,6 +168,7 @@ export function SharedSessionPage() {
 				revoked={sharedSession.revoked}
 				isLive={sharedSession.isLive}
 				onLeave={handleLeave}
+				onLinkSession={() => setShowLinkModal(true)}
 			/>
 
 			<div className="shared-session-content">
@@ -138,59 +180,101 @@ export function SharedSessionPage() {
 					<button
 						type="button"
 						className="shared-session-link-btn"
-						onClick={() => setShowLinkPicker((v) => !v)}
+						onClick={() => setShowLinkModal(true)}
 					>
 						+ Link Session
 					</button>
 				</div>
-
-				{showLinkPicker && (
-					<div className="shared-session-link-picker">
-						{availableToLink.length === 0 ? (
-							<p className="shared-session-link-picker-empty">No sessions available to link.</p>
-						) : (
-							availableToLink.map((s) => (
-								<button
-									key={s.id}
-									type="button"
-									className="shared-session-link-picker-item"
-									onClick={() => handleLinkSession(s.id)}
-								>
-									{s.projectName} — {s.description.slice(0, 60)}
-								</button>
-							))
-						)}
-					</div>
-				)}
 
 				{sharedSession.sessionIds.length === 0 ? (
 					<div className="shared-session-empty">
 						<p>No sessions linked yet. Click "Link Session" to add one.</p>
 					</div>
 				) : (
-					<div className="shared-session-grid">
+					<div className="shared-session-panels">
 						{sharedSession.sessionIds.map((sid) => (
-							<LinkedSessionPanel key={sid} sessionId={sid} onUnlink={handleUnlinkSession} />
+							<LinkedSessionPanel
+								key={sid}
+								sessionId={sid}
+								expanded={expandedPanels.has(sid)}
+								onToggle={() => togglePanel(sid)}
+								onUnlink={handleUnlinkSession}
+							/>
 						))}
 					</div>
 				)}
 			</div>
+
+			{showLinkModal && (
+				<div className="modal-overlay" onClick={() => setShowLinkModal(false)}>
+					<div className="modal-card" onClick={(e) => e.stopPropagation()}>
+						<div className="modal-title">Link Session</div>
+						<div className="modal-body">Select a session to link to this shared room.</div>
+						{availableToLink.length === 0 ? (
+							<p style={{ color: "var(--text-subtle)", fontSize: 13 }}>
+								No sessions available to link.
+							</p>
+						) : (
+							<div className="link-session-list">
+								{availableToLink.map((s) => (
+									<button
+										key={s.id}
+										type="button"
+										className="link-session-item"
+										onClick={() => handleLinkSession(s.id)}
+									>
+										{s.projectName || s.description.slice(0, 60) || s.id.slice(0, 8)}
+									</button>
+								))}
+							</div>
+						)}
+						<div className="modal-actions">
+							<button type="button" className="modal-btn" onClick={() => setShowLinkModal(false)}>
+								Cancel
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 		</>
+	)
+}
+
+function ChevronIcon() {
+	return (
+		<svg
+			className="shared-session-panel-chevron"
+			viewBox="0 0 16 16"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-label="Toggle panel"
+		>
+			<title>Toggle panel</title>
+			<polyline points="4 6 8 10 12 6" />
+		</svg>
 	)
 }
 
 function LinkedSessionPanel({
 	sessionId,
+	expanded,
+	onToggle,
 	onUnlink,
 }: {
 	sessionId: string
+	expanded: boolean
+	onToggle: () => void
 	onUnlink: (sessionId: string) => void
 }) {
 	const { entries, isLive, isComplete, markGateResolved } = useSession(sessionId)
 
 	return (
-		<div className="shared-session-panel">
-			<div className="shared-session-panel-header">
+		<div className={`shared-session-panel ${expanded ? "expanded" : "collapsed"}`}>
+			<div className="shared-session-panel-header" onClick={onToggle}>
+				<ChevronIcon />
 				<span className="shared-session-panel-id">{sessionId.slice(0, 8)}</span>
 				{isLive && (
 					<span className="session-header-status" style={{ color: "var(--green)", fontSize: 11 }}>
@@ -208,19 +292,26 @@ function LinkedSessionPanel({
 				<button
 					type="button"
 					className="shared-session-unlink-btn"
-					onClick={() => onUnlink(sessionId)}
+					onClick={(e) => {
+						e.stopPropagation()
+						onUnlink(sessionId)
+					}}
 					title="Unlink session"
 				>
 					Unlink
 				</button>
 			</div>
-			<Console
-				sessionId={sessionId}
-				entries={entries}
-				isLive={isLive}
-				isComplete={isComplete}
-				onGateResolved={markGateResolved}
-			/>
+			{expanded && (
+				<div className="shared-session-panel-body">
+					<Console
+						sessionId={sessionId}
+						entries={entries}
+						isLive={isLive}
+						isComplete={isComplete}
+						onGateResolved={markGateResolved}
+					/>
+				</div>
+			)}
 		</div>
 	)
 }

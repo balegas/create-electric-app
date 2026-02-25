@@ -26,8 +26,6 @@ export function HomePage() {
 	const { openMobileDrawer } = useOutletContext<OutletCtx>()
 	const [showRepoPicker, setShowRepoPicker] = useState(false)
 	const [resuming, setResuming] = useState(false)
-	const [joinCode, setJoinCode] = useState("")
-	const [showJoinInput, setShowJoinInput] = useState(false)
 	const [creatingShared, setCreatingShared] = useState(false)
 
 	const handleCreateSharedSession = useCallback(async () => {
@@ -43,12 +41,6 @@ export function HomePage() {
 			setCreatingShared(false)
 		}
 	}, [navigate])
-
-	const handleJoinSharedSession = useCallback(() => {
-		const trimmed = joinCode.trim()
-		if (!trimmed) return
-		navigate(`/shared/${trimmed}`)
-	}, [joinCode, navigate])
 
 	const handleResumeFromGithub = useCallback(
 		async (repoUrl: string, branch: string) => {
@@ -127,45 +119,14 @@ export function HomePage() {
 						{resuming ? "Cloning..." : "Resume from GitHub"}
 					</button>
 				)}
-				<div className="hero-shared-actions">
-					<button
-						type="button"
-						className="hero-resume-btn"
-						onClick={handleCreateSharedSession}
-						disabled={creatingShared}
-					>
-						{creatingShared ? "Creating..." : "Create Shared Session"}
-					</button>
-
-					{showJoinInput ? (
-						<span className="hero-join-group">
-							<input
-								type="text"
-								className="hero-join-input"
-								placeholder="Enter invite code..."
-								value={joinCode}
-								onChange={(e) => setJoinCode(e.target.value)}
-								onKeyDown={(e) => e.key === "Enter" && handleJoinSharedSession()}
-							/>
-							<button
-								type="button"
-								className="hero-resume-btn"
-								onClick={handleJoinSharedSession}
-								disabled={!joinCode.trim()}
-							>
-								Join
-							</button>
-						</span>
-					) : (
-						<button
-							type="button"
-							className="hero-resume-btn"
-							onClick={() => setShowJoinInput(true)}
-						>
-							Join Shared Session
-						</button>
-					)}
-				</div>
+				<button
+					type="button"
+					className="hero-resume-btn"
+					onClick={handleCreateSharedSession}
+					disabled={creatingShared}
+				>
+					{creatingShared ? "Creating..." : "Create Shared Session"}
+				</button>
 			</div>
 
 			{showRepoPicker && (

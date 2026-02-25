@@ -1,5 +1,7 @@
+import { useCallback, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAppContext } from "../layouts/AppShell"
+import { removeJoinedSharedSession } from "../lib/shared-session-store"
 import { SessionListItem } from "./SessionListItem"
 
 interface SidebarProps {
@@ -33,13 +35,45 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
 	)
 }
 
+function LinkIcon() {
+	return (
+		<svg
+			viewBox="0 0 16 16"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			width="14"
+			height="14"
+		>
+			<title>Join shared session</title>
+			<path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5l-1 1" />
+			<path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5l1-1" />
+		</svg>
+	)
+}
+
 export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
-	const { sessions, pendingProject, handleDeleteSession } = useAppContext()
+	const {
+		sessions,
+		pendingProject,
+		handleDeleteSession,
+		joinedSharedSessions,
+		refreshJoinedSharedSessions,
+	} = useAppContext()
 	const navigate = useNavigate()
 	const location = useLocation()
 
+	const [joinInputOpen, setJoinInputOpen] = useState(false)
+	const [joinCode, setJoinCode] = useState("")
+
 	const activeSessionId = location.pathname.startsWith("/session/")
 		? location.pathname.split("/session/")[1]
+		: null
+
+	const activeSharedCode = location.pathname.startsWith("/shared/")
+		? location.pathname.split("/shared/")[1]
 		: null
 
 	const sortedSessions = [...sessions].sort(
@@ -50,6 +84,23 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		navigate(path)
 		onMobileClose?.()
 	}
+
+	const handleJoin = useCallback(() => {
+		const trimmed = joinCode.trim()
+		if (!trimmed) return
+		navigate(`/shared/${trimmed}`)
+		setJoinCode("")
+		setJoinInputOpen(false)
+		onMobileClose?.()
+	}, [joinCode, navigate, onMobileClose])
+
+	const handleRemoveShared = useCallback(
+		(code: string) => {
+			removeJoinedSharedSession(code)
+			refreshJoinedSharedSessions()
+		},
+		[refreshJoinedSharedSessions],
+	)
 
 	return (
 		<aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
@@ -69,6 +120,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 			</div>
 
 			<div className="sidebar-sessions">
+				<div className="sidebar-section-label">Sessions</div>
+
 				<div className="session-item" onClick={() => handleNavigate("/")} title="New App">
 					<span className="session-avatar new-project-avatar">+</span>
 					<div className="session-item-details">
@@ -94,6 +147,77 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						onClick={() => handleNavigate(`/session/${s.id}`)}
 						onDelete={() => handleDeleteSession(s.id)}
 					/>
+				))}
+
+				<div className="sidebar-section-label">Shared</div>
+
+				{joinInputOpen ? (
+					<div className="sidebar-join-input">
+						<input
+							type="text"
+							placeholder="Invite code..."
+							value={joinCode}
+							onChange={(e) => setJoinCode(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleJoin()
+								if (e.key === "Escape") {
+									setJoinInputOpen(false)
+									setJoinCode("")
+								}
+							}}
+						/>
+						<button
+							type="button"
+							className="sidebar-join-go"
+							onClick={handleJoin}
+							disabled={!joinCode.trim()}
+						>
+							Go
+						</button>
+					</div>
+				) : (
+					<div
+						className="session-item"
+						onClick={() => setJoinInputOpen(true)}
+						title="Join shared session"
+					>
+						<span className="session-avatar new-project-avatar">
+							<LinkIcon />
+						</span>
+						<div className="session-item-details">
+							<div className="session-item-name">Join</div>
+						</div>
+					</div>
+				)}
+
+				{joinedSharedSessions.map((s) => (
+					<div
+						key={s.code}
+						className={`session-item ${activeSharedCode === s.code ? "active" : ""}`}
+						onClick={() => handleNavigate(`/shared/${s.code}`)}
+						title={s.name}
+					>
+						<span className="session-avatar session-avatar-shared">
+							{s.name.slice(0, 2).toUpperCase()}
+						</span>
+						<div className="session-item-details">
+							<div className="session-item-name">{s.name}</div>
+							<div className="session-item-meta">
+								<span>{s.code}</span>
+							</div>
+						</div>
+						<button
+							type="button"
+							className="session-item-delete"
+							onClick={(e) => {
+								e.stopPropagation()
+								handleRemoveShared(s.code)
+							}}
+							title="Remove"
+						>
+							&times;
+						</button>
+					</div>
 				))}
 			</div>
 
