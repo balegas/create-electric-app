@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm"
  * Get the current Postgres transaction ID. Used to correlate
  * optimistic updates with server-side writes via Electric sync.
  */
+// biome-ignore lint/suspicious/noExplicitAny: Drizzle transaction type varies by driver
 export async function generateTxId(tx: any): Promise<number> {
 	const result = await tx.execute(sql`SELECT pg_current_xact_id()::text as txid`)
 	const txid = result[0]?.txid
