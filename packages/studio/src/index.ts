@@ -10,5 +10,18 @@ export {
 	readSessionIndex,
 	updateSessionInfo,
 } from "./sessions.js"
+export type { SharedSessionEntry } from "./shared-sessions.js"
+export {
+	addSharedSession,
+	generateInviteCode,
+	getSharedSession,
+	getSharedSessionByCode,
+	revokeSharedSession,
+} from "./shared-sessions.js"
 export type { StreamConfig, StreamConnectionInfo } from "./streams.js"
-export { getStreamConfig, getStreamConnectionInfo, getStreamEnvVars } from "./streams.js"
+export {
+	getSharedStreamConnectionInfo,
+	getStreamConfig,
+	getStreamConnectionInfo,
+	getStreamEnvVars,
+} from "./streams.js"

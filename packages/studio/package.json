@@ -33,6 +33,10 @@
 		"./bridge": {
 			"types": "./dist/bridge/index.d.ts",
 			"import": "./dist/bridge/index.js"
+		},
+		"./shared-sessions": {
+			"types": "./dist/shared-sessions.d.ts",
+			"import": "./dist/shared-sessions.js"
 		}
 	},
 	"files": [

@@ -88,8 +88,29 @@ export type EngineEvent =
 			summary?: string
 			/** Structured key-value details of the gate decision (e.g. infra mode, repo) */
 			details?: Record<string, string>
+			/** Who resolved the gate (for shared session attribution) */
+			resolvedBy?: Participant
 			ts: string
 	  }
+
+export interface Participant {
+	id: string
+	displayName: string
+}
+
+export type SharedSessionEvent =
+	| {
+			type: "shared_session_created"
+			name: string
+			code: string
+			createdBy: Participant
+			ts: string
+	  }
+	| { type: "participant_joined"; participant: Participant; ts: string }
+	| { type: "participant_left"; participantId: string; ts: string }
+	| { type: "session_linked"; sessionId: string; linkedBy: string; ts: string }
+	| { type: "session_unlinked"; sessionId: string; ts: string }
+	| { type: "code_revoked"; ts: string }
 
 export function ts(): string {
 	return new Date().toISOString()

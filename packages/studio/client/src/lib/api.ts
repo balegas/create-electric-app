@@ -1,4 +1,5 @@
 import { getApiKey, getGhToken, getOauthToken } from "./credentials"
+import { getOrCreateParticipant } from "./participant"
 
 const API_BASE = "/api"
 
@@ -20,11 +21,17 @@ function ghHeaders(): Record<string, string> {
 	return token ? { "X-GH-Token": token } : {}
 }
 
+/** Return participant identity headers for gate attribution. */
+function participantHeaders(): Record<string, string> {
+	const p = getOrCreateParticipant()
+	return { "X-Participant-Id": p.id, "X-Participant-Name": p.displayName }
+}
+
 async function request<T>(
 	path: string,
 	opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
 ): Promise<T> {
-	const headers: Record<string, string> = { ...opts?.headers }
+	const headers: Record<string, string> = { ...participantHeaders(), ...opts?.headers }
 	if (opts?.body) headers["Content-Type"] = "application/json"
 
 	const res = await fetch(`${API_BASE}${path}`, {
@@ -193,5 +200,55 @@ export function resumeFromGithub(repoUrl: string, branch?: string) {
 	return request<{ sessionId: string; streamUrl: string; hasPlan: boolean }>("/sessions/resume", {
 		method: "POST",
 		body: { repoUrl, branch, ...credentialFields() },
+	})
+}
+
+// --- Shared Sessions ---
+
+export function createSharedSession(name: string) {
+	const participant = getOrCreateParticipant()
+	return request<{ id: string; code: string }>("/shared-sessions", {
+		method: "POST",
+		body: { name, participant },
+	})
+}
+
+export function joinSharedSession(code: string) {
+	return request<{ id: string; code: string; revoked: boolean }>(`/shared-sessions/join/${code}`)
+}
+
+export function joinAsParticipant(sharedSessionId: string) {
+	const participant = getOrCreateParticipant()
+	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/join`, {
+		method: "POST",
+		body: { participant },
+	})
+}
+
+export function leaveSharedSession(sharedSessionId: string) {
+	const participant = getOrCreateParticipant()
+	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/leave`, {
+		method: "POST",
+		body: { participantId: participant.id },
+	})
+}
+
+export function linkSession(sharedSessionId: string, sessionId: string) {
+	const participant = getOrCreateParticipant()
+	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/sessions`, {
+		method: "POST",
+		body: { sessionId, linkedBy: participant.displayName },
+	})
+}
+
+export function unlinkSession(sharedSessionId: string, sessionId: string) {
+	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/sessions/${sessionId}`, {
+		method: "DELETE",
+	})
+}
+
+export function revokeSharedSession(sharedSessionId: string) {
+	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/revoke`, {
+		method: "POST",
 	})
 }

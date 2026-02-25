@@ -1,4 +1,9 @@
-export type { EngineEvent, LogLevel } from "@electric-agent/protocol"
+export type {
+	EngineEvent,
+	LogLevel,
+	Participant,
+	SharedSessionEvent,
+} from "@electric-agent/protocol"
 
 import type { EngineEvent, LogLevel } from "@electric-agent/protocol"
 

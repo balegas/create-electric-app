@@ -3,7 +3,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { DurableStream } from "@durable-streams/client"
-import type { EngineEvent } from "@electric-agent/protocol"
+import type { EngineEvent, Participant, SharedSessionEvent } from "@electric-agent/protocol"
 import { ts } from "@electric-agent/protocol"
 import { serve } from "@hono/node-server"
 import { serveStatic } from "@hono/node-server/serve-static"
@@ -32,6 +32,15 @@ import {
 	updateSessionInfo,
 } from "./sessions.js"
 import {
+	addSharedSession,
+	generateInviteCode,
+	getSharedSessionByCode,
+	getSharedSession as getSharedSessionEntry,
+	revokeSharedSession,
+	type SharedSessionEntry,
+} from "./shared-sessions.js"
+import {
+	getSharedStreamConnectionInfo,
 	getStreamConnectionInfo,
 	getStreamEnvVars,
 	type StreamConfig,
@@ -64,6 +73,11 @@ function parseRepoNameFromUrl(url: string | null): string | null {
 /** Get stream connection info for a session (URL + auth headers) */
 function sessionStream(config: ServerConfig, sessionId: string): StreamConnectionInfo {
 	return getStreamConnectionInfo(sessionId, config.streamConfig)
+}
+
+/** Get stream connection info for a shared session */
+function sharedSessionStream(config: ServerConfig, sharedSessionId: string): StreamConnectionInfo {
+	return getSharedStreamConnectionInfo(sharedSessionId, config.streamConfig)
 }
 
 /** Create or retrieve the SessionBridge for a session */
@@ -894,6 +908,14 @@ export function createApp(config: ServerConfig) {
 		// Client may pass a human-readable summary of the decision for replay display
 		const summary = (body._summary as string) || undefined
 
+		// Extract participant info from headers for gate attribution
+		const participantId = c.req.header("X-Participant-Id")
+		const participantName = c.req.header("X-Participant-Name")
+		const resolvedBy: Participant | undefined =
+			participantId && participantName
+				? { id: participantId, displayName: participantName }
+				: undefined
+
 		// AskUserQuestion gates: resolve the blocking hook-event and emit gate_resolved
 		if (gate === "ask_user_question") {
 			const toolUseId = body.toolUseId as string
@@ -908,7 +930,13 @@ export function createApp(config: ServerConfig) {
 			// Emit gate_resolved for replay
 			try {
 				const bridge = getOrCreateBridge(config, sessionId)
-				await bridge.emit({ type: "gate_resolved", gate: "ask_user_question", summary, ts: ts() })
+				await bridge.emit({
+					type: "gate_resolved",
+					gate: "ask_user_question",
+					summary,
+					resolvedBy,
+					ts: ts(),
+				})
 			} catch {
 				// Non-critical
 			}
@@ -929,7 +957,7 @@ export function createApp(config: ServerConfig) {
 
 			// Persist gate resolution for replay
 			try {
-				await bridge.emit({ type: "gate_resolved", gate, summary, ts: ts() })
+				await bridge.emit({ type: "gate_resolved", gate, summary, resolvedBy, ts: ts() })
 			} catch {
 				// Non-critical
 			}
@@ -998,7 +1026,7 @@ export function createApp(config: ServerConfig) {
 		// Persist gate resolution so replays mark the gate as resolved
 		try {
 			const bridge = getOrCreateBridge(config, sessionId)
-			await bridge.emit({ type: "gate_resolved", gate, summary, details, ts: ts() })
+			await bridge.emit({ type: "gate_resolved", gate, summary, details, resolvedBy, ts: ts() })
 		} catch {
 			// Non-critical
 		}
@@ -1157,6 +1185,252 @@ export function createApp(config: ServerConfig) {
 
 		closeBridge(sessionId)
 		await config.sandbox.destroy(handle)
+		return c.json({ ok: true })
+	})
+
+	// --- Shared Sessions ---
+
+	// Create a shared session
+	app.post("/api/shared-sessions", async (c) => {
+		const body = (await c.req.json()) as {
+			name: string
+			participant: Participant
+		}
+		if (!body.name || !body.participant?.id || !body.participant?.displayName) {
+			return c.json({ error: "name and participant (id, displayName) are required" }, 400)
+		}
+
+		const id = crypto.randomUUID()
+		const code = generateInviteCode()
+
+		// Create the shared session durable stream
+		const conn = sharedSessionStream(config, id)
+		try {
+			await DurableStream.create({
+				url: conn.url,
+				headers: conn.headers,
+				contentType: "application/json",
+			})
+		} catch (err) {
+			console.error(`[shared-session] Failed to create durable stream:`, err)
+			return c.json({ error: "Failed to create shared session stream" }, 500)
+		}
+
+		// Write shared_session_created event
+		const stream = new DurableStream({
+			url: conn.url,
+			headers: conn.headers,
+			contentType: "application/json",
+		})
+		const createdEvent: SharedSessionEvent = {
+			type: "shared_session_created",
+			name: body.name,
+			code,
+			createdBy: body.participant,
+			ts: ts(),
+		}
+		await stream.append(JSON.stringify(createdEvent))
+
+		// Write participant_joined for the creator
+		const joinedEvent: SharedSessionEvent = {
+			type: "participant_joined",
+			participant: body.participant,
+			ts: ts(),
+		}
+		await stream.append(JSON.stringify(joinedEvent))
+
+		// Save to JSON index
+		const entry: SharedSessionEntry = {
+			id,
+			code,
+			createdAt: new Date().toISOString(),
+			revoked: false,
+		}
+		addSharedSession(config.dataDir, entry)
+
+		console.log(`[shared-session] Created: id=${id} code=${code}`)
+		return c.json({ id, code }, 201)
+	})
+
+	// Resolve invite code → shared session ID
+	app.get("/api/shared-sessions/join/:code", (c) => {
+		const code = c.req.param("code")
+		const entry = getSharedSessionByCode(config.dataDir, code)
+		if (!entry) return c.json({ error: "Shared session not found" }, 404)
+		return c.json({ id: entry.id, code: entry.code, revoked: entry.revoked })
+	})
+
+	// Join a shared session as participant
+	app.post("/api/shared-sessions/:id/join", async (c) => {
+		const id = c.req.param("id")
+		const entry = getSharedSessionEntry(config.dataDir, id)
+		if (!entry) return c.json({ error: "Shared session not found" }, 404)
+		if (entry.revoked) return c.json({ error: "Invite code has been revoked" }, 403)
+
+		const body = (await c.req.json()) as { participant: Participant }
+		if (!body.participant?.id || !body.participant?.displayName) {
+			return c.json({ error: "participant (id, displayName) is required" }, 400)
+		}
+
+		const conn = sharedSessionStream(config, id)
+		const stream = new DurableStream({
+			url: conn.url,
+			headers: conn.headers,
+			contentType: "application/json",
+		})
+		const event: SharedSessionEvent = {
+			type: "participant_joined",
+			participant: body.participant,
+			ts: ts(),
+		}
+		await stream.append(JSON.stringify(event))
+
+		return c.json({ ok: true })
+	})
+
+	// Leave a shared session
+	app.post("/api/shared-sessions/:id/leave", async (c) => {
+		const id = c.req.param("id")
+		const body = (await c.req.json()) as { participantId: string }
+		if (!body.participantId) {
+			return c.json({ error: "participantId is required" }, 400)
+		}
+
+		const conn = sharedSessionStream(config, id)
+		const stream = new DurableStream({
+			url: conn.url,
+			headers: conn.headers,
+			contentType: "application/json",
+		})
+		const event: SharedSessionEvent = {
+			type: "participant_left",
+			participantId: body.participantId,
+			ts: ts(),
+		}
+		await stream.append(JSON.stringify(event))
+
+		return c.json({ ok: true })
+	})
+
+	// Link a session to a shared session
+	app.post("/api/shared-sessions/:id/sessions", async (c) => {
+		const id = c.req.param("id")
+		const body = (await c.req.json()) as { sessionId: string; linkedBy: string }
+		if (!body.sessionId || !body.linkedBy) {
+			return c.json({ error: "sessionId and linkedBy are required" }, 400)
+		}
+
+		// Verify session exists
+		const session = getSession(config.dataDir, body.sessionId)
+		if (!session) return c.json({ error: "Session not found" }, 404)
+
+		const conn = sharedSessionStream(config, id)
+		const stream = new DurableStream({
+			url: conn.url,
+			headers: conn.headers,
+			contentType: "application/json",
+		})
+		const event: SharedSessionEvent = {
+			type: "session_linked",
+			sessionId: body.sessionId,
+			linkedBy: body.linkedBy,
+			ts: ts(),
+		}
+		await stream.append(JSON.stringify(event))
+
+		return c.json({ ok: true })
+	})
+
+	// Unlink a session from a shared session
+	app.delete("/api/shared-sessions/:id/sessions/:sessionId", async (c) => {
+		const id = c.req.param("id")
+		const sessionId = c.req.param("sessionId")
+
+		const conn = sharedSessionStream(config, id)
+		const stream = new DurableStream({
+			url: conn.url,
+			headers: conn.headers,
+			contentType: "application/json",
+		})
+		const event: SharedSessionEvent = {
+			type: "session_unlinked",
+			sessionId,
+			ts: ts(),
+		}
+		await stream.append(JSON.stringify(event))
+
+		return c.json({ ok: true })
+	})
+
+	// SSE proxy for shared session events
+	app.get("/api/shared-sessions/:id/events", async (c) => {
+		const id = c.req.param("id")
+		const entry = getSharedSessionEntry(config.dataDir, id)
+		if (!entry) return c.json({ error: "Shared session not found" }, 404)
+
+		const connection = sharedSessionStream(config, id)
+		const lastEventId = c.req.header("Last-Event-ID") || "-1"
+
+		const reader = new DurableStream({
+			url: connection.url,
+			headers: connection.headers,
+			contentType: "application/json",
+		})
+
+		const { readable, writable } = new TransformStream()
+		const writer = writable.getWriter()
+		const encoder = new TextEncoder()
+		let cancelled = false
+
+		const response = await reader.stream<Record<string, unknown>>({
+			offset: lastEventId,
+			live: true,
+		})
+
+		const cancel = response.subscribeJson<Record<string, unknown>>((batch) => {
+			if (cancelled) return
+			for (const item of batch.items) {
+				const data = JSON.stringify(item)
+				writer.write(encoder.encode(`id:${batch.offset}\ndata:${data}\n\n`)).catch(() => {
+					cancelled = true
+				})
+			}
+		})
+
+		c.req.raw.signal.addEventListener("abort", () => {
+			cancelled = true
+			cancel()
+			writer.close().catch(() => {})
+		})
+
+		return new Response(readable, {
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				Connection: "keep-alive",
+				"Access-Control-Allow-Origin": "*",
+			},
+		})
+	})
+
+	// Revoke a shared session's invite code
+	app.post("/api/shared-sessions/:id/revoke", async (c) => {
+		const id = c.req.param("id")
+		const revoked = revokeSharedSession(config.dataDir, id)
+		if (!revoked) return c.json({ error: "Shared session not found" }, 404)
+
+		const conn = sharedSessionStream(config, id)
+		const stream = new DurableStream({
+			url: conn.url,
+			headers: conn.headers,
+			contentType: "application/json",
+		})
+		const event: SharedSessionEvent = {
+			type: "code_revoked",
+			ts: ts(),
+		}
+		await stream.append(JSON.stringify(event))
+
 		return c.json({ ok: true })
 	})
 

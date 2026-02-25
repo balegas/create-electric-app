@@ -53,6 +53,21 @@ export function getStreamConnectionInfo(
 }
 
 /**
+ * Build connection info for a shared session stream.
+ */
+export function getSharedStreamConnectionInfo(
+	sharedSessionId: string,
+	config: StreamConfig,
+): StreamConnectionInfo {
+	return {
+		url: `${config.url}/v1/stream/${config.serviceId}/shared/${sharedSessionId}`,
+		headers: {
+			Authorization: `Bearer ${config.secret}`,
+		},
+	}
+}
+
+/**
  * Env vars to pass to a sandbox so it can connect to the same stream.
  */
 export function getStreamEnvVars(sessionId: string, config: StreamConfig): Record<string, string> {
