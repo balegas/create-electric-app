@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
-import { deleteSession, fetchKeychainCredentials, listSessions, type SessionInfo } from "../lib/api"
+import { useRegistry } from "../hooks/useRegistry"
+import { deleteSession, fetchKeychainCredentials, type SessionInfo } from "../lib/api"
 import {
 	hasApiKey as checkHasApiKey,
 	hasGhToken as checkHasGhToken,
@@ -53,7 +54,8 @@ function useIsMobile() {
 }
 
 export function AppShell() {
-	const [sessions, setSessions] = useState<SessionInfo[]>([])
+	const { sessions: registrySessions } = useRegistry()
+	const sessions = registrySessions as unknown as SessionInfo[]
 	const [authSource, setAuthSource] = useState<AuthSource>(null)
 	const [hasGhToken, setHasGhToken] = useState<boolean | null>(null)
 	const [showSettings, setShowSettings] = useState(false)
@@ -108,15 +110,10 @@ export function AppShell() {
 		}
 	}, [location.pathname])
 
+	// Sessions are now live-updated via the registry SSE stream.
+	// refreshSessions is kept as a no-op for API compatibility with consumers.
 	const refreshSessions = useCallback(async () => {
-		try {
-			const data = await listSessions()
-			setSessions(data.sessions)
-			// Clear pending project once real sessions have loaded
-			setPendingProject(null)
-		} catch {
-			// ignore
-		}
+		setPendingProject(null)
 	}, [])
 
 	const refreshSettings = useCallback(async () => {
@@ -149,9 +146,8 @@ export function AppShell() {
 	}, [])
 
 	useEffect(() => {
-		refreshSessions()
 		refreshSettings()
-	}, [refreshSessions, refreshSettings])
+	}, [refreshSettings])
 
 	const handleNewProject = useCallback(
 		(description: string) => {
@@ -168,8 +164,7 @@ export function AppShell() {
 		async (sessionId: string) => {
 			try {
 				await deleteSession(sessionId)
-				await refreshSessions()
-				// Navigate home if the deleted session was active
+				// session_deleted event arrives via SSE — no manual refresh needed
 				if (location.pathname === `/session/${sessionId}`) {
 					navigate("/")
 				}
@@ -177,7 +172,7 @@ export function AppShell() {
 				console.error("Failed to delete session:", err)
 			}
 		},
-		[refreshSessions, location.pathname, navigate],
+		[location.pathname, navigate],
 	)
 
 	const ctx: AppContextValue = {

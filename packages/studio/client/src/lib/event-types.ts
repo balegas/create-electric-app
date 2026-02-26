@@ -7,6 +7,48 @@ export type {
 
 import type { EngineEvent, LogLevel } from "@electric-agent/protocol"
 
+// --- Registry Events (mirrored from server-side registry.ts) ---
+
+export interface RegistrySessionInfo {
+	id: string
+	projectName: string
+	sandboxProjectDir: string
+	description: string
+	createdAt: string
+	lastActiveAt: string
+	status: "running" | "complete" | "error" | "cancelled"
+	appPort?: number
+	previewUrl?: string
+	claudeSessionId?: string
+	claimId?: string
+	git?: {
+		branch: string
+		remoteUrl: string | null
+		repoName: string | null
+		repoVisibility?: "public" | "private"
+		lastCommitHash: string | null
+		lastCommitMessage: string | null
+		lastCheckpointAt: string | null
+	}
+	lastCoderSessionId?: string
+}
+
+export interface RegistryRoomInfo {
+	id: string
+	code: string
+	createdAt: string
+	revoked: boolean
+}
+
+export type RegistryEvent =
+	| { type: "session_registered"; session: RegistrySessionInfo; ts: string }
+	| { type: "session_updated"; sessionId: string; update: Partial<RegistrySessionInfo>; ts: string }
+	| { type: "session_deleted"; sessionId: string; ts: string }
+	| { type: "room_created"; room: RegistryRoomInfo; ts: string }
+	| { type: "room_revoked"; roomId: string; ts: string }
+
+// --- Console Entries ---
+
 export type ConsoleEntry =
 	| { kind: "log"; level: LogLevel; message: string; ts: string }
 	| { kind: "user_prompt"; message: string }

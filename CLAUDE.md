@@ -41,7 +41,7 @@ pnpm --filter @electric-agent/studio run test
 The server requires `DS_URL`, `DS_SERVICE_ID`, and `DS_SECRET` env vars (Durable Streams credentials). Set them in a `.env` file at the project root or export them before starting.
 
 ```bash
-pnpm --filter @electric-agent/agent run serve    # start web UI (Hono + DurableStreams + React SPA)
+pnpm --filter @electric-agent/agent run serve    # start web UI + Caddy HTTPS proxy
 node packages/agent/dist/index.js headless       # headless NDJSON mode (used inside Docker containers)
 ```
 
@@ -49,11 +49,7 @@ node packages/agent/dist/index.js headless       # headless NDJSON mode (used in
 - **`SANDBOX_RUNTIME=sprites`** — uses Fly.io Sprites cloud VMs. Requires `FLY_API_TOKEN`.
 - **`SANDBOX_RUNTIME=daytona`** — uses Daytona cloud sandboxes. Requires `DAYTONA_API_KEY`.
 
-For shared sessions with multiple SSE streams, run Caddy for HTTP/2:
-```bash
-caddy run --config packages/studio/Caddyfile
-```
-Then open `https://localhost:4443`. Accept the self-signed cert on first visit.
+**Caddy (HTTP/2 reverse proxy):** `pnpm serve` auto-starts Caddy if installed, proxying `https://localhost:4443` → `http://127.0.0.1:4400`. HTTP/2 is required for concurrent SSE streams (registry + per-session). Install with `brew install caddy`. Accept the self-signed cert on first visit. If Caddy is not installed, the server falls back to plain HTTP on port 4400 (limited to ~6 concurrent SSE connections per browser).
 
 ### Deployment (Fly.io)
 
