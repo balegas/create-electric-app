@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
+import { ActionGroup } from "./ActionGroup"
 import {
 	ConsoleLogEntry,
 	ConsoleTextEntry,
@@ -16,6 +17,90 @@ interface ConsoleProps {
 	isLive: boolean
 	isComplete: boolean
 	onGateResolved: (index: number, summary?: string) => void
+}
+
+type ToolEntry = Extract<ConsoleEntry, { kind: "tool_use" }>
+
+/** Minimum consecutive same-category tool calls to trigger grouping. */
+const GROUP_THRESHOLD = 3
+
+/** Map tool names to grouping categories. */
+function toolCategory(name: string): string | null {
+	if (name === "Read" || name === "Glob" || name === "Grep") return "read"
+	if (name === "Edit" || name === "Write") return "write"
+	if (name === "Bash" || name === "bash") return "run"
+	return null
+}
+
+/**
+ * A render-ready item: either a single ConsoleEntry or a grouped run of tool calls.
+ */
+type RenderItem =
+	| { type: "single"; entry: ConsoleEntry; index: number; duration: string | null }
+	| {
+			type: "group"
+			category: string
+			entries: ToolEntry[]
+			indices: number[]
+			durations: (string | null)[]
+	  }
+
+/**
+ * Walk the flat entries array and produce RenderItems, collapsing consecutive
+ * same-category tool calls (≥ GROUP_THRESHOLD) into group items.
+ */
+function buildRenderItems(entries: ConsoleEntry[], durations: (string | null)[]): RenderItem[] {
+	const items: RenderItem[] = []
+	let i = 0
+
+	while (i < entries.length) {
+		const entry = entries[i]
+
+		if (entry.kind === "tool_use") {
+			const cat = toolCategory(entry.tool_name)
+			if (cat) {
+				// Scan ahead for consecutive same-category tool calls
+				const runEntries: ToolEntry[] = []
+				const runIndices: number[] = []
+				const runDurations: (string | null)[] = []
+
+				while (i < entries.length) {
+					const e = entries[i]
+					if (e.kind !== "tool_use" || toolCategory(e.tool_name) !== cat) break
+					runEntries.push(e)
+					runIndices.push(i)
+					runDurations.push(durations[i])
+					i++
+				}
+
+				if (runEntries.length >= GROUP_THRESHOLD) {
+					items.push({
+						type: "group",
+						category: cat,
+						entries: runEntries,
+						indices: runIndices,
+						durations: runDurations,
+					})
+				} else {
+					// Below threshold — emit as individual items
+					for (let j = 0; j < runEntries.length; j++) {
+						items.push({
+							type: "single",
+							entry: runEntries[j],
+							index: runIndices[j],
+							duration: runDurations[j],
+						})
+					}
+				}
+				continue
+			}
+		}
+
+		items.push({ type: "single", entry, index: i, duration: durations[i] })
+		i++
+	}
+
+	return items
 }
 
 function getEntryTs(entry: ConsoleEntry): string | undefined {
@@ -99,6 +184,9 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 		if (ts) prevTs = ts
 	}
 
+	// Build grouped render items
+	const renderItems = useMemo(() => buildRenderItems(entries, durations), [entries, durations])
+
 	// Determine whether to show the waiting indicator:
 	// Show when the session is live, not complete, and no tool is currently loading
 	// or waiting on a gate. Don't show after assistant_message (Stop hook) —
@@ -118,8 +206,19 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 
 	return (
 		<div className="console" ref={containerRef} onScroll={handleScroll}>
-			{entries.map((entry, i) => {
-				const duration = durations[i]
+			{renderItems.map((item) => {
+				if (item.type === "group") {
+					return (
+						<ActionGroup
+							key={`group-${item.indices[0]}`}
+							category={item.category}
+							entries={item.entries}
+							durations={item.durations}
+						/>
+					)
+				}
+
+				const { entry, index: i, duration } = item
 				switch (entry.kind) {
 					case "log":
 						return <ConsoleLogEntry key={`log-${i}`} entry={entry} duration={duration} />
