@@ -1,113 +1,94 @@
 import { useState } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
+import { Duration } from "./ConsoleEntry"
 import { ToolExecution } from "./ToolExecution"
 
 type ToolEntry = Extract<ConsoleEntry, { kind: "tool_use" }>
 
 interface ActionGroupProps {
+	category: string
 	entries: ToolEntry[]
 	durations: (string | null)[]
 }
 
-function getToolSummary(entry: ToolEntry): string {
-	const { tool_name, tool_input } = entry
-	if (tool_name === "Write" || tool_name === "Edit") {
-		return (tool_input.file_path as string) || "unknown file"
-	}
-	if (tool_name === "Read") {
-		return (tool_input.file_path as string) || "unknown file"
-	}
-	if (tool_name === "Bash") {
-		return ((tool_input.command as string) || "").slice(0, 60)
-	}
-	if (tool_name === "Glob") {
-		return (tool_input.pattern as string) || "*"
-	}
-	if (tool_name === "Grep") {
-		return (tool_input.pattern as string) || ""
-	}
-	return tool_name
+/** Labels per category — [active gerund, completed past tense, noun]. */
+const CATEGORY_LABELS: Record<string, [string, string, string]> = {
+	read: ["Reading", "Read", "files"],
+	write: ["Editing", "Edited", "files"],
+	run: ["Running", "Ran", "commands"],
 }
 
-function getStatus(entry: ToolEntry, isLast: boolean): "pending" | "running" | "done" | "failed" {
-	if (entry.tool_response === null) {
-		return isLast ? "running" : "pending"
+function aggregateDuration(durations: (string | null)[]): string | null {
+	let totalMs = 0
+	let any = false
+	for (const d of durations) {
+		if (!d) continue
+		any = true
+		// Parse back from formatted string
+		if (d.endsWith("ms")) {
+			totalMs += Number.parseInt(d, 10)
+		} else if (d.includes("m ")) {
+			const [m, s] = d.split("m ")
+			totalMs += Number.parseInt(m, 10) * 60_000 + Number.parseFloat(s) * 1000
+		} else if (d.endsWith("s")) {
+			totalMs += Number.parseFloat(d) * 1000
+		}
 	}
-	// Simple heuristic: check if output contains error indicators
-	const out = entry.tool_response.toLowerCase()
-	if (out.includes("error:") || out.includes("failed") || out.startsWith("error")) {
-		return "failed"
-	}
-	return "done"
+	if (!any) return null
+	if (totalMs < 1000) return `${totalMs}ms`
+	const seconds = totalMs / 1000
+	if (seconds < 60) return `${seconds.toFixed(1)}s`
+	const minutes = Math.floor(seconds / 60)
+	const remainingSeconds = seconds % 60
+	return `${minutes}m ${remainingSeconds.toFixed(0)}s`
 }
 
-function StatusIcon({ status }: { status: string }) {
-	switch (status) {
-		case "pending":
-			return (
-				<span className="status-icon">
-					<span className="status-icon-pending" />
-				</span>
-			)
-		case "running":
-			return (
-				<span className="status-icon">
-					<span className="status-icon-running" />
-				</span>
-			)
-		case "done":
-			return <span className="status-icon status-icon-done">{"\u2713"}</span>
-		case "failed":
-			return <span className="status-icon status-icon-failed">{"\u2717"}</span>
-		default:
-			return null
-	}
-}
+export function ActionGroup({ category, entries, durations }: ActionGroupProps) {
+	const [expanded, setExpanded] = useState(false)
 
-export function ActionGroup({ entries, durations }: ActionGroupProps) {
-	const [collapsed, setCollapsed] = useState(false)
-	const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
-
-	const doneCount = entries.filter((e) => e.tool_response !== null).length
 	const total = entries.length
-	const allDone = doneCount === total
+	const allDone = entries.every((e) => e.tool_response !== null)
+	const [activeLabel, doneLabel, noun] = CATEGORY_LABELS[category] || [
+		"Processing",
+		"Processed",
+		"items",
+	]
+
+	const tail = entries[entries.length - 1]
+	const tailDuration = durations[durations.length - 1]
+	const totalDuration = aggregateDuration(durations)
+
+	// Header text with tense switching
+	const headerText = allDone
+		? `${doneLabel} ${total} ${noun}`
+		: `${activeLabel} ${total} ${noun}...`
 
 	return (
-		<div className="action-group">
-			<div className="action-group-header" onClick={() => setCollapsed((v) => !v)}>
-				<span className="action-group-title">Actions</span>
-				<span className="action-group-count">
-					{allDone ? `${total} complete` : `${doneCount} of ${total} complete`}
-				</span>
-				<span className="action-group-toggle">{collapsed ? "\u25B6" : "\u25BC"}</span>
+		<div className="tool-group">
+			<div className="tool-group-header" onClick={() => setExpanded((v) => !v)}>
+				{!allDone && <span className="spinner-inline" />}
+				<span className="tool-group-label">{headerText}</span>
+				<span className="tool-group-chevron">{expanded ? "\u25BC" : "\u25B6"}</span>
+				{allDone && <Duration value={totalDuration} />}
 			</div>
 
-			{!collapsed && (
-				<div className="action-group-list">
-					{entries.map((entry, i) => {
-						const isLast = i === entries.length - 1
-						const status = getStatus(entry, isLast)
-						const isExpanded = expandedIdx === i
+			{/* Expanded: show all items as one-liners */}
+			{expanded && (
+				<div className="tool-group-items">
+					{entries.map((entry, i) => (
+						<ToolExecution
+							key={entry.tool_use_id || `gi-${i}`}
+							entry={entry}
+							duration={durations[i]}
+						/>
+					))}
+				</div>
+			)}
 
-						return (
-							<div key={entry.tool_use_id || `action-${i}`}>
-								<div
-									className={`action-item ${isExpanded ? "expanded" : ""}`}
-									onClick={() => setExpandedIdx(isExpanded ? null : i)}
-								>
-									<StatusIcon status={status} />
-									<span className="action-item-name">{entry.tool_name}</span>
-									<span className="action-item-summary">{getToolSummary(entry)}</span>
-									{durations[i] && <span className="action-item-duration">{durations[i]}</span>}
-								</div>
-								{isExpanded && (
-									<div className="action-item-detail">
-										<ToolExecution entry={entry} duration={durations[i]} />
-									</div>
-								)}
-							</div>
-						)
-					})}
+			{/* Tail: always show last/active item */}
+			{!expanded && (
+				<div className="tool-group-tail">
+					<ToolExecution entry={tail} duration={tailDuration} />
 				</div>
 			)}
 		</div>

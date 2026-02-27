@@ -259,132 +259,43 @@
 	}
 }
 
-/* Action group */
-.action-group {
-	margin: 4px 0;
-	border: 1px solid var(--border);
-	border-radius: 8px;
-	overflow: hidden;
+/* Tool group (accordion with tail) */
+.tool-group {
+	margin: 2px 0;
+	padding: 0;
 }
 
-.action-group-header {
+.tool-group-header {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 8px 12px;
-	background: var(--bg-surface);
+	gap: 6px;
+	padding: 3px 0;
+	cursor: pointer;
 	font-family: var(--font-mono);
 	font-size: 13px;
 	color: var(--text-muted);
-	cursor: pointer;
 	user-select: none;
+	line-height: 1.6;
 }
 
-.action-group-header:hover {
-	background: var(--bg-hover);
+.tool-group-header:hover .tool-group-label {
+	text-decoration: underline;
 }
 
-.action-group-title {
-	font-weight: 600;
-}
-
-.action-group-count {
-	color: var(--text-subtle);
-	font-size: 11px;
-}
-
-.action-group-toggle {
-	margin-left: auto;
-	color: var(--text-subtle);
-	font-size: 10px;
-}
-
-.action-group-list {
-	list-style: none;
-}
-
-.action-item {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 5px 12px;
-	font-family: var(--font-mono);
-	font-size: 13px;
-	cursor: pointer;
-	transition: background 0.1s;
-	border-top: 1px solid var(--border);
-}
-
-.action-item:hover {
-	background: var(--bg-hover);
-}
-
-.action-item.expanded {
-	background: var(--bg-surface);
-}
-
-/* Status icons (CSS-only) */
-.status-icon {
-	width: 14px;
-	height: 14px;
-	flex-shrink: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.status-icon-pending {
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	border: 1.5px solid var(--text-subtle);
-}
-
-.status-icon-running {
-	width: 10px;
-	height: 10px;
-	border: 1.5px solid var(--border);
-	border-top-color: var(--brand-1);
-	border-radius: 50%;
-	animation: spin 0.8s linear infinite;
-}
-
-.status-icon-done {
-	color: var(--green);
-	font-size: 13px;
-	line-height: 1;
-}
-
-.status-icon-failed {
-	color: var(--red);
-	font-size: 13px;
-	line-height: 1;
-}
-
-.action-item-name {
+.tool-group-label {
 	font-weight: 600;
 	color: var(--brand-1);
-	white-space: nowrap;
 }
 
-.action-item-summary {
+.tool-group-chevron {
+	font-size: 9px;
 	color: var(--text-subtle);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
-.action-item-duration {
-	margin-left: auto;
-	font-size: 11px;
-	color: var(--text-subtle);
-	flex-shrink: 0;
-}
-
-.action-item-detail {
-	padding: 8px 12px 8px 34px;
-	border-top: 1px solid var(--border);
-	background: var(--bg);
+/* Tail & expanded items are indented under the header */
+.tool-group-tail,
+.tool-group-items {
+	padding-left: 16px;
 }
 
 /* Todo widget */
