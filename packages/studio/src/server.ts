@@ -52,6 +52,9 @@ interface ServerConfig {
 /** Active session bridges — one per running session */
 const bridges = new Map<string, SessionBridge>()
 
+/** Inflight hook session creations — prevents duplicate sessions from concurrent hooks */
+const inflightHookCreations = new Map<string, Promise<string>>()
+
 function parseRepoNameFromUrl(url: string | null): string | null {
 	if (!url) return null
 	const match = url.match(/github\.com[/:](.+?)(?:\.git)?$/)
@@ -549,6 +552,241 @@ export function createApp(config: ServerConfig) {
 		}
 
 		return c.json({ ok: true })
+	})
+
+	// --- Unified Hook Endpoint (transcript_path correlation) ---
+
+	// Single endpoint for all Claude Code hook events. Uses transcript_path
+	// from the hook JSON as the correlation key — stable across resume/compact,
+	// changes on /clear. Replaces the need for client-side session tracking.
+	app.post("/api/hook", async (c) => {
+		const body = (await c.req.json()) as Record<string, unknown>
+		const transcriptPath = body.transcript_path as string | undefined
+
+		// Look up or create session via transcript_path
+		let sessionId: string | undefined
+		if (transcriptPath) {
+			sessionId = config.registry.getSessionByTranscript(transcriptPath)
+		}
+
+		if (!sessionId) {
+			// Check inflight creation to prevent duplicate sessions from concurrent hooks
+			if (transcriptPath && inflightHookCreations.has(transcriptPath)) {
+				// Another request is already creating a session for this transcript — wait for it
+				sessionId = await inflightHookCreations.get(transcriptPath)
+			}
+		}
+
+		if (!sessionId) {
+			// Create a new session (with inflight guard)
+			const createPromise = (async () => {
+				const newId = crypto.randomUUID()
+
+				// Create the durable stream
+				const conn = sessionStream(config, newId)
+				try {
+					await DurableStream.create({
+						url: conn.url,
+						headers: conn.headers,
+						contentType: "application/json",
+					})
+				} catch (err) {
+					console.error(`[hook] Failed to create durable stream:`, err)
+					throw err
+				}
+
+				// Derive project name from cwd
+				const cwd = body.cwd as string | undefined
+				const projectName = cwd ? path.basename(cwd) : "local-session"
+
+				const session: SessionInfo = {
+					id: newId,
+					projectName,
+					sandboxProjectDir: cwd || "",
+					description: `Local session: ${projectName}`,
+					createdAt: new Date().toISOString(),
+					lastActiveAt: new Date().toISOString(),
+					status: "running",
+				}
+				await config.registry.addSession(session)
+
+				// Durably map transcript_path → session
+				if (transcriptPath) {
+					await config.registry.mapTranscriptToSession(transcriptPath, newId)
+				}
+
+				console.log(
+					`[hook] Created session: ${newId} (project: ${session.projectName}, transcript: ${transcriptPath ?? "none"})`,
+				)
+				return newId
+			})()
+
+			if (transcriptPath) {
+				inflightHookCreations.set(transcriptPath, createPromise)
+			}
+			try {
+				sessionId = await createPromise
+			} catch {
+				return c.json({ error: "Failed to create event stream" }, 500)
+			} finally {
+				if (transcriptPath) {
+					inflightHookCreations.delete(transcriptPath)
+				}
+			}
+		}
+
+		// Ensure bridge exists
+		const bridge = getOrCreateBridge(config, sessionId)
+
+		// On SessionStart (resume/compact), re-activate the session
+		const hookName = body.hook_event_name as string | undefined
+		if (hookName === "SessionStart") {
+			const session = config.registry.getSession(sessionId)
+			if (session && session.status !== "running") {
+				await config.registry.updateSession(sessionId, { status: "running" })
+			}
+		}
+
+		// Map hook JSON → EngineEvent
+		const hookEvent = mapHookToEngineEvent(body)
+		if (!hookEvent) {
+			return c.json({ ok: true, sessionId })
+		}
+
+		try {
+			await bridge.emit(hookEvent)
+		} catch (err) {
+			console.error(`[hook] Failed to emit:`, err)
+			return c.json({ error: "Failed to write event" }, 500)
+		}
+
+		// Bump lastActiveAt
+		await config.registry.updateSession(sessionId, {})
+
+		// SessionEnd: mark complete and close bridge (keep mapping for potential re-open)
+		if (hookEvent.type === "session_end") {
+			await config.registry.updateSession(sessionId, { status: "complete" })
+			closeBridge(sessionId)
+			return c.json({ ok: true, sessionId })
+		}
+
+		// AskUserQuestion: block until the user answers via the web UI
+		if (hookEvent.type === "ask_user_question") {
+			const toolUseId = hookEvent.tool_use_id
+			console.log(`[hook] Blocking for ask_user_question gate: ${toolUseId}`)
+			try {
+				const gateTimeout = 5 * 60 * 1000
+				const answer = await Promise.race([
+					createGate<{ answer: string }>(sessionId, `ask_user_question:${toolUseId}`),
+					new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error("AskUserQuestion gate timed out")), gateTimeout),
+					),
+				])
+				console.log(`[hook] ask_user_question gate resolved: ${toolUseId}`)
+				return c.json({
+					sessionId,
+					hookSpecificOutput: {
+						hookEventName: "PreToolUse",
+						permissionDecision: "allow",
+						updatedInput: {
+							questions: (body.tool_input as Record<string, unknown>)?.questions,
+							answers: { [hookEvent.question]: answer.answer },
+						},
+					},
+				})
+			} catch (err) {
+				console.error(`[hook] ask_user_question gate error:`, err)
+				return c.json({ ok: true, sessionId })
+			}
+		}
+
+		return c.json({ ok: true, sessionId })
+	})
+
+	// --- Hook Setup Installer ---
+
+	// Returns a shell script that installs forward.sh and configures Claude Code hooks
+	// in the current project directory (.claude/hooks/ and .claude/settings.local.json).
+	// Usage: cd <project> && curl -s http://localhost:4400/api/hooks/setup | bash
+	app.get("/api/hooks/setup", (c) => {
+		const port = config.port
+		const script = `#!/bin/bash
+# Electric Agent — Claude Code hook installer (project-scoped)
+# Installs the hook forwarder into the current project's .claude/ directory.
+
+set -e
+
+HOOKS_DIR=".claude/hooks"
+SETTINGS_FILE=".claude/settings.local.json"
+FORWARD_SH="\${HOOKS_DIR}/forward.sh"
+EA_PORT="${port}"
+
+mkdir -p "\${HOOKS_DIR}"
+
+# Write the forwarder script
+cat > "\${FORWARD_SH}" << 'HOOKEOF'
+#!/bin/bash
+# Forward Claude Code hook events to Electric Agent studio.
+# Installed by: curl -s http://localhost:EA_PORT/api/hooks/setup | bash
+
+EA_PORT="\${EA_PORT:-EA_PORT_PLACEHOLDER}"
+BODY="$(cat)"
+
+RESPONSE=$(curl -s -X POST "http://localhost:\${EA_PORT}/api/hook" \\
+  -H "Content-Type: application/json" \\
+  -d "\${BODY}" \\
+  --max-time 360 \\
+  --connect-timeout 2 \\
+  2>/dev/null)
+
+# If the response contains hookSpecificOutput, print it so Claude Code reads it
+if echo "\${RESPONSE}" | grep -q '"hookSpecificOutput"'; then
+  echo "\${RESPONSE}"
+fi
+
+exit 0
+HOOKEOF
+
+# Replace placeholder with actual port
+sed -i.bak "s/EA_PORT_PLACEHOLDER/${port}/" "\${FORWARD_SH}" && rm -f "\${FORWARD_SH}.bak"
+chmod +x "\${FORWARD_SH}"
+
+# Merge hook config into project-level settings.local.json
+HOOK_ENTRY="\${FORWARD_SH}"
+
+if command -v node > /dev/null 2>&1; then
+  node -e "
+const fs = require('fs');
+const file = process.argv[1];
+const hook = process.argv[2];
+let settings = {};
+try { settings = JSON.parse(fs.readFileSync(file, 'utf-8')); } catch {}
+if (!settings.hooks) settings.hooks = {};
+const events = ['PreToolUse','PostToolUse','PostToolUseFailure','Stop','SessionStart','SessionEnd','UserPromptSubmit','SubagentStart','SubagentStop'];
+for (const ev of events) {
+  if (!settings.hooks[ev]) settings.hooks[ev] = [];
+  const arr = settings.hooks[ev];
+  if (!arr.some(h => h.command === hook)) {
+    arr.push({ type: 'command', command: hook });
+  }
+}
+fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\\\\n');
+" "\${SETTINGS_FILE}" "\${HOOK_ENTRY}"
+else
+  echo "Warning: node not found. Please add the hook manually to \${SETTINGS_FILE}"
+  echo "See: https://docs.anthropic.com/en/docs/claude-code/hooks"
+  exit 1
+fi
+
+echo ""
+echo "Electric Agent hooks installed in project: $(pwd)"
+echo "  Forwarder: $(pwd)/\${FORWARD_SH}"
+echo "  Settings:  $(pwd)/\${SETTINGS_FILE}"
+echo "  Server:    http://localhost:\${EA_PORT}"
+echo ""
+echo "Start claude in this project — the session will appear in the studio UI."
+`
+		return c.text(script, 200, { "Content-Type": "text/plain" })
 	})
 
 	// Start new project

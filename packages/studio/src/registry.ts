@@ -9,6 +9,7 @@ type RegistryEvent =
 	| { type: "session_registered"; session: SessionInfo; ts: string }
 	| { type: "session_updated"; sessionId: string; update: Partial<SessionInfo>; ts: string }
 	| { type: "session_deleted"; sessionId: string; ts: string }
+	| { type: "session_mapped"; transcriptPath: string; sessionId: string; ts: string }
 	| { type: "room_created"; room: SharedSessionEntry; ts: string }
 	| { type: "room_revoked"; roomId: string; ts: string }
 
@@ -20,6 +21,7 @@ type RegistryEvent =
  */
 export class Registry {
 	private sessions = new Map<string, SessionInfo>()
+	private transcriptToSession = new Map<string, string>()
 	private rooms = new Map<string, SharedSessionEntry>()
 	private roomsByCode = new Map<string, SharedSessionEntry>()
 	private stream: DurableStream
@@ -97,6 +99,9 @@ export class Registry {
 			}
 			case "session_deleted":
 				this.sessions.delete(event.sessionId)
+				break
+			case "session_mapped":
+				this.transcriptToSession.set(event.transcriptPath, event.sessionId)
 				break
 			case "room_created":
 				this.rooms.set(event.room.id, event.room)
@@ -177,6 +182,31 @@ export class Registry {
 		// (avoids async in a sync hot path). The status will be corrected on
 		// next real mutation or server restart.
 		return count
+	}
+
+	// --- Transcript → Session Mapping ---
+
+	/**
+	 * Look up the EA session ID for a Claude Code transcript path.
+	 * Returns undefined if no mapping exists or the session has been deleted.
+	 */
+	getSessionByTranscript(transcriptPath: string): string | undefined {
+		const sessionId = this.transcriptToSession.get(transcriptPath)
+		if (!sessionId) return undefined
+		// Only return if the session still exists
+		return this.sessions.has(sessionId) ? sessionId : undefined
+	}
+
+	/**
+	 * Durably map a transcript path to an EA session ID.
+	 */
+	async mapTranscriptToSession(transcriptPath: string, sessionId: string): Promise<void> {
+		await this.append({
+			type: "session_mapped",
+			transcriptPath,
+			sessionId,
+			ts: new Date().toISOString(),
+		})
 	}
 
 	// --- Room (Shared Session) CRUD ---

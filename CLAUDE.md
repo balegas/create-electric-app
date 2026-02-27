@@ -49,6 +49,13 @@ node packages/agent/dist/index.js headless       # headless NDJSON mode (used in
 - **`SANDBOX_RUNTIME=sprites`** — uses Fly.io Sprites cloud VMs. Requires `FLY_API_TOKEN`.
 - **`SANDBOX_RUNTIME=daytona`** — uses Daytona cloud sandboxes. Requires `DAYTONA_API_KEY`.
 
+**Claude Code hook integration:** To stream Claude Code events into the studio UI, install the hook forwarder in your project:
+```bash
+cd <your-project>
+curl -s http://localhost:4400/api/hooks/setup | bash
+```
+This installs `.claude/hooks/forward.sh` and configures `.claude/settings.local.json` in the current project directory. After installation, running `claude` in the project will automatically stream events to the studio. Sessions correlate via `transcript_path` — resume continues the same session, `/clear` starts a new one.
+
 **Caddy (HTTP/2 reverse proxy):** `pnpm serve` auto-starts Caddy if installed, proxying `https://localhost:4443` → `http://127.0.0.1:4400`. HTTP/2 is required for concurrent SSE streams (registry + per-session). Install with `brew install caddy`. Accept the self-signed cert on first visit. If Caddy is not installed, the server falls back to plain HTTP on port 4400 (limited to ~6 concurrent SSE connections per browser).
 
 ### Deployment (Fly.io)

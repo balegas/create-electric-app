@@ -59,6 +59,9 @@ export function useRegistry() {
 						case "session_deleted":
 							sessionsRef.current.delete(event.sessionId)
 							break
+						case "session_mapped":
+							// Handled server-side only — no client state needed
+							break
 						case "room_created":
 							roomsRef.current.set(event.room.id, event.room)
 							break

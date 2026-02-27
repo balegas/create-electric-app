@@ -44,6 +44,7 @@ export type RegistryEvent =
 	| { type: "session_registered"; session: RegistrySessionInfo; ts: string }
 	| { type: "session_updated"; sessionId: string; update: Partial<RegistrySessionInfo>; ts: string }
 	| { type: "session_deleted"; sessionId: string; ts: string }
+	| { type: "session_mapped"; transcriptPath: string; sessionId: string; ts: string }
 	| { type: "room_created"; room: RegistryRoomInfo; ts: string }
 	| { type: "room_revoked"; roomId: string; ts: string }
 
