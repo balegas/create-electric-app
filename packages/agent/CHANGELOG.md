@@ -1,5 +1,15 @@
 # @electric-agent/agent
 
+## 1.0.1
+
+### Patch Changes
+
+- fixes to sprites
+- Updated dependencies [89d4cb6]
+- Updated dependencies
+- Updated dependencies [ba8f908]
+  - @electric-agent/studio@1.1.0
+
 ## 1.0.0
 
 ### Major Changes

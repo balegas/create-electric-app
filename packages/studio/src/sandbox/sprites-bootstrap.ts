@@ -24,7 +24,7 @@ export interface BootstrapOptions {
  * This runs inside a freshly-created sprite that has Node.js but nothing else.
  */
 export async function bootstrapSprite(sprite: Sprite, opts?: BootstrapOptions): Promise<void> {
-	const packageSpec = opts?.packageUrl ?? "electric-agent"
+	const packageSpec = opts?.packageUrl ?? "@electric-agent/agent"
 
 	console.log(`[sprites-bootstrap] Installing pnpm...`)
 	await sprite.exec("npm install -g pnpm", { maxBuffer: 50 * 1024 * 1024 })
