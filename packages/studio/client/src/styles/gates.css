@@ -53,15 +53,29 @@
 }
 
 .gate-prompt .question input,
-.gate-prompt .question select {
+.gate-prompt .question select,
+.gate-prompt .question textarea {
 	width: 100%;
-	padding: 6px 10px;
+	padding: 8px 12px;
 	background: var(--bg);
 	border: 1px solid var(--border);
-	border-radius: 6px;
+	border-radius: 8px;
 	color: var(--text);
 	font-family: var(--font-mono);
 	font-size: 13px;
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s,
+		background 0.15s;
+}
+
+.gate-prompt .question textarea {
+	resize: vertical;
+}
+
+.gate-prompt .question input::placeholder,
+.gate-prompt .question textarea::placeholder {
+	color: var(--text-subtle);
 }
 
 .gate-prompt .question select {
@@ -74,6 +88,8 @@
 	cursor: pointer;
 }
 
+.gate-prompt .question input:hover,
+.gate-prompt .question textarea:hover,
 .gate-prompt .question select:hover {
 	border-color: var(--text-subtle);
 }
@@ -83,18 +99,14 @@
 .gate-prompt .question select:focus {
 	outline: none;
 	border-color: var(--brand-2);
+	box-shadow: 0 0 0 3px rgba(153, 143, 231, 0.15);
 }
 
-.gate-prompt .question textarea {
-	width: 100%;
-	padding: 6px 10px;
-	background: var(--bg);
-	border: 1px solid var(--border);
-	border-radius: 6px;
-	color: var(--text);
-	font-family: var(--font-mono);
-	font-size: 13px;
-	resize: vertical;
+.gate-prompt .question input:disabled,
+.gate-prompt .question textarea:disabled,
+.gate-prompt .question select:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 
 /* Gate action buttons */
@@ -105,8 +117,8 @@
 }
 
 .gate-btn {
-	padding: 6px 16px;
-	border-radius: 6px;
+	padding: 8px 18px;
+	border-radius: 8px;
 	border: 1px solid var(--border);
 	background: var(--bg);
 	color: var(--text-muted);
@@ -115,11 +127,14 @@
 	cursor: pointer;
 	transition:
 		background 0.15s,
-		border-color 0.15s;
+		border-color 0.15s,
+		color 0.15s,
+		box-shadow 0.15s;
 }
 
 .gate-btn:hover {
 	background: var(--bg-hover);
+	border-color: var(--text-subtle);
 }
 
 .gate-btn:disabled {
@@ -184,14 +199,14 @@
 .gate-radio {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	font-family: var(--font-mono);
 	font-size: 13px;
 	color: var(--text);
 	cursor: pointer;
 	line-height: 1.4;
-	padding: 4px 10px;
-	border-radius: 6px;
+	padding: 8px 12px;
+	border-radius: 8px;
 	border: 1px solid var(--border);
 	transition:
 		background 0.15s,
@@ -200,6 +215,7 @@
 
 .gate-radio:hover {
 	background: var(--bg-hover);
+	border-color: var(--text-subtle);
 }
 
 .gate-radio:has(input:checked) {
@@ -227,7 +243,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
-	padding: 10px 12px;
+	padding: 10px 14px;
 	border: 1px solid var(--border);
 	border-radius: 8px;
 	background: transparent;
@@ -235,11 +251,13 @@
 	text-align: left;
 	transition:
 		background 0.15s,
-		border-color 0.15s;
+		border-color 0.15s,
+		box-shadow 0.15s;
 }
 
 .gate-option:hover {
 	background: var(--bg-hover);
+	border-color: var(--text-subtle);
 }
 
 .gate-option.active {

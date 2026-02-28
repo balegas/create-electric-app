@@ -218,30 +218,56 @@
 
 .settings-input-row input {
 	flex: 1;
-	padding: 4px 8px;
-	background: var(--bg-surface);
+	padding: 8px 12px;
+	background: var(--bg);
 	border: 1px solid var(--border);
-	border-radius: 4px;
+	border-radius: 8px;
 	color: var(--text);
 	font-family: var(--font-mono);
-	font-size: 12px;
+	font-size: 13px;
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s,
+		background 0.15s;
+}
+
+.settings-input-row input::placeholder {
+	color: var(--text-subtle);
+}
+
+.settings-input-row input:hover {
+	border-color: var(--text-subtle);
 }
 
 .settings-input-row input:focus {
 	outline: none;
 	border-color: var(--brand-2);
+	box-shadow: 0 0 0 3px rgba(153, 143, 231, 0.15);
+}
+
+.settings-input-row input:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 
 .settings-input-row button {
-	padding: 4px 12px;
-	border-radius: 4px;
+	padding: 8px 14px;
+	border-radius: 8px;
 	border: 1px solid var(--border);
 	background: var(--bg-surface);
 	color: var(--text-muted);
 	font-family: var(--font-mono);
-	font-size: 12px;
+	font-size: 13px;
 	cursor: pointer;
-	transition: background 0.15s;
+	transition:
+		background 0.15s,
+		border-color 0.15s,
+		color 0.15s;
+}
+
+.settings-input-row button:hover {
+	background: var(--bg-hover);
+	border-color: var(--text-subtle);
 }
 
 .settings-input-row button.primary {
@@ -254,6 +280,7 @@
 .settings-input-row button.primary:hover {
 	background: var(--brand-2);
 	border-color: var(--brand-2);
+	color: #fff;
 }
 
 .settings-input-row button:disabled {
@@ -510,19 +537,22 @@
 }
 
 .modal-btn {
-	padding: 8px 16px;
-	border-radius: 6px;
+	padding: 8px 18px;
+	border-radius: 8px;
 	border: 1px solid var(--border);
 	background: var(--bg-hover);
 	color: var(--text);
 	font-size: 13px;
 	font-family: var(--font-sans);
 	cursor: pointer;
-	transition: background 0.15s;
+	transition:
+		background 0.15s,
+		border-color 0.15s;
 }
 
 .modal-btn:hover {
 	background: var(--border);
+	border-color: var(--text-subtle);
 }
 
 .modal-btn-danger {
@@ -577,15 +607,23 @@
 	padding: 8px 12px;
 	background: var(--bg);
 	border: 1px solid var(--border);
-	border-radius: 6px;
+	border-radius: 8px;
 	color: var(--text);
 	font-family: var(--font-mono);
 	font-size: 13px;
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s;
+}
+
+.repo-picker-filter input:hover {
+	border-color: var(--text-subtle);
 }
 
 .repo-picker-filter input:focus {
 	outline: none;
 	border-color: var(--brand-2);
+	box-shadow: 0 0 0 3px rgba(153, 143, 231, 0.15);
 }
 
 .repo-picker-filter input::placeholder {
@@ -639,18 +677,26 @@
 
 .repo-picker-new-branch input {
 	flex: 1;
-	padding: 6px 10px;
+	padding: 8px 12px;
 	background: var(--bg);
 	border: 1px solid var(--border);
-	border-radius: 6px;
+	border-radius: 8px;
 	color: var(--text);
 	font-family: var(--font-mono);
 	font-size: 13px;
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s;
+}
+
+.repo-picker-new-branch input:hover {
+	border-color: var(--text-subtle);
 }
 
 .repo-picker-new-branch input:focus {
 	outline: none;
 	border-color: var(--brand-2);
+	box-shadow: 0 0 0 3px rgba(153, 143, 231, 0.15);
 }
 
 .repo-picker-new-branch input::placeholder {
@@ -706,8 +752,8 @@
 
 .font-size-option {
 	flex: 1;
-	padding: 8px 12px;
-	border-radius: 6px;
+	padding: 10px 12px;
+	border-radius: 8px;
 	border: 1px solid var(--border);
 	background: var(--bg);
 	color: var(--text-muted);
@@ -722,6 +768,7 @@
 
 .font-size-option:hover {
 	background: var(--bg-hover);
+	border-color: var(--text-subtle);
 	color: var(--text);
 }
 
