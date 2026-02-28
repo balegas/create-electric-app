@@ -155,8 +155,6 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 			this.config.prompt,
 			"--output-format",
 			"stream-json",
-			"--input-format",
-			"stream-json",
 			"--verbose",
 			"--model",
 			model,
@@ -170,13 +168,16 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 		const escapedArgs = claudeArgs.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")
 		const cmd = `cd '${this.config.cwd}' && claude ${escapedArgs}`
 
-		this.proc = spawn("docker", ["exec", "-i", this.containerId, "bash", "-c", cmd], {
+		// Note: do NOT use -i flag — Claude Code detects interactive stdin and blocks
+		// waiting for input even when -p is provided. Without -i, stdout flows normally.
+		this.proc = spawn("docker", ["exec", this.containerId, "bash", "-c", cmd], {
 			stdio: ["pipe", "pipe", "pipe"],
 		})
 
 		console.log(
 			`[claude-code-docker] Started: session=${this.sessionId} container=${this.containerId} pid=${this.proc.pid}`,
 		)
+		console.log(`[claude-code-docker] cmd: ${cmd}`)
 
 		// Read stdout line by line (stream-json NDJSON)
 		if (this.proc.stdout) {
@@ -187,6 +188,7 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 
 			rl.on("line", (line) => {
 				if (this.closed) return
+				console.log(`[claude-code-docker:stdout] ${line.slice(0, 120)}...`)
 				this.handleLine(line)
 			})
 		}
@@ -250,6 +252,23 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 		// Write to Durable Stream for UI
 		const msg: StreamMessage = { source: "agent", ...event }
 		this.writer.append(JSON.stringify(msg)).catch(() => {})
+
+		// Detect dev:start in Bash tool_use → emit app_ready for the UI preview
+		if (event.type === "pre_tool_use" && event.tool_name === "Bash") {
+			const cmd = (event.tool_input as Record<string, unknown>)?.command
+			if (typeof cmd === "string" && /\bdev:start\b/.test(cmd)) {
+				const appReady: EngineEvent = { type: "app_ready", ts: ts() }
+				const appReadyMsg: StreamMessage = { source: "agent", ...appReady }
+				this.writer.append(JSON.stringify(appReadyMsg)).catch(() => {})
+				for (const cb of this.agentEventCallbacks) {
+					try {
+						cb(appReady)
+					} catch {
+						// Swallow
+					}
+				}
+			}
+		}
 
 		// Dispatch to callbacks
 		for (const cb of this.agentEventCallbacks) {

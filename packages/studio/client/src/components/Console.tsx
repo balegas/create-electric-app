@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
-import { ActionGroup } from "./ActionGroup"
+import { ActionGroup, type ActionGroupEntry } from "./ActionGroup"
 import {
 	ConsoleLogEntry,
 	ConsoleTextEntry,
@@ -19,35 +19,30 @@ interface ConsoleProps {
 	onGateResolved: (index: number, summary?: string) => void
 }
 
-type ToolEntry = Extract<ConsoleEntry, { kind: "tool_use" }>
-
-/** Minimum consecutive same-category tool calls to trigger grouping. */
+/** Minimum action entries to trigger grouping. */
 const GROUP_THRESHOLD = 3
 
-/** Map tool names to grouping categories. */
-function toolCategory(name: string): string | null {
-	if (name === "Read" || name === "Glob" || name === "Grep") return "read"
-	if (name === "Edit" || name === "Write") return "write"
-	if (name === "Bash" || name === "bash") return "run"
-	return null
+/** Entries that are "actions" — tool calls and thinking between boundaries. */
+function isActionEntry(entry: ConsoleEntry): boolean {
+	return entry.kind === "tool_use" || entry.kind === "assistant_thinking"
+}
+
+/** Boundary entries break action groups — user messages, assistant text, gates, logs, todos. */
+function isBoundaryEntry(entry: ConsoleEntry): boolean {
+	return !isActionEntry(entry)
 }
 
 /**
- * A render-ready item: either a single ConsoleEntry or a grouped run of tool calls.
+ * A render-ready item: either a single ConsoleEntry or a grouped run of actions.
  */
 type RenderItem =
 	| { type: "single"; entry: ConsoleEntry; index: number; duration: string | null }
-	| {
-			type: "group"
-			category: string
-			entries: ToolEntry[]
-			indices: number[]
-			durations: (string | null)[]
-	  }
+	| { type: "group"; items: ActionGroupEntry[] }
 
 /**
  * Walk the flat entries array and produce RenderItems, collapsing consecutive
- * same-category tool calls (≥ GROUP_THRESHOLD) into group items.
+ * action entries (tool_use + assistant_thinking) between boundary entries
+ * into a single collapsible group showing just the tail.
  */
 function buildRenderItems(entries: ConsoleEntry[], durations: (string | null)[]): RenderItem[] {
 	const items: RenderItem[] = []
@@ -56,44 +51,22 @@ function buildRenderItems(entries: ConsoleEntry[], durations: (string | null)[])
 	while (i < entries.length) {
 		const entry = entries[i]
 
-		if (entry.kind === "tool_use") {
-			const cat = toolCategory(entry.tool_name)
-			if (cat) {
-				// Scan ahead for consecutive same-category tool calls
-				const runEntries: ToolEntry[] = []
-				const runIndices: number[] = []
-				const runDurations: (string | null)[] = []
-
-				while (i < entries.length) {
-					const e = entries[i]
-					if (e.kind !== "tool_use" || toolCategory(e.tool_name) !== cat) break
-					runEntries.push(e)
-					runIndices.push(i)
-					runDurations.push(durations[i])
-					i++
-				}
-
-				if (runEntries.length >= GROUP_THRESHOLD) {
-					items.push({
-						type: "group",
-						category: cat,
-						entries: runEntries,
-						indices: runIndices,
-						durations: runDurations,
-					})
-				} else {
-					// Below threshold — emit as individual items
-					for (let j = 0; j < runEntries.length; j++) {
-						items.push({
-							type: "single",
-							entry: runEntries[j],
-							index: runIndices[j],
-							duration: runDurations[j],
-						})
-					}
-				}
-				continue
+		if (isActionEntry(entry)) {
+			// Collect consecutive action entries
+			const run: ActionGroupEntry[] = []
+			while (i < entries.length && isActionEntry(entries[i])) {
+				run.push({ entry: entries[i], index: i, duration: durations[i] })
+				i++
 			}
+
+			if (run.length >= GROUP_THRESHOLD) {
+				items.push({ type: "group", items: run })
+			} else {
+				for (const item of run) {
+					items.push({ type: "single", ...item })
+				}
+			}
+			continue
 		}
 
 		items.push({ type: "single", entry, index: i, duration: durations[i] })
@@ -208,14 +181,7 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 		<div className="console" ref={containerRef} onScroll={handleScroll}>
 			{renderItems.map((item) => {
 				if (item.type === "group") {
-					return (
-						<ActionGroup
-							key={`group-${item.indices[0]}`}
-							category={item.category}
-							entries={item.entries}
-							durations={item.durations}
-						/>
-					)
+					return <ActionGroup key={`group-${item.items[0].index}`} items={item.items} />
 				}
 
 				const { entry, index: i, duration } = item

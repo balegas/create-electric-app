@@ -258,7 +258,7 @@ function InfraConfigGate({
 	const [repoAccount, setRepoAccount] = useState(event.ghAccounts[0]?.login ?? "")
 	const [repoName, setRepoName] = useState(event.projectName)
 	const [repoVisibility, setRepoVisibility] = useState<"public" | "private">("private")
-	const [setupRepo, setSetupRepo] = useState(hasGh)
+	const [setupRepo, setSetupRepo] = useState(false)
 
 	async function handleProvision() {
 		setProvisioning(true)
@@ -573,27 +573,23 @@ function InfraConfigGate({
 							</div>
 							<div className="question">
 								<label>Visibility</label>
-								<div className="gate-radio-group">
-									<label className="gate-radio">
-										<input
-											type="radio"
-											name="repo-visibility"
-											checked={repoVisibility === "private"}
-											onChange={() => setRepoVisibility("private")}
-											disabled={disabled}
-										/>
-										Private
-									</label>
-									<label className="gate-radio">
-										<input
-											type="radio"
-											name="repo-visibility"
-											checked={repoVisibility === "public"}
-											onChange={() => setRepoVisibility("public")}
-											disabled={disabled}
-										/>
-										Public
-									</label>
+								<div className="gate-option-group">
+									<button
+										type="button"
+										className={`gate-option ${repoVisibility === "private" ? "active" : ""}`}
+										onClick={() => setRepoVisibility("private")}
+										disabled={disabled}
+									>
+										<span className="gate-option-title">Private</span>
+									</button>
+									<button
+										type="button"
+										className={`gate-option ${repoVisibility === "public" ? "active" : ""}`}
+										onClick={() => setRepoVisibility("public")}
+										disabled={disabled}
+									>
+										<span className="gate-option-title">Public</span>
+									</button>
 								</div>
 							</div>
 						</>
