@@ -13,8 +13,6 @@ COPY packages/agent/package.json packages/agent/
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build
-# Remove dev dependencies after build
-RUN pnpm prune --prod
 
 # ---------------------------------------------------------------------------
 # Stage 2: Runtime image (minimal)
@@ -30,22 +28,30 @@ RUN npm install -g @anthropic-ai/claude-code
 # Install pnpm (used by generated projects)
 RUN npm install -g pnpm
 
-# Copy built packages (protocol + studio + agent)
+# Copy built packages and workspace config, then install prod deps fresh
 WORKDIR /opt/electric-agent
-COPY --from=builder /opt/electric-agent/packages/protocol/dist packages/protocol/dist
+COPY --from=builder /opt/electric-agent/package.json ./package.json
+COPY --from=builder /opt/electric-agent/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /opt/electric-agent/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder /opt/electric-agent/packages/protocol/package.json packages/protocol/
-COPY --from=builder /opt/electric-agent/packages/studio/dist packages/studio/dist
+COPY --from=builder /opt/electric-agent/packages/protocol/dist packages/protocol/dist
 COPY --from=builder /opt/electric-agent/packages/studio/package.json packages/studio/
-COPY --from=builder /opt/electric-agent/packages/agent/dist packages/agent/dist
+COPY --from=builder /opt/electric-agent/packages/studio/dist packages/studio/dist
 COPY --from=builder /opt/electric-agent/packages/agent/package.json packages/agent/
+COPY --from=builder /opt/electric-agent/packages/agent/dist packages/agent/dist
 COPY --from=builder /opt/electric-agent/packages/agent/playbooks packages/agent/playbooks
 COPY --from=builder /opt/electric-agent/packages/agent/template packages/agent/template
-COPY --from=builder /opt/electric-agent/node_modules ./node_modules
-COPY --from=builder /opt/electric-agent/package.json ./package.json
-COPY --from=builder /opt/electric-agent/pnpm-workspace.yaml ./pnpm-workspace.yaml
+RUN pnpm install --prod --frozen-lockfile
 
 # Link the CLI globally so `electric-agent` is on PATH
 RUN cd packages/agent && npm link
+
+# ---------------------------------------------------------------------------
+# Pre-scaffold: run scaffold once at build time so sessions get instant copies.
+# This clones KPB, merges deps, patches vite/gitignore, and runs pnpm install.
+# Per-session customization (project name, .env) happens at runtime.
+# ---------------------------------------------------------------------------
+RUN electric-agent scaffold /opt/scaffold-base --name scaffold-base --skip-git
 
 # Create non-root user (Claude CLI blocks --dangerously-skip-permissions as root)
 RUN adduser -D -s /bin/bash agent && \

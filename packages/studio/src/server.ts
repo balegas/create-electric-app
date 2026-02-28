@@ -1038,11 +1038,56 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			if (sessionBridgeMode === "claude-code") {
 				console.log(`[session:${sessionId}] Setting up Claude Code bridge...`)
 
+				// Copy pre-scaffolded project from the image and customize per-session
+				await bridge.emit({
+					type: "log",
+					level: "build",
+					message: "Setting up project...",
+					ts: ts(),
+				})
+				try {
+					if (config.sandbox.runtime === "docker") {
+						// Docker: copy the pre-built scaffold base (baked into the image)
+						await config.sandbox.exec(handle, `cp -r /opt/scaffold-base '${handle.projectDir}'`)
+						await config.sandbox.exec(
+							handle,
+							`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`,
+						)
+					} else {
+						// Sprites/Daytona: run scaffold from globally installed electric-agent
+						await config.sandbox.exec(
+							handle,
+							`source /etc/profile.d/npm-global.sh 2>/dev/null; electric-agent scaffold '${handle.projectDir}' --name '${projectName}' --skip-git`,
+						)
+					}
+					// Ensure _agent/ working memory directory exists
+					await config.sandbox.exec(
+						handle,
+						`mkdir -p '${handle.projectDir}/_agent' && echo '# Error Log\n' > '${handle.projectDir}/_agent/errors.md' && echo '# Session State\n' > '${handle.projectDir}/_agent/session.md'`,
+					)
+					console.log(`[session:${sessionId}] Project setup complete`)
+					await bridge.emit({
+						type: "log",
+						level: "done",
+						message: "Project ready",
+						ts: ts(),
+					})
+				} catch (err) {
+					console.error(`[session:${sessionId}] Project setup failed:`, err)
+					await bridge.emit({
+						type: "log",
+						level: "error",
+						message: `Project setup failed: ${err instanceof Error ? err.message : "unknown"}`,
+						ts: ts(),
+					})
+				}
+
 				// Write CLAUDE.md to the sandbox workspace
 				const claudeMd = generateClaudeMd({
 					description: body.description,
 					projectName,
 					projectDir: handle.projectDir,
+					runtime: config.sandbox.runtime,
 				})
 				try {
 					await config.sandbox.exec(
@@ -1125,6 +1170,23 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Container may already be stopped
 				}
 				await config.registry.updateSession(sessionId, updates)
+
+				// For Claude Code mode: check if the app is running after completion
+				// and emit app_ready so the UI shows the preview link
+				if (sessionBridgeMode === "claude-code" && success) {
+					try {
+						const appRunning = await config.sandbox.isAppRunning(handle)
+						if (appRunning) {
+							await bridge.emit({
+								type: "app_ready",
+								port: handle.port ?? session.appPort,
+								ts: ts(),
+							})
+						}
+					} catch {
+						// Container may already be stopped
+					}
+				}
 			})
 
 			console.log(`[session:${sessionId}] Starting bridge listener...`)

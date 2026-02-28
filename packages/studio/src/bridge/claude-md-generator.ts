@@ -1,10 +1,9 @@
 /**
- * Generates a CLAUDE.md file for a project workspace so that Claude Code
- * automatically picks up Electric SQL + TanStack DB conventions, guardrails,
- * and workflow instructions.
+ * Generates CLAUDE.md files for project workspaces.
  *
- * This replaces the system prompt that was previously passed to the Agent
- * SDK's query() function, and the hook-based guardrails.
+ * Two variants:
+ * - `generateClaudeMd()` — for Claude Code mode (streamlined, no redundant instructions)
+ * - `generateElectricAgentClaudeMd()` — for electric-agent mode (full instructions for the SDK agent)
  */
 
 export interface ClaudeMdOptions {
@@ -18,17 +17,20 @@ export interface ClaudeMdOptions {
 	isIteration?: boolean
 	/** Iteration request text (if isIteration) */
 	iterationRequest?: string
+	/** Sandbox runtime — affects environment-specific instructions */
+	runtime?: "docker" | "sprites" | "daytona"
 }
+
+// ---------------------------------------------------------------------------
+// Claude Code variant
+// ---------------------------------------------------------------------------
 
 export function generateClaudeMd(opts: ClaudeMdOptions): string {
 	const sections: string[] = []
 
 	sections.push(`# ${opts.projectName}`)
 	sections.push("")
-	sections.push("## Project Context")
-	sections.push(
-		"This is a reactive, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start.",
-	)
+	sections.push(PROJECT_CONTEXT)
 	sections.push("")
 
 	if (!opts.isIteration) {
@@ -45,7 +47,45 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 	sections.push("")
 	sections.push(PLAYBOOK_INSTRUCTIONS)
 	sections.push("")
+	sections.push(INFRASTRUCTURE)
+	sections.push("")
+	sections.push(devServerInstructions(opts.runtime))
+	sections.push("")
+	sections.push(SSR_RULES)
+	sections.push("")
+
+	return sections.join("\n")
+}
+
+// ---------------------------------------------------------------------------
+// Electric Agent variant
+// ---------------------------------------------------------------------------
+
+export function generateElectricAgentClaudeMd(opts: ClaudeMdOptions): string {
+	const sections: string[] = []
+
+	sections.push(`# ${opts.projectName}`)
+	sections.push("")
+	sections.push(PROJECT_CONTEXT)
+	sections.push("")
+
+	if (!opts.isIteration) {
+		sections.push("## Current Task")
+		sections.push(opts.description)
+		sections.push("")
+	}
+
+	sections.push(SCAFFOLD_STRUCTURE)
+	sections.push("")
+	sections.push(DRIZZLE_WORKFLOW)
+	sections.push("")
+	sections.push(GUARDRAILS)
+	sections.push("")
+	sections.push(PLAYBOOK_INSTRUCTIONS_AGENT)
+	sections.push("")
 	sections.push(BUILD_INSTRUCTIONS)
+	sections.push("")
+	sections.push(devServerInstructions(opts.runtime))
 	sections.push("")
 	sections.push(ARCHITECTURE_REFERENCE)
 	sections.push("")
@@ -60,8 +100,11 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 }
 
 // ---------------------------------------------------------------------------
-// Template sections
+// Shared sections (used by both variants)
 // ---------------------------------------------------------------------------
+
+const PROJECT_CONTEXT =
+	"## Project Context\nThis is a reactive, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start."
 
 const SCAFFOLD_STRUCTURE = `## Scaffold Structure (DO NOT EXPLORE)
 The project is scaffolded from a known template. DO NOT read or explore scaffold files before coding. You already know the structure:
@@ -114,7 +157,114 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - snake_case for SQL table/column names
 - Foreign keys with onDelete: "cascade" where appropriate`
 
-const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge)
+function devServerInstructions(runtime?: string): string {
+	if (runtime === "sprites" || runtime === "daytona") {
+		return `## Dev Server & Migrations
+### Dev Server
+- \`pnpm dev:start\` — start the Vite dev server in the background
+- \`pnpm dev:stop\` — stop the dev server
+- \`pnpm dev:restart\` — stop then start
+
+The app is exposed on the VITE_PORT environment variable (default: 5173).
+The database and Electric sync service are remote (cloud-hosted) — there is no local Postgres or Docker.
+
+### Migrations (CRITICAL)
+After modifying src/db/schema.ts, ALWAYS run migrations:
+\`\`\`bash
+pnpm drizzle-kit generate   # generate SQL from schema changes
+pnpm drizzle-kit migrate    # apply migration to the database
+\`\`\`
+
+### Sprites Environment Gotchas
+- npm global binaries are NOT in PATH by default. If you need to run a globally installed tool, source the profile first: \`source /etc/profile.d/npm-global.sh\`
+- Node.js is managed via nvm at \`/.sprite/languages/node/nvm/\`
+- The sandbox is a cloud micro-VM — there is no Docker, no docker-compose, no local Postgres
+- The database connection string is in DATABASE_URL (remote Neon Postgres)
+
+### Workflow
+After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`
+	}
+
+	return `## Dev Server & Migrations
+### Dev Server
+- \`pnpm dev:start\` — start Vite + Postgres + Electric in the background
+- \`pnpm dev:stop\` — stop all background services
+- \`pnpm dev:restart\` — stop then start
+
+The app is exposed on the VITE_PORT environment variable (default: 5173).
+
+### Migrations (CRITICAL)
+After modifying src/db/schema.ts, ALWAYS run migrations:
+\`\`\`bash
+pnpm dev:start              # start Postgres (needed for migrate)
+pnpm drizzle-kit generate   # generate SQL from schema changes
+pnpm drizzle-kit migrate    # apply migration to the database
+\`\`\`
+
+### Workflow
+After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`
+}
+
+const SSR_RULES = `## SSR Configuration (CRITICAL)
+NEVER add ssr: false to __root.tsx — it renders the HTML shell and must always SSR.
+Instead, add ssr: false to each LEAF route that uses useLiveQuery or collections.
+This is needed because useLiveQuery uses useSyncExternalStore without getServerSnapshot.`
+
+// ---------------------------------------------------------------------------
+// Claude Code–only sections
+// ---------------------------------------------------------------------------
+
+const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
+Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.
+
+### Available Skills
+Read with the Read tool at these exact paths:
+
+**Electric SQL** (\`node_modules/@electric-sql/playbook/skills/\`):
+- \`electric/SKILL.md\` — core Electric concepts and shape API
+- \`electric-tanstack-integration/SKILL.md\` — how Electric + TanStack DB work together (READ FIRST)
+- \`electric-quickstart/SKILL.md\` — quickstart patterns
+- \`electric-security-check/SKILL.md\` — security best practices
+- \`tanstack-start-quickstart/SKILL.md\` — TanStack Start framework patterns
+- \`deploying-electric/SKILL.md\` — deployment configuration
+- \`electric-go-live/SKILL.md\` — production checklist
+
+**TanStack DB** (\`node_modules/@tanstack/db-playbook/skills/\`):
+- \`tanstack-db/SKILL.md\` — collections, useLiveQuery, mutations (CRITICAL — read before writing any UI)
+
+**Durable Streams** (\`node_modules/@durable-streams/playbook/skills/\`):
+- \`durable-streams/SKILL.md\` — event streaming patterns
+- \`durable-state/SKILL.md\` — state management
+- \`durable-streams-dev-setup/SKILL.md\` — development setup
+
+### Reading Order
+1. \`electric-tanstack-integration/SKILL.md\` — integration rules and guardrails
+2. \`tanstack-db/SKILL.md\` — collections, queries, mutations API
+3. \`electric/SKILL.md\` — shape API for proxy routes
+4. Other skills as needed for your current phase
+
+### Important
+- ONLY read playbooks relevant to your current phase
+- Do NOT use include_references — the SKILL.md content is sufficient`
+
+const INFRASTRUCTURE = `## Infrastructure (Pre-configured — DO NOT MODIFY)
+The database (Postgres) and Electric sync service are already provisioned and configured via environment variables:
+- \`DATABASE_URL\` — Postgres connection string
+- \`ELECTRIC_URL\` — Electric sync service URL
+- \`ELECTRIC_SOURCE_ID\` / \`ELECTRIC_SECRET\` — Electric Cloud auth (if using cloud mode)
+
+These are read by:
+- \`src/db/index.ts\` — Drizzle client (DO NOT MODIFY)
+- \`drizzle.config.ts\` — Drizzle Kit migrations (DO NOT MODIFY)
+- \`src/lib/electric-proxy.ts\` — Electric shape proxy for API routes (DO NOT MODIFY)
+
+You do NOT need to set up database connections or configure Electric. Just define your schema, run migrations, and write your app.`
+
+// ---------------------------------------------------------------------------
+// Electric Agent–only sections
+// ---------------------------------------------------------------------------
+
+const PLAYBOOK_INSTRUCTIONS_AGENT = `## Playbooks (Domain Knowledge)
 Playbook skill files are available in node_modules. Read them before implementing each phase:
 
 ### How to Read Playbooks
@@ -186,11 +336,6 @@ You have git and gh CLI available via Bash. Use them when needed:
 - \`gh repo create "org/name" --private --source . --remote origin --push\` — create repo
 - \`gh pr create --title "..." --body "..."\` — create PR
 Commit types: feat, fix, refactor, style, chore, docs, test`
-
-const SSR_RULES = `## SSR Configuration (CRITICAL)
-NEVER add ssr: false to __root.tsx — it renders the HTML shell and must always SSR.
-Instead, add ssr: false to each LEAF route that uses useLiveQuery or collections.
-This is needed because useLiveQuery uses useSyncExternalStore without getServerSnapshot.`
 
 const ERROR_HANDLING = `## Error Handling
 Before fixing any error, check _agent/errors.md for previous attempts at the same fix.

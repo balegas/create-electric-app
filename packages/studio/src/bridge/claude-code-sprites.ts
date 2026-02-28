@@ -145,8 +145,6 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 			this.config.prompt,
 			"--output-format",
 			"stream-json",
-			"--input-format",
-			"stream-json",
 			"--verbose",
 			"--model",
 			model,
@@ -232,6 +230,23 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	private dispatchEvent(event: EngineEvent): void {
 		const msg: StreamMessage = { source: "agent", ...event }
 		this.writer.append(JSON.stringify(msg)).catch(() => {})
+
+		// Detect dev:start in Bash tool_use → emit app_ready for the UI preview
+		if (event.type === "pre_tool_use" && event.tool_name === "Bash") {
+			const cmd = (event.tool_input as Record<string, unknown>)?.command
+			if (typeof cmd === "string" && /\bdev:start\b/.test(cmd)) {
+				const appReady: EngineEvent = { type: "app_ready", ts: ts() }
+				const appReadyMsg: StreamMessage = { source: "agent", ...appReady }
+				this.writer.append(JSON.stringify(appReadyMsg)).catch(() => {})
+				for (const cb of this.agentEventCallbacks) {
+					try {
+						cb(appReady)
+					} catch {
+						// Swallow
+					}
+				}
+			}
+		}
 
 		for (const cb of this.agentEventCallbacks) {
 			try {
