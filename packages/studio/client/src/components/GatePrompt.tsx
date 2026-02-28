@@ -530,16 +530,15 @@ function InfraConfigGate({
 					<p className="gate-summary" style={{ marginTop: 16 }}>
 						GitHub Repository
 					</p>
-					<div className="question">
-						<label className="gate-radio" style={{ marginBottom: 8 }}>
-							<input
-								type="checkbox"
-								checked={setupRepo}
-								onChange={(e) => setSetupRepo(e.target.checked)}
-								disabled={disabled}
-							/>
-							Create a GitHub repo for this project
-						</label>
+					<div className="gate-option-group">
+						<button
+							type="button"
+							className={`gate-option ${setupRepo ? "active" : ""}`}
+							onClick={() => setSetupRepo(!setupRepo)}
+							disabled={disabled}
+						>
+							<span className="gate-option-title">Create a GitHub repo for this project</span>
+						</button>
 					</div>
 					{setupRepo && (
 						<>
