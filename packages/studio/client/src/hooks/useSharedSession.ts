@@ -6,6 +6,8 @@ export interface SharedSessionState {
 	code: string
 	participants: Participant[]
 	sessionIds: string[]
+	/** Maps sessionId → display name (from session_linked events) */
+	sessionNames: Map<string, string>
 	revoked: boolean
 }
 
@@ -14,6 +16,7 @@ const initialState: SharedSessionState = {
 	code: "",
 	participants: [],
 	sessionIds: [],
+	sessionNames: new Map(),
 	revoked: false,
 }
 
@@ -37,14 +40,26 @@ function reduceEvent(state: SharedSessionState, event: SharedSessionEvent): Shar
 
 		case "session_linked": {
 			if (state.sessionIds.includes(event.sessionId)) return state
-			return { ...state, sessionIds: [...state.sessionIds, event.sessionId] }
+			const names = new Map(state.sessionNames)
+			if (event.sessionName) {
+				names.set(event.sessionId, event.sessionName)
+			}
+			return {
+				...state,
+				sessionIds: [...state.sessionIds, event.sessionId],
+				sessionNames: names,
+			}
 		}
 
-		case "session_unlinked":
+		case "session_unlinked": {
+			const names = new Map(state.sessionNames)
+			names.delete(event.sessionId)
 			return {
 				...state,
 				sessionIds: state.sessionIds.filter((id) => id !== event.sessionId),
+				sessionNames: names,
 			}
+		}
 
 		case "code_revoked":
 			return { ...state, revoked: true }

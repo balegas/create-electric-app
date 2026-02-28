@@ -11,10 +11,12 @@ import {
 	type FontSize,
 	getAgentMode,
 	getFontSize,
+	isManualOauth,
 	setAgentMode as saveAgentMode,
 	setApiKey as saveApiKey,
 	setFontSize as saveFontSize,
 	setGhToken as saveGhToken,
+	setManualOauthToken as saveOauthToken,
 } from "../lib/credentials"
 
 interface SettingsProps {
@@ -33,8 +35,10 @@ export function Settings({
 	onCopyLog,
 }: SettingsProps) {
 	const apiInputId = useId()
+	const oauthInputId = useId()
 	const ghInputId = useId()
 	const [apiKey, setApiKey] = useState("")
+	const [oauthToken, setOauthToken] = useState("")
 	const [ghPat, setGhPat] = useState("")
 	const [copied, setCopied] = useState(false)
 	const [fontSize, setFontSize] = useState<FontSize>(getFontSize)
@@ -60,6 +64,17 @@ export function Settings({
 
 	const handleClearApiKey = useCallback(() => {
 		clearApiKey()
+		onKeySaved()
+	}, [onKeySaved])
+
+	const handleSaveOauthToken = useCallback(() => {
+		if (!oauthToken.trim()) return
+		saveOauthToken(oauthToken.trim())
+		setOauthToken("")
+		onKeySaved()
+	}, [oauthToken, onKeySaved])
+
+	const handleClearOauthToken = useCallback(() => {
 		clearOauthToken()
 		onKeySaved()
 	}, [onKeySaved])
@@ -84,6 +99,16 @@ export function Settings({
 			}
 		},
 		[handleSaveApiKey],
+	)
+
+	const handleOauthKeyDown = useCallback(
+		(e: React.KeyboardEvent) => {
+			if (e.key === "Enter") {
+				e.preventDefault()
+				handleSaveOauthToken()
+			}
+		},
+		[handleSaveOauthToken],
 	)
 
 	const handleGhKeyDown = useCallback(
@@ -118,9 +143,11 @@ export function Settings({
 						<span className={`settings-status ${authSource ? "active" : "missing"}`}>
 							{authSource === "keychain"
 								? "Using Claude keychain"
-								: authSource === "api-key"
-									? "API key set"
-									: "No API key"}
+								: authSource === "oauth"
+									? "OAuth token set"
+									: authSource === "api-key"
+										? "API key set"
+										: "No credentials"}
 						</span>
 					</div>
 					<div className="settings-input-row">
@@ -130,19 +157,55 @@ export function Settings({
 							value={apiKey}
 							onChange={(e) => setApiKey(e.target.value)}
 							onKeyDown={handleKeyDown}
-							placeholder={authSource ? "Enter new key to override..." : "sk-ant-..."}
+							placeholder={authSource === "api-key" ? "Enter new key to override..." : "sk-ant-..."}
 						/>
 						{apiKey.trim() ? (
 							<button type="button" onClick={handleSaveApiKey} className="primary">
 								Save
 							</button>
 						) : (
-							authSource && (
+							authSource === "api-key" && (
 								<button type="button" onClick={handleClearApiKey} className="btn btn-danger">
 									Remove
 								</button>
 							)
 						)}
+					</div>
+				</div>
+
+				{/* OAuth Token Override */}
+				<div className="settings-field">
+					<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+						<label htmlFor={oauthInputId} style={{ margin: 0 }}>
+							OAuth Token
+						</label>
+						{isManualOauth() && <span className="settings-status active">Manual override</span>}
+					</div>
+					<div className="settings-input-row">
+						<input
+							id={oauthInputId}
+							type="password"
+							value={oauthToken}
+							onChange={(e) => setOauthToken(e.target.value)}
+							onKeyDown={handleOauthKeyDown}
+							placeholder={
+								isManualOauth() ? "Enter new token to override..." : "Paste OAuth token..."
+							}
+						/>
+						{oauthToken.trim() ? (
+							<button type="button" onClick={handleSaveOauthToken} className="primary">
+								Save
+							</button>
+						) : (
+							isManualOauth() && (
+								<button type="button" onClick={handleClearOauthToken} className="btn btn-danger">
+									Remove
+								</button>
+							)
+						)}
+					</div>
+					<div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
+						Override the OAuth token used for Claude authentication. Takes priority over keychain.
 					</div>
 				</div>
 

@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from "node:child_process"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { Registry } from "@electric-agent/studio/registry"
+import { RoomRegistry } from "@electric-agent/studio/room-registry"
 import type { SandboxProvider } from "@electric-agent/studio/sandbox"
 import { DaytonaSandboxProvider } from "@electric-agent/studio/sandbox/daytona"
 import { getSnapshotStatus } from "@electric-agent/studio/sandbox/daytona-registry"
@@ -98,14 +98,14 @@ export async function serveCommand(opts: {
 	}
 	console.log(`[serve] Bridge mode: ${bridgeMode}`)
 
-	// Create registry (hydrates from durable stream)
-	console.log("[serve] Hydrating registry from durable stream...")
-	const registry = await Registry.create(streamConfig)
+	// Create room registry (hydrates from durable stream)
+	console.log("[serve] Hydrating room registry from durable stream...")
+	const rooms = await RoomRegistry.create(streamConfig)
 
 	await startWebServer({
 		port,
 		dataDir,
-		registry,
+		rooms,
 		sandbox,
 		streamConfig,
 		bridgeMode,

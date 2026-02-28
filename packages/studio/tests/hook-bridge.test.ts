@@ -6,7 +6,8 @@ import os from "node:os"
 import path from "node:path"
 import { after, before, describe, it } from "node:test"
 import { DurableStream } from "@durable-streams/client"
-import { Registry } from "../src/registry.js"
+import { ActiveSessions } from "../src/active-sessions.js"
+import { RoomRegistry } from "../src/room-registry.js"
 import type { SandboxHandle, SandboxProvider } from "../src/sandbox/types.js"
 import { createApp } from "../src/server.js"
 import { cleanupStaleSessions, getSession, readSessionIndex } from "../src/sessions.js"
@@ -21,8 +22,9 @@ const server = localStreamServer()
 /** Temp data dir for session index files */
 let dataDir: string
 
-/** Shared registry instance — recreated per test suite */
-let registry: Registry
+/** Shared session tracking — recreated per test suite */
+let sessions: ActiveSessions
+let rooms: RoomRegistry
 
 /** Create a mock SandboxProvider that throws on unexpected calls */
 function mockSandboxProvider(): SandboxProvider {
@@ -84,7 +86,8 @@ function createTestApp() {
 	return createApp({
 		port: 0,
 		dataDir,
-		registry,
+		sessions,
+		rooms,
 		sandbox: mockSandboxProvider(),
 		streamConfig: server.config,
 		bridgeMode: "stream",
@@ -110,7 +113,8 @@ describe("hook-bridge integration", () => {
 	before(async () => {
 		await server.start()
 		dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "hook-bridge-test-"))
-		registry = await Registry.create(server.config)
+		sessions = new ActiveSessions()
+		rooms = await RoomRegistry.create(server.config)
 	})
 
 	after(async () => {
@@ -135,9 +139,9 @@ describe("hook-bridge integration", () => {
 		const body = (await res.json()) as { sessionId: string }
 		assert.ok(body.sessionId, "Should return a sessionId")
 
-		// Verify session was created in the registry
-		const session = registry.getSession(body.sessionId)
-		assert.ok(session, "Session should exist in registry")
+		// Verify session was created in the active sessions store
+		const session = sessions.get(body.sessionId)
+		assert.ok(session, "Session should exist in active sessions")
 		assert.equal(session.projectName, "my-project")
 		assert.equal(session.status, "running")
 	})
@@ -236,7 +240,7 @@ describe("hook-bridge integration", () => {
 		assert.equal(endRes.status, 200)
 
 		// 3. Verify session status is "complete"
-		const session = registry.getSession(sessionId)
+		const session = sessions.get(sessionId)
 		assert.ok(session, "Session should still exist")
 		assert.equal(session.status, "complete")
 	})
