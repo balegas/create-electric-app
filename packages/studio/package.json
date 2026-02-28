@@ -37,6 +37,10 @@
 		"./shared-sessions": {
 			"types": "./dist/shared-sessions.d.ts",
 			"import": "./dist/shared-sessions.js"
+		},
+		"./registry": {
+			"types": "./dist/registry.d.ts",
+			"import": "./dist/registry.js"
 		}
 	},
 	"files": [

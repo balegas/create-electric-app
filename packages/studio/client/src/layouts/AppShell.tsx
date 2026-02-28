@@ -125,12 +125,9 @@ export function AppShell() {
 			setAuthSource("api-key")
 			return
 		}
-		if (getOauthToken()) {
-			setAuthSource("keychain")
-			return
-		}
 
-		// Try loading OAuth token from macOS Keychain via server
+		// Always refresh OAuth token from macOS Keychain (token may have been
+		// rotated via `claude /login` since the last page load)
 		try {
 			const { oauthToken } = await fetchKeychainCredentials()
 			if (oauthToken) {
@@ -139,7 +136,11 @@ export function AppShell() {
 				return
 			}
 		} catch {
-			// Server not reachable or not on macOS — ignore
+			// Server not reachable or not on macOS — fall back to cached token
+			if (getOauthToken()) {
+				setAuthSource("keychain")
+				return
+			}
 		}
 		setAuthSource(null)
 		setShowSettings(true)

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Console } from "../components/Console"
 import { SharedSessionHeader } from "../components/SharedSessionHeader"
@@ -65,12 +65,14 @@ export function SharedSessionPage() {
 		}
 	}, [code, sharedSession.name, sharedSessionId, refreshJoinedSharedSessions])
 
-	// Auto-expand first panel when sessions are linked
+	// Auto-expand first panel on initial link (only once)
+	const hasAutoExpanded = useRef(false)
 	useEffect(() => {
-		if (sharedSession.sessionIds.length > 0 && expandedPanels.size === 0) {
+		if (sharedSession.sessionIds.length > 0 && !hasAutoExpanded.current) {
+			hasAutoExpanded.current = true
 			setExpandedPanels(new Set([sharedSession.sessionIds[0]]))
 		}
-	}, [sharedSession.sessionIds, expandedPanels.size])
+	}, [sharedSession.sessionIds])
 
 	const handleLeave = useCallback(async () => {
 		if (!sharedSessionId) return
@@ -276,19 +278,18 @@ function LinkedSessionPanel({
 			<div className="shared-session-panel-header" onClick={onToggle}>
 				<ChevronIcon />
 				<span className="shared-session-panel-id">{sessionId.slice(0, 8)}</span>
-				{isLive && (
-					<span className="session-header-status" style={{ color: "var(--green)", fontSize: 11 }}>
-						Live
-					</span>
-				)}
-				{isComplete && (
+				{isComplete ? (
 					<span
 						className="session-header-status"
 						style={{ color: "var(--text-subtle)", fontSize: 11 }}
 					>
-						Complete
+						Offline
 					</span>
-				)}
+				) : isLive ? (
+					<span className="session-header-status" style={{ color: "var(--green)", fontSize: 11 }}>
+						Live
+					</span>
+				) : null}
 				<button
 					type="button"
 					className="shared-session-unlink-btn"

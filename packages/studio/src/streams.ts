@@ -68,6 +68,18 @@ export function getSharedStreamConnectionInfo(
 }
 
 /**
+ * Build connection info for the registry stream (session + room metadata).
+ */
+export function getRegistryConnectionInfo(config: StreamConfig): StreamConnectionInfo {
+	return {
+		url: `${config.url}/v1/stream/${config.serviceId}/registry`,
+		headers: {
+			Authorization: `Bearer ${config.secret}`,
+		},
+	}
+}
+
+/**
  * Env vars to pass to a sandbox so it can connect to the same stream.
  */
 export function getStreamEnvVars(sessionId: string, config: StreamConfig): Record<string, string> {

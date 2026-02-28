@@ -132,8 +132,20 @@
 	display: none;
 }
 
-.sidebar-collapsed .sidebar-brand,
+.sidebar-collapsed .sidebar-brand {
+	display: none;
+}
+
 .sidebar-collapsed .sidebar-section-label {
+	font-size: 0;
+	padding: 0 8px;
+	margin: 4px 0;
+	height: 1px;
+	background: var(--border);
+	border-radius: 1px;
+}
+
+.sidebar-collapsed .sidebar-section-label:first-child {
 	display: none;
 }
 
@@ -414,7 +426,6 @@
 	height: var(--topbar-height);
 	flex-shrink: 0;
 	font-size: 13px;
-	position: relative;
 }
 
 .shared-session-header-name {
@@ -534,20 +545,13 @@
 }
 
 .shared-session-panel-body {
-	flex: 1;
-	display: flex;
+	display: none;
 	flex-direction: column;
-	overflow: hidden;
-	transition: max-height 0.2s ease;
-}
-
-.shared-session-panel.collapsed .shared-session-panel-body {
-	max-height: 0;
 	overflow: hidden;
 }
 
 .shared-session-panel.expanded .shared-session-panel-body {
-	max-height: none;
+	display: flex;
 	flex: 1;
 }
 
