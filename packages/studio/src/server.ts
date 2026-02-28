@@ -843,11 +843,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			apiKey?: string
 			oauthToken?: string
 			ghToken?: string
+			/** Per-session agent mode: "electric-agent" (default) or "claude-code" */
+			agentMode?: "electric-agent" | "claude-code"
 		}
 
 		if (!body.description) {
 			return c.json({ error: "description is required" }, 400)
 		}
+
+		// Per-session bridge mode: "claude-code" if explicitly requested, else server default
+		const sessionBridgeMode: BridgeMode =
+			body.agentMode === "claude-code" ? "claude-code" : config.bridgeMode
 
 		const sessionId = crypto.randomUUID()
 		const inferredName =
@@ -891,6 +897,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			createdAt: new Date().toISOString(),
 			lastActiveAt: new Date().toISOString(),
 			status: "running",
+			agentMode: sessionBridgeMode === "claude-code" ? "claude-code" : "electric-agent",
 		}
 		await config.registry.addSession(session)
 
@@ -990,17 +997,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			// Only pass stream env vars when using hosted stream bridge (not stdio or claude-code)
 			const streamEnv =
-				config.bridgeMode === "stdio" || config.bridgeMode === "claude-code"
+				sessionBridgeMode === "stdio" || sessionBridgeMode === "claude-code"
 					? undefined
 					: getStreamEnvVars(sessionId, config.streamConfig)
 			console.log(
-				`[session:${sessionId}] Creating sandbox: runtime=${config.sandbox.runtime} project=${projectName} bridgeMode=${config.bridgeMode}`,
+				`[session:${sessionId}] Creating sandbox: runtime=${config.sandbox.runtime} project=${projectName} bridgeMode=${sessionBridgeMode}`,
 			)
 			const handle = await config.sandbox.create(sessionId, {
 				projectName,
 				infra,
 				streamEnv,
-				deferAgentStart: config.bridgeMode === "stdio" || config.bridgeMode === "claude-code",
+				deferAgentStart: sessionBridgeMode === "stdio" || sessionBridgeMode === "claude-code",
 				apiKey: body.apiKey,
 				oauthToken: body.oauthToken,
 				ghToken: body.ghToken,
@@ -1025,9 +1032,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			// 3. If stdio bridge mode, create the stdio bridge now that the sandbox exists.
 			// If claude-code mode, write CLAUDE.md and create a ClaudeCode bridge.
+			// If stdio mode, create the stdio bridge now that the sandbox exists.
 			// If stream bridge mode with Sprites, launch the agent process in the sprite
 			// (it connects directly to the hosted Durable Stream via DS_URL env vars).
-			if (config.bridgeMode === "claude-code") {
+			if (sessionBridgeMode === "claude-code") {
 				console.log(`[session:${sessionId}] Setting up Claude Code bridge...`)
 
 				// Write CLAUDE.md to the sandbox workspace
@@ -1050,7 +1058,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					cwd: handle.projectDir,
 				}
 				bridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
-			} else if (config.bridgeMode === "stdio") {
+			} else if (sessionBridgeMode === "stdio") {
 				console.log(`[session:${sessionId}] Creating stdio bridge...`)
 				bridge = createStdioBridge(config, sessionId)
 			} else if (config.sandbox.runtime === "sprites") {
@@ -1209,7 +1217,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				return c.json({ error: "Container is not running" }, 400)
 			}
 
-			if (config.bridgeMode === "claude-code") {
+			if (session.agentMode === "claude-code") {
 				// In Claude Code mode, send git requests as user messages
 				await bridge.sendCommand({
 					command: "iterate",
