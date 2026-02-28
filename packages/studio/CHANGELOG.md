@@ -1,5 +1,11 @@
 # @electric-agent/studio
 
+## 1.1.2
+
+### Patch Changes
+
+- 76cbfd0: Fix Claude Code iterate in Sprites/Docker sandboxes by respawning with --resume instead of writing to dead stdin. Add Vite allowedHosts guardrail to generated CLAUDE.md.
+
 ## 1.1.1
 
 ### Patch Changes
