@@ -144,6 +144,9 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - Use "@radix-ui/themes" for Radix components (NOT @radix-ui/react-*)
 - Use "react-router" for routing (NOT react-router-dom)
 
+### Vite Config Rules
+- When modifying vite.config.ts, ALWAYS preserve \`server: { allowedHosts: true }\` — without it, Vite rejects connections from the proxy URL
+
 ### Dependency Rules
 - NEVER remove existing dependencies from package.json
 - Only add new dependencies
@@ -180,6 +183,7 @@ pnpm drizzle-kit migrate    # apply migration to the database
 - Node.js is managed via nvm at \`/.sprite/languages/node/nvm/\`
 - The sandbox is a cloud micro-VM — there is no Docker, no docker-compose, no local Postgres
 - The database connection string is in DATABASE_URL (remote Neon Postgres)
+- **CRITICAL**: vite.config.ts MUST have \`server: { allowedHosts: true }\` — without it, Vite rejects connections from the proxy URL and the preview will not work
 
 ### Workflow
 After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`

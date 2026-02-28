@@ -1095,6 +1095,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			}
 
 			// 5. Start listening for agent events via the bridge
+
+			// Track Claude Code session ID for --resume on iterate
+			bridge.onAgentEvent((event) => {
+				if (event.type === "session_start" && "session_id" in event) {
+					const ccSessionId = (event as EngineEvent & { session_id: string }).session_id
+					if (ccSessionId) {
+						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
+					}
+				}
+			})
+
 			bridge.onComplete(async (success) => {
 				const updates: Partial<SessionInfo> = {
 					status: success ? "complete" : "error",

@@ -5,6 +5,10 @@
  * The bridge translates Claude Code's stream-json output into EngineEvents
  * and writes them to the Durable Stream for the UI. User messages and
  * gate responses are sent to Claude Code's stdin.
+ *
+ * Claude Code runs in one-shot mode (`-p`) and exits after completing.
+ * On iterate (follow-up message), the bridge respawns Claude Code with
+ * `--resume <sessionId>` so it picks up the previous conversation context.
  */
 
 import { type ChildProcess, spawn } from "node:child_process"
@@ -55,6 +59,13 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 	private closed = false
 	private proc: ChildProcess | null = null
 
+	/** Claude Code session ID captured from stream-json system.init — used for --resume */
+	private claudeSessionId: string | null = null
+	/** Whether a Claude Code process is currently running */
+	private running = false
+	/** Whether the parser already emitted a session_end (from a "result" message) */
+	private resultReceived = false
+
 	constructor(
 		sessionId: string,
 		connection: StreamConnectionInfo,
@@ -81,15 +92,15 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 	}
 
 	/**
-	 * Send a follow-up user message to Claude Code via stdin.
+	 * Send a follow-up user message to Claude Code by respawning with --resume.
 	 * Used for iteration requests (the user types a new message in the UI).
 	 */
 	async sendCommand(cmd: Record<string, unknown>): Promise<void> {
-		if (this.closed || !this.proc?.stdin?.writable) return
+		if (this.closed) return
 
-		// For iteration: send the request as a user message to Claude Code's stdin
+		// For iteration: respawn Claude Code with --resume
 		if (cmd.command === "iterate" && typeof cmd.request === "string") {
-			this.writeUserMessage(cmd.request)
+			this.spawnClaude(cmd.request, this.claudeSessionId ?? undefined)
 			return
 		}
 
@@ -145,80 +156,7 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 
 	async start(): Promise<void> {
 		if (this.closed) return
-
-		const allowedTools = this.config.allowedTools ?? DEFAULT_ALLOWED_TOOLS
-		const model = this.config.model ?? "claude-sonnet-4-6"
-
-		// Build the claude CLI command
-		const claudeArgs = [
-			"-p",
-			this.config.prompt,
-			"--output-format",
-			"stream-json",
-			"--verbose",
-			"--model",
-			model,
-			"--dangerously-skip-permissions",
-			"--allowedTools",
-			allowedTools.join(","),
-			...(this.config.extraFlags ?? []),
-		]
-
-		// Escape for bash
-		const escapedArgs = claudeArgs.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")
-		const cmd = `cd '${this.config.cwd}' && claude ${escapedArgs}`
-
-		// Note: do NOT use -i flag — Claude Code detects interactive stdin and blocks
-		// waiting for input even when -p is provided. Without -i, stdout flows normally.
-		this.proc = spawn("docker", ["exec", this.containerId, "bash", "-c", cmd], {
-			stdio: ["pipe", "pipe", "pipe"],
-		})
-
-		console.log(
-			`[claude-code-docker] Started: session=${this.sessionId} container=${this.containerId} pid=${this.proc.pid}`,
-		)
-		console.log(`[claude-code-docker] cmd: ${cmd}`)
-
-		// Read stdout line by line (stream-json NDJSON)
-		if (this.proc.stdout) {
-			const rl = readline.createInterface({
-				input: this.proc.stdout,
-				terminal: false,
-			})
-
-			rl.on("line", (line) => {
-				if (this.closed) return
-				console.log(`[claude-code-docker:stdout] ${line.slice(0, 120)}...`)
-				this.handleLine(line)
-			})
-		}
-
-		// Log stderr
-		if (this.proc.stderr) {
-			const stderrRl = readline.createInterface({
-				input: this.proc.stderr,
-				terminal: false,
-			})
-			stderrRl.on("line", (line) => {
-				if (!this.closed) {
-					console.error(`[claude-code-docker:stderr] ${line}`)
-				}
-			})
-		}
-
-		// Handle process exit
-		this.proc.on("exit", (code) => {
-			console.log(`[claude-code-docker] Process exited: code=${code} session=${this.sessionId}`)
-			// If process exits without a session_end event, emit one
-			if (!this.closed) {
-				const endEvent: EngineEvent = {
-					type: "session_end",
-					success: code === 0,
-					ts: ts(),
-				}
-				this.dispatchEvent(endEvent)
-			}
-		})
+		this.spawnClaude(this.config.prompt)
 	}
 
 	close(): void {
@@ -238,6 +176,117 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 	// Private helpers
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Spawn a new Claude Code process. Called for both the initial prompt
+	 * and follow-up iterate messages (with --resume).
+	 */
+	private spawnClaude(prompt: string, resumeSessionId?: string): void {
+		// Kill any existing process
+		if (this.proc) {
+			try {
+				this.proc.stdin?.end()
+				this.proc.kill("SIGTERM")
+			} catch {
+				// Already dead
+			}
+			this.proc = null
+		}
+
+		// Reset parser state for the new process
+		this.parser = createStreamJsonParser()
+		this.resultReceived = false
+		this.running = true
+
+		const allowedTools = this.config.allowedTools ?? DEFAULT_ALLOWED_TOOLS
+		const model = this.config.model ?? "claude-sonnet-4-6"
+
+		// Build the claude CLI command
+		const claudeArgs = [
+			"-p",
+			prompt,
+			"--output-format",
+			"stream-json",
+			"--verbose",
+			"--model",
+			model,
+			"--dangerously-skip-permissions",
+			"--allowedTools",
+			allowedTools.join(","),
+			...(this.config.extraFlags ?? []),
+		]
+
+		// Add --resume if we have a previous session ID
+		if (resumeSessionId) {
+			claudeArgs.push("--resume", resumeSessionId)
+		}
+
+		// Escape for bash
+		const escapedArgs = claudeArgs.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")
+		const cmd = `cd '${this.config.cwd}' && claude ${escapedArgs}`
+
+		// Note: do NOT use -i flag — Claude Code detects interactive stdin and blocks
+		// waiting for input even when -p is provided. Without -i, stdout flows normally.
+		this.proc = spawn("docker", ["exec", this.containerId, "bash", "-c", cmd], {
+			stdio: ["pipe", "pipe", "pipe"],
+		})
+
+		console.log(
+			`[claude-code-docker] Started: session=${this.sessionId} container=${this.containerId} pid=${this.proc.pid} resume=${resumeSessionId ?? "none"}`,
+		)
+		console.log(`[claude-code-docker] cmd: ${cmd}`)
+
+		const currentProc = this.proc
+
+		// Read stdout line by line (stream-json NDJSON)
+		if (currentProc.stdout) {
+			const rl = readline.createInterface({
+				input: currentProc.stdout,
+				terminal: false,
+			})
+
+			rl.on("line", (line) => {
+				if (this.closed) return
+				console.log(`[claude-code-docker:stdout] ${line.slice(0, 120)}...`)
+				this.handleLine(line)
+			})
+		}
+
+		// Log stderr
+		if (currentProc.stderr) {
+			const stderrRl = readline.createInterface({
+				input: currentProc.stderr,
+				terminal: false,
+			})
+			stderrRl.on("line", (line) => {
+				if (!this.closed) {
+					console.error(`[claude-code-docker:stderr] ${line}`)
+				}
+			})
+		}
+
+		// Handle process exit
+		currentProc.on("exit", (code) => {
+			console.log(`[claude-code-docker] Process exited: code=${code} session=${this.sessionId}`)
+
+			// Capture session ID from parser state before marking not running
+			if (this.parser.state.sessionId) {
+				this.claudeSessionId = this.parser.state.sessionId
+			}
+			this.running = false
+
+			// Only emit session_end from exit handler if the parser didn't already
+			// emit one (via a "result" message). This prevents double session_end.
+			if (!this.closed && !this.resultReceived) {
+				const endEvent: EngineEvent = {
+					type: "session_end",
+					success: code === 0,
+					ts: ts(),
+				}
+				this.dispatchEvent(endEvent)
+			}
+		})
+	}
+
 	private handleLine(line: string): void {
 		const trimmed = line.trim()
 		if (!trimmed) return
@@ -252,6 +301,11 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 		// Write to Durable Stream for UI
 		const msg: StreamMessage = { source: "agent", ...event }
 		this.writer.append(JSON.stringify(msg)).catch(() => {})
+
+		// Track session_end from result messages to prevent duplicates
+		if (event.type === "session_end") {
+			this.resultReceived = true
+		}
 
 		// Detect dev:start in Bash tool_use → emit app_ready for the UI preview
 		if (event.type === "pre_tool_use" && event.tool_name === "Bash") {

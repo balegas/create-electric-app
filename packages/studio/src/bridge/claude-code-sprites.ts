@@ -5,6 +5,10 @@
  * The bridge translates Claude Code's stream-json output into EngineEvents
  * and writes them to the Durable Stream for the UI. User messages and
  * gate responses are sent to Claude Code's stdin.
+ *
+ * Claude Code runs in one-shot mode (`-p`) and exits after completing.
+ * On iterate (follow-up message), the bridge respawns Claude Code with
+ * `--resume <sessionId>` so it picks up the previous conversation context.
  */
 
 import * as readline from "node:readline"
@@ -58,6 +62,13 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	private closed = false
 	private cmd: SpriteCommand | null = null
 
+	/** Claude Code session ID captured from stream-json system.init — used for --resume */
+	private claudeSessionId: string | null = null
+	/** Whether a Claude Code process is currently running */
+	private running = false
+	/** Whether the parser already emitted a session_end (from a "result" message) */
+	private resultReceived = false
+
 	constructor(
 		sessionId: string,
 		connection: StreamConnectionInfo,
@@ -84,10 +95,11 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	}
 
 	async sendCommand(cmd: Record<string, unknown>): Promise<void> {
-		if (this.closed || !this.cmd) return
+		if (this.closed) return
 
 		if (cmd.command === "iterate" && typeof cmd.request === "string") {
-			this.writeUserMessage(cmd.request)
+			// Respawn Claude Code with --resume for follow-up messages
+			this.spawnClaude(cmd.request, this.claudeSessionId ?? undefined)
 			return
 		}
 
@@ -136,72 +148,7 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 
 	async start(): Promise<void> {
 		if (this.closed) return
-
-		const allowedTools = this.config.allowedTools ?? DEFAULT_ALLOWED_TOOLS
-		const model = this.config.model ?? "claude-sonnet-4-6"
-
-		// Build the claude CLI command
-		const claudeArgs = [
-			"-p",
-			this.config.prompt,
-			"--output-format",
-			"stream-json",
-			"--verbose",
-			"--model",
-			model,
-			"--dangerously-skip-permissions",
-			"--allowedTools",
-			allowedTools.join(","),
-			...(this.config.extraFlags ?? []),
-		]
-
-		// Escape for bash — use bash -c with properly escaped args
-		const escapedArgs = claudeArgs.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")
-		const fullCmd = `source /etc/profile.d/npm-global.sh 2>/dev/null; source /etc/profile.d/electric-agent.sh 2>/dev/null; cd '${this.config.cwd}' && claude ${escapedArgs}`
-
-		// Use SpriteCommand with tty:true (for streaming) but NOT detachable
-		// (detachable creates a tmux session which causes immediate exit)
-		this.cmd = new SpriteCommand(this.sprite, "bash", ["-c", fullCmd], {
-			tty: true,
-		})
-		await this.cmd.start()
-
-		console.log(`[claude-code-sprites] Started: session=${this.sessionId}`)
-
-		// Read stdout line by line (stream-json NDJSON)
-		const rl = readline.createInterface({
-			input: this.cmd.stdout,
-			terminal: false,
-		})
-
-		rl.on("line", (line) => {
-			if (this.closed) return
-			this.handleLine(line)
-		})
-
-		// Log stderr
-		const stderrRl = readline.createInterface({
-			input: this.cmd.stderr,
-			terminal: false,
-		})
-		stderrRl.on("line", (line) => {
-			if (!this.closed) {
-				console.error(`[claude-code-sprites:stderr] ${line}`)
-			}
-		})
-
-		// Handle process exit
-		this.cmd.on("exit", (code) => {
-			console.log(`[claude-code-sprites] Process exited: code=${code} session=${this.sessionId}`)
-			if (!this.closed) {
-				const endEvent: EngineEvent = {
-					type: "session_end",
-					success: code === 0,
-					ts: ts(),
-				}
-				this.dispatchEvent(endEvent)
-			}
-		})
+		this.spawnClaude(this.config.prompt)
 	}
 
 	close(): void {
@@ -220,6 +167,111 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	// Private helpers
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Spawn a new Claude Code process. Called for both the initial prompt
+	 * and follow-up iterate messages (with --resume).
+	 */
+	private spawnClaude(prompt: string, resumeSessionId?: string): void {
+		// Kill any existing process
+		if (this.cmd) {
+			try {
+				this.cmd.kill()
+			} catch {
+				// Already dead
+			}
+			this.cmd = null
+		}
+
+		// Reset parser state for the new process
+		this.parser = createStreamJsonParser()
+		this.resultReceived = false
+		this.running = true
+
+		const allowedTools = this.config.allowedTools ?? DEFAULT_ALLOWED_TOOLS
+		const model = this.config.model ?? "claude-sonnet-4-6"
+
+		// Build the claude CLI command
+		const claudeArgs = [
+			"-p",
+			prompt,
+			"--output-format",
+			"stream-json",
+			"--verbose",
+			"--model",
+			model,
+			"--dangerously-skip-permissions",
+			"--allowedTools",
+			allowedTools.join(","),
+			...(this.config.extraFlags ?? []),
+		]
+
+		// Add --resume if we have a previous session ID
+		if (resumeSessionId) {
+			claudeArgs.push("--resume", resumeSessionId)
+		}
+
+		// Escape for bash — use bash -c with properly escaped args
+		const escapedArgs = claudeArgs.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")
+		const fullCmd = `source /etc/profile.d/npm-global.sh 2>/dev/null; source /etc/profile.d/electric-agent.sh 2>/dev/null; cd '${this.config.cwd}' && claude ${escapedArgs}`
+
+		// Use SpriteCommand with tty:true (for streaming) but NOT detachable
+		// (detachable creates a tmux session which causes immediate exit)
+		this.cmd = new SpriteCommand(this.sprite, "bash", ["-c", fullCmd], {
+			tty: true,
+		})
+		this.cmd.start()
+
+		console.log(
+			`[claude-code-sprites] Started: session=${this.sessionId} resume=${resumeSessionId ?? "none"}`,
+		)
+
+		const currentCmd = this.cmd
+
+		// Read stdout line by line (stream-json NDJSON)
+		const rl = readline.createInterface({
+			input: currentCmd.stdout,
+			terminal: false,
+		})
+
+		rl.on("line", (line) => {
+			if (this.closed) return
+			this.handleLine(line)
+		})
+
+		// Log stderr
+		const stderrRl = readline.createInterface({
+			input: currentCmd.stderr,
+			terminal: false,
+		})
+		stderrRl.on("line", (line) => {
+			if (!this.closed) {
+				console.error(`[claude-code-sprites:stderr] ${line}`)
+			}
+		})
+
+		// Handle process exit
+		currentCmd.on("exit", (code) => {
+			console.log(`[claude-code-sprites] Process exited: code=${code} session=${this.sessionId}`)
+
+			// Capture session ID from parser state before marking not running
+			if (this.parser.state.sessionId) {
+				this.claudeSessionId = this.parser.state.sessionId
+			}
+			this.running = false
+
+			// Only emit session_end from exit handler if the parser didn't already
+			// emit one (via a "result" message). This prevents double session_end.
+			if (!this.closed && !this.resultReceived) {
+				const endEvent: EngineEvent = {
+					type: "session_end",
+					success: code === 0,
+					ts: ts(),
+				}
+				this.dispatchEvent(endEvent)
+			}
+		})
+	}
+
 	private handleLine(line: string): void {
 		// Strip ANSI escape sequences and terminal control chars added by tty mode
 		const cleaned = stripAnsi(line).trim()
@@ -234,6 +286,11 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	private dispatchEvent(event: EngineEvent): void {
 		const msg: StreamMessage = { source: "agent", ...event }
 		this.writer.append(JSON.stringify(msg)).catch(() => {})
+
+		// Track session_end from result messages to prevent duplicates
+		if (event.type === "session_end") {
+			this.resultReceived = true
+		}
 
 		// Detect dev:start in Bash tool_use → emit app_ready for the UI preview
 		if (event.type === "pre_tool_use" && event.tool_name === "Bash") {
