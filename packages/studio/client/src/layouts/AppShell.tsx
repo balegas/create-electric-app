@@ -7,12 +7,13 @@ import {
 	hasApiKey as checkHasApiKey,
 	hasGhToken as checkHasGhToken,
 	getOauthToken,
+	isManualOauth,
 	setOauthToken,
 } from "../lib/credentials"
 import { getSessions, removeSession as removeSessionFromStore } from "../lib/session-store"
 import { getJoinedSharedSessions, type JoinedSharedSession } from "../lib/shared-session-store"
 
-export type AuthSource = "api-key" | "keychain" | null
+export type AuthSource = "api-key" | "oauth" | "keychain" | null
 
 export interface PendingProject {
 	name: string
@@ -128,6 +129,12 @@ export function AppShell() {
 		// Check local credentials first
 		if (checkHasApiKey()) {
 			setAuthSource("api-key")
+			return
+		}
+
+		// Check for manually-set OAuth token (takes priority over keychain)
+		if (isManualOauth() && getOauthToken()) {
+			setAuthSource("oauth")
 			return
 		}
 
