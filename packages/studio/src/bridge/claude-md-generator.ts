@@ -17,6 +17,8 @@ export interface ClaudeMdOptions {
 	isIteration?: boolean
 	/** Iteration request text (if isIteration) */
 	iterationRequest?: string
+	/** Sandbox runtime — affects environment-specific instructions */
+	runtime?: "docker" | "sprites" | "daytona"
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +49,7 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 	sections.push("")
 	sections.push(INFRASTRUCTURE)
 	sections.push("")
-	sections.push(DEV_SERVER_INSTRUCTIONS)
+	sections.push(devServerInstructions(opts.runtime))
 	sections.push("")
 	sections.push(SSR_RULES)
 	sections.push("")
@@ -83,7 +85,7 @@ export function generateElectricAgentClaudeMd(opts: ClaudeMdOptions): string {
 	sections.push("")
 	sections.push(BUILD_INSTRUCTIONS)
 	sections.push("")
-	sections.push(DEV_SERVER_INSTRUCTIONS)
+	sections.push(devServerInstructions(opts.runtime))
 	sections.push("")
 	sections.push(ARCHITECTURE_REFERENCE)
 	sections.push("")
@@ -155,7 +157,35 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - snake_case for SQL table/column names
 - Foreign keys with onDelete: "cascade" where appropriate`
 
-const DEV_SERVER_INSTRUCTIONS = `## Dev Server & Migrations
+function devServerInstructions(runtime?: string): string {
+	if (runtime === "sprites" || runtime === "daytona") {
+		return `## Dev Server & Migrations
+### Dev Server
+- \`pnpm dev:start\` — start the Vite dev server in the background
+- \`pnpm dev:stop\` — stop the dev server
+- \`pnpm dev:restart\` — stop then start
+
+The app is exposed on the VITE_PORT environment variable (default: 5173).
+The database and Electric sync service are remote (cloud-hosted) — there is no local Postgres or Docker.
+
+### Migrations (CRITICAL)
+After modifying src/db/schema.ts, ALWAYS run migrations:
+\`\`\`bash
+pnpm drizzle-kit generate   # generate SQL from schema changes
+pnpm drizzle-kit migrate    # apply migration to the database
+\`\`\`
+
+### Sprites Environment Gotchas
+- npm global binaries are NOT in PATH by default. If you need to run a globally installed tool, source the profile first: \`source /etc/profile.d/npm-global.sh\`
+- Node.js is managed via nvm at \`/.sprite/languages/node/nvm/\`
+- The sandbox is a cloud micro-VM — there is no Docker, no docker-compose, no local Postgres
+- The database connection string is in DATABASE_URL (remote Neon Postgres)
+
+### Workflow
+After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`
+	}
+
+	return `## Dev Server & Migrations
 ### Dev Server
 - \`pnpm dev:start\` — start Vite + Postgres + Electric in the background
 - \`pnpm dev:stop\` — stop all background services
@@ -173,6 +203,7 @@ pnpm drizzle-kit migrate    # apply migration to the database
 
 ### Workflow
 After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`
+}
 
 const SSR_RULES = `## SSR Configuration (CRITICAL)
 NEVER add ssr: false to __root.tsx — it renders the HTML shell and must always SSR.

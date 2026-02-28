@@ -993,13 +993,20 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					ts: ts(),
 				})
 				try {
-					// Copy the pre-built scaffold base (KPB + deps already installed)
-					await config.sandbox.exec(handle, `cp -r /opt/scaffold-base '${handle.projectDir}'`)
-					// Rename project in package.json
-					await config.sandbox.exec(
-						handle,
-						`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`,
-					)
+					if (config.sandbox.runtime === "docker") {
+						// Docker: copy the pre-built scaffold base (baked into the image)
+						await config.sandbox.exec(handle, `cp -r /opt/scaffold-base '${handle.projectDir}'`)
+						await config.sandbox.exec(
+							handle,
+							`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`,
+						)
+					} else {
+						// Sprites/Daytona: run scaffold from globally installed electric-agent
+						await config.sandbox.exec(
+							handle,
+							`source /etc/profile.d/npm-global.sh 2>/dev/null; electric-agent scaffold '${handle.projectDir}' --name '${projectName}' --skip-git`,
+						)
+					}
 					// Ensure _agent/ working memory directory exists
 					await config.sandbox.exec(
 						handle,
@@ -1027,6 +1034,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					description: body.description,
 					projectName,
 					projectDir: handle.projectDir,
+					runtime: config.sandbox.runtime,
 				})
 				try {
 					await config.sandbox.exec(

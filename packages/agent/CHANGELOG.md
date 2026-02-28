@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- fixes to sprites
 - Updated dependencies [89d4cb6]
 - Updated dependencies [ba8f908]
 - Updated dependencies [a99ba74]

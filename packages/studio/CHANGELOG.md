@@ -32,6 +32,7 @@
 
 ### Patch Changes
 
+- fixes to sprites
 - Updated dependencies [a99ba74]
   - @electric-agent/protocol@1.1.0
 
