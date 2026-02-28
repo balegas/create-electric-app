@@ -81,47 +81,58 @@ Todo o package `packages/agent/` será removido. Inclui:
 
 ### Package `@electric-agent/studio` — Funcionalidades a remover
 
-#### Bridges que só o electric-agent usa
+#### Bridges que só o electric-agent usa — ELIMINAR
 
 | Ficheiro | Descrição |
 |----------|-----------|
 | `src/bridge/docker-stdio.ts` | DockerStdioBridge (stdin/stdout para electric-agent headless) |
 | `src/bridge/sprites.ts` | SpritesStdioBridge (idem para Sprites) |
 
-Bridges que ficam:
-- `src/bridge/hosted.ts` — HostedStreamBridge (Durable Streams, usado por ambos)
+Bridges que **ficam**:
+- `src/bridge/hosted.ts` — HostedStreamBridge (Durable Streams)
 - `src/bridge/claude-code-docker.ts` — ClaudeCodeDockerBridge
 - `src/bridge/claude-code-sprites.ts` — ClaudeCodeSpritesBridge
+- `src/bridge/stream-json-parser.ts` — Parser Claude Code stream-json
+- `src/bridge/claude-md-generator.ts` — Geração de CLAUDE.md (simplificar, remover lógica electric-agent)
 
-#### Server routes que só o electric-agent usa
+#### Funcionalidades que FICAM (usadas pelo Claude Code)
 
-| Route | Descrição |
-|-------|-----------|
-| `POST /api/provision-electric` | Claim API provisioning (infra_config gate) |
-| Git ops em `POST /api/sessions/:id/iterate` | Bloco `git:*` commands |
-| Lógica de `agentMode: "electric-agent"` | Toggle e branching no server |
+| Funcionalidade | Razão |
+|----------------|-------|
+| `electric-api.ts` | Claim API — usado pelo gate `infra_config` para provisionar DB para sessões Claude Code |
+| `git.ts` | GitHub list fns — usado pelo gate `infra_config` para popular account/repo selectors |
+| Gate `infra_config` | Configuração de infra (local/cloud/claim) — usado por AMBOS os modos |
+| `RepoPickerModal.tsx` | Parte do gate `infra_config` |
+| `GatePrompt.tsx` — secção `infra_config` | UI do gate de configuração de infra |
+| `GatePrompt.tsx` — secção `ask_user_question` | Gate do Claude Code AskUserQuestion |
+| Gate `continue` | Continuação após max_turns/budget |
+| Sandbox providers (Docker, Sprites) | Criação de containers com env vars DB |
 
-#### Funcionalidades do server a remover/simplificar
+#### Funcionalidades do server a REMOVER
 
 | Funcionalidade | Descrição |
 |----------------|-----------|
-| `electric-api.ts` | Claim API provisioning (só electric-agent usa) |
-| `git.ts` | GitHub list fns (usadas pela infra_config gate) |
-| Gate `infra_config` | Configuração de infra (local/cloud/claim) — só electric-agent |
-| Gate `clarification` | Perguntas de clarificação — só electric-agent |
+| Gate `clarification` | Perguntas do clarifier agent — só electric-agent |
 | Gate `plan_ready` / `revision` | Aprovação de plano — só electric-agent |
-| `agentMode` toggle | Distinção electric-agent vs claude-code |
-| `bridgeMode` selection | Lógica stdio vs stream vs claude-code |
+| `agentMode` toggle | Distinção electric-agent vs claude-code (agora só claude-code) |
+| `bridgeMode` selection `"stdio"` | Lógica stdio (era para electric-agent headless) |
+| Git ops em iterate (`git:*` commands) | Bloco git operations no iterate — só electric-agent |
 
-#### UI components a remover/simplificar
+#### Funcionalidades do server a SIMPLIFICAR
+
+| Funcionalidade | Alteração |
+|----------------|-----------|
+| `bridgeMode` | Remover opção `"stdio"`, manter só `"claude-code"` e `"stream"` |
+| Session creation | Remover branching `agentMode`, assumir sempre claude-code |
+| `claude-md-generator.ts` | Remover lógica `generateElectricAgentClaudeMd()`, manter só `generateClaudeMd()` |
+
+#### UI components a REMOVER
 
 | Componente | Descrição |
 |------------|-----------|
-| `GatePrompt.tsx` — secções `infra_config` | Config gate com repo picker, DB mode |
-| `GatePrompt.tsx` — secções `clarification` | Perguntas do clarifier |
-| `GatePrompt.tsx` — secções `plan_ready` | Approve/revise/cancel plan |
-| `RepoPickerModal.tsx` | GitHub repo + branch selector (infra_config) |
-| `Settings.tsx` — agent mode toggle | Toggle electric-agent / claude-code |
+| `GatePrompt.tsx` — secção `clarification` | Perguntas do clarifier |
+| `GatePrompt.tsx` — secção `plan_ready` | Approve/revise/cancel plan |
+| `Settings.tsx` — agent mode toggle | Toggle electric-agent / claude-code (agora inútil) |
 | Cost tracking no header | `cost_update` events (SDK-only) |
 
 #### Event types a remover do protocol
@@ -152,6 +163,17 @@ Bridges que ficam:
 | `CLAUDE.md` | Atualizar toda documentação |
 | `ARCHITECTURE.md` | Atualizar ou reescrever |
 
+### Nota: Fluxo de credenciais DB no Claude Code
+
+O fluxo de provisioning de base de dados é **partilhado** entre modos e FICA:
+
+1. Server emite gate `infra_config_prompt` (independente do agentMode)
+2. UI mostra opções: **Provision** (Claim API), **Local** (Docker Postgres), **Cloud** (manual)
+3. Server resolve gate → constrói `InfraConfig`
+4. Sandbox provider injeta `DATABASE_URL`, `ELECTRIC_URL`, etc. como env vars
+5. Claude Code herda env vars quando é spawned no container
+6. `CLAUDE.md` informa Claude que a DB está pré-configurada ("DO NOT MODIFY")
+
 ---
 
 ## Fase 3 — Melhoramentos de interface e simplificação da arquitetura (A DISCUTIR)
@@ -164,11 +186,13 @@ packages/
 └── studio/            # Server + UI + bridges Claude Code
     ├── src/
     │   ├── server.ts           # API server (simplificado)
-    │   ├── gate.ts             # Gates (só ask_user_question, continue)
+    │   ├── gate.ts             # Gates (infra_config, ask_user_question, continue)
     │   ├── sessions.ts         # Session index
     │   ├── streams.ts          # Durable Streams config
+    │   ├── electric-api.ts     # Claim API provisioning (FICA)
+    │   ├── git.ts              # GitHub list fns para infra_config (FICA)
     │   ├── sandbox/
-    │   │   ├── types.ts        # SandboxProvider interface
+    │   │   ├── types.ts        # SandboxProvider + InfraConfig
     │   │   ├── docker.ts       # DockerSandboxProvider
     │   │   ├── sprites.ts      # SpritesSandboxProvider
     │   │   └── index.ts
@@ -177,6 +201,7 @@ packages/
     │       ├── hosted.ts       # HostedStreamBridge
     │       ├── claude-code-docker.ts
     │       ├── claude-code-sprites.ts
+    │       ├── claude-md-generator.ts
     │       ├── stream-json-parser.ts
     │       └── index.ts
     └── client/                 # React SPA (simplificada)
@@ -188,7 +213,7 @@ packages/
 2. **Simplificação de bridges**: ClaudeCodeDockerBridge e ClaudeCodeSpritesBridge partilham ~90% do código. Extrair base class?
 3. **Simplificação do server**: server.ts tem ~2100 linhas. Dividir em route modules?
 4. **Shared sessions**: Funcionalidade de colaboração — está a ser usada? Manter?
-5. **Gate system**: Com só `ask_user_question` e `continue`, simplificar a abstração?
+5. **Gate system**: Com `infra_config`, `ask_user_question` e `continue`, simplificar a abstração?
 6. **Sandbox provider interface**: Simplificar agora que não há Daytona?
 7. **CLAUDE.md generation**: Simplificar `claude-md-generator.ts` removendo lógica electric-agent?
 
