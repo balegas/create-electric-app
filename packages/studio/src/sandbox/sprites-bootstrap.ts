@@ -35,6 +35,13 @@ export async function bootstrapSprite(sprite: Sprite, opts?: BootstrapOptions): 
 		`source /etc/profile.d/npm-global.sh 2>/dev/null; npm install -g ${packageSpec}`,
 	])
 
+	// Install Claude Code CLI (for claude-code bridge mode)
+	console.log(`[sprites-bootstrap] Installing Claude Code CLI...`)
+	await sprite.execFile("bash", [
+		"-c",
+		"source /etc/profile.d/npm-global.sh 2>/dev/null; npm install -g @anthropic-ai/claude-code",
+	])
+
 	// Create the workspace directory structure matching other runtimes
 	await sprite.exec("mkdir -p /home/agent/workspace")
 
