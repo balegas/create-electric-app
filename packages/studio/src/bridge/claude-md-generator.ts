@@ -131,6 +131,7 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 
 ### Protected Files — DO NOT MODIFY
 - docker-compose.yml
+- vite.config.ts (pre-configured with port, host, allowedHosts, and proxy — modifying it WILL break the preview)
 - tsconfig.json
 - biome.json
 - pnpm-lock.yaml
@@ -143,9 +144,6 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - Use "lucide-react" for icons (NOT @radix-ui/react-icons)
 - Use "@radix-ui/themes" for Radix components (NOT @radix-ui/react-*)
 - Use "react-router" for routing (NOT react-router-dom)
-
-### Vite Config Rules
-- When modifying vite.config.ts, ALWAYS preserve \`server: { allowedHosts: true }\` — without it, Vite rejects connections from the proxy URL
 
 ### Dependency Rules
 - NEVER remove existing dependencies from package.json
