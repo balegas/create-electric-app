@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
 import { ToolExecution } from "./ToolExecution"
@@ -17,6 +17,9 @@ const CATEGORY_LABELS: Record<string, [string, string, string]> = {
 	write: ["Editing", "Edited", "files"],
 	run: ["Running", "Ran", "commands"],
 }
+
+/** How many tail items to show when collapsed. */
+const VISIBLE_TAIL = 4
 
 function aggregateDuration(durations: (string | null)[]): string | null {
 	let totalMs = 0
@@ -45,6 +48,8 @@ function aggregateDuration(durations: (string | null)[]): string | null {
 
 export function ActionGroup({ category, entries, durations }: ActionGroupProps) {
 	const [expanded, setExpanded] = useState(false)
+	const prevCountRef = useRef(entries.length)
+	const tailRef = useRef<HTMLDivElement>(null)
 
 	const total = entries.length
 	const allDone = entries.every((e) => e.tool_response !== null)
@@ -54,8 +59,6 @@ export function ActionGroup({ category, entries, durations }: ActionGroupProps) 
 		"items",
 	]
 
-	const tail = entries[entries.length - 1]
-	const tailDuration = durations[durations.length - 1]
 	const totalDuration = aggregateDuration(durations)
 
 	// Header text with tense switching
@@ -63,16 +66,35 @@ export function ActionGroup({ category, entries, durations }: ActionGroupProps) 
 		? `${doneLabel} ${total} ${noun}`
 		: `${activeLabel} ${total} ${noun}...`
 
+	// Animate when a new entry is added while collapsed
+	useEffect(() => {
+		if (entries.length > prevCountRef.current && !expanded && tailRef.current) {
+			const items = tailRef.current.querySelectorAll(".tool-group-tail-item")
+			const lastItem = items[items.length - 1]
+			if (lastItem) {
+				lastItem.classList.remove("tool-group-slide-in")
+				// Force reflow so animation restarts
+				void (lastItem as HTMLElement).offsetWidth
+				lastItem.classList.add("tool-group-slide-in")
+			}
+		}
+		prevCountRef.current = entries.length
+	}, [entries.length, expanded])
+
+	// Visible tail entries (last VISIBLE_TAIL items)
+	const tailStart = Math.max(0, entries.length - VISIBLE_TAIL)
+	const tailEntries = entries.slice(tailStart)
+	const tailDurations = durations.slice(tailStart)
+
 	return (
 		<div className="tool-group">
 			<div className="tool-group-header" onClick={() => setExpanded((v) => !v)}>
 				{!allDone && <span className="spinner-inline" />}
 				<span className="tool-group-label">{headerText}</span>
-				<span className="tool-group-chevron">{expanded ? "\u25BC" : "\u25B6"}</span>
 				{allDone && <Duration value={totalDuration} />}
 			</div>
 
-			{/* Expanded: show all items as one-liners */}
+			{/* Expanded: show all items */}
 			{expanded && (
 				<div className="tool-group-items">
 					{entries.map((entry, i) => (
@@ -85,10 +107,17 @@ export function ActionGroup({ category, entries, durations }: ActionGroupProps) 
 				</div>
 			)}
 
-			{/* Tail: always show last/active item */}
+			{/* Collapsed: show last VISIBLE_TAIL items */}
 			{!expanded && (
-				<div className="tool-group-tail">
-					<ToolExecution entry={tail} duration={tailDuration} />
+				<div className="tool-group-tail" ref={tailRef}>
+					{tailEntries.map((entry, i) => (
+						<div
+							key={entry.tool_use_id || `gt-${tailStart + i}`}
+							className={`tool-group-tail-item${i === tailEntries.length - 1 ? " tool-group-slide-in" : ""}`}
+						>
+							<ToolExecution entry={entry} duration={tailDurations[i]} />
+						</div>
+					))}
 				</div>
 			)}
 		</div>

@@ -287,15 +287,34 @@
 	color: var(--brand-1);
 }
 
-.tool-group-chevron {
-	font-size: 9px;
-	color: var(--text-subtle);
-}
-
 /* Tail & expanded items are indented under the header */
 .tool-group-tail,
 .tool-group-items {
 	padding-left: 16px;
+}
+
+/* Slide-in animation for new tail items */
+.tool-group-tail {
+	overflow: hidden;
+}
+
+.tool-group-tail-item {
+	/* Items start visible — animation only applies via .tool-group-slide-in */
+}
+
+.tool-group-slide-in {
+	animation: group-slide-in 0.25s ease-out;
+}
+
+@keyframes group-slide-in {
+	from {
+		opacity: 0;
+		transform: translateY(-8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 /* Todo widget */
