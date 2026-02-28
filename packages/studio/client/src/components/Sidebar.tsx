@@ -178,6 +178,47 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 
 				<div className="sidebar-section-label">Rooms</div>
 
+				{joinedSharedSessions.map((s) => {
+					const color = getAvatarColor(s.id)
+					const initials = s.name
+						.split(/[-_ ]+/)
+						.slice(0, 2)
+						.map((w) => w.charAt(0).toUpperCase())
+						.join("")
+					return (
+						<div
+							key={s.code}
+							className={`session-item ${activeSharedCode === s.code ? "active" : ""}`}
+							onClick={() => handleNavigate(`/shared/${s.code}`)}
+							title={s.name}
+						>
+							<span
+								className="session-avatar session-avatar-shared"
+								style={{ background: color.bg, color: color.fg }}
+							>
+								{initials}
+							</span>
+							<div className="session-item-details">
+								<div className="session-item-name">{s.name}</div>
+								<div className="session-item-meta">
+									<span>{s.code}</span>
+								</div>
+							</div>
+							<button
+								type="button"
+								className="session-item-delete"
+								onClick={(e) => {
+									e.stopPropagation()
+									handleRemoveShared(s.code)
+								}}
+								title="Remove"
+							>
+								&times;
+							</button>
+						</div>
+					)
+				})}
+
 				{createInputOpen && !collapsed ? (
 					<div className="sidebar-join-input">
 						<input
@@ -263,47 +304,6 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						</div>
 					</div>
 				)}
-
-				{joinedSharedSessions.map((s) => {
-					const color = getAvatarColor(s.id)
-					const initials = s.name
-						.split(/[-_ ]+/)
-						.slice(0, 2)
-						.map((w) => w.charAt(0).toUpperCase())
-						.join("")
-					return (
-						<div
-							key={s.code}
-							className={`session-item ${activeSharedCode === s.code ? "active" : ""}`}
-							onClick={() => handleNavigate(`/shared/${s.code}`)}
-							title={s.name}
-						>
-							<span
-								className="session-avatar session-avatar-shared"
-								style={{ background: color.bg, color: color.fg }}
-							>
-								{initials}
-							</span>
-							<div className="session-item-details">
-								<div className="session-item-name">{s.name}</div>
-								<div className="session-item-meta">
-									<span>{s.code}</span>
-								</div>
-							</div>
-							<button
-								type="button"
-								className="session-item-delete"
-								onClick={(e) => {
-									e.stopPropagation()
-									handleRemoveShared(s.code)
-								}}
-								title="Remove"
-							>
-								&times;
-							</button>
-						</div>
-					)
-				})}
 			</div>
 
 			<div className="sidebar-collapse">

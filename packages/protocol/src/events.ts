@@ -108,7 +108,16 @@ export type SharedSessionEvent =
 	  }
 	| { type: "participant_joined"; participant: Participant; ts: string }
 	| { type: "participant_left"; participantId: string; ts: string }
-	| { type: "session_linked"; sessionId: string; linkedBy: string; ts: string }
+	| {
+			type: "session_linked"
+			sessionId: string
+			/** Display name of the session (provided by the linking user) */
+			sessionName: string
+			/** Short description of the session */
+			sessionDescription: string
+			linkedBy: string
+			ts: string
+	  }
 	| { type: "session_unlinked"; sessionId: string; ts: string }
 	| { type: "code_revoked"; ts: string }
 

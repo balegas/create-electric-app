@@ -6,9 +6,10 @@
 
 - fixes to sprites
 - Updated dependencies [89d4cb6]
-- Updated dependencies
 - Updated dependencies [ba8f908]
+- Updated dependencies [a99ba74]
   - @electric-agent/studio@1.1.0
+  - @electric-agent/protocol@1.1.0
 
 ## 1.0.0
 

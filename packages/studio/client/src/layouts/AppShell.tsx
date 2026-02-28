@@ -2,17 +2,18 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
-import { useRegistry } from "../hooks/useRegistry"
 import { deleteSession, fetchKeychainCredentials, type SessionInfo } from "../lib/api"
 import {
 	hasApiKey as checkHasApiKey,
 	hasGhToken as checkHasGhToken,
 	getOauthToken,
+	isManualOauth,
 	setOauthToken,
 } from "../lib/credentials"
+import { getSessions, removeSession as removeSessionFromStore } from "../lib/session-store"
 import { getJoinedSharedSessions, type JoinedSharedSession } from "../lib/shared-session-store"
 
-export type AuthSource = "api-key" | "keychain" | null
+export type AuthSource = "api-key" | "oauth" | "keychain" | null
 
 export interface PendingProject {
 	name: string
@@ -25,9 +26,9 @@ interface AppContextValue {
 	hasGhToken: boolean | null
 	showSettings: boolean
 	setShowSettings: (v: boolean | ((prev: boolean) => boolean)) => void
-	refreshSessions: () => Promise<void>
+	refreshSessions: () => void
 	refreshSettings: () => void
-	handleNewProject: (description: string) => Promise<void>
+	handleNewProject: (description: string) => void
 	handleDeleteSession: (sessionId: string) => Promise<void>
 	loading: boolean
 	joinedSharedSessions: JoinedSharedSession[]
@@ -54,8 +55,8 @@ function useIsMobile() {
 }
 
 export function AppShell() {
-	const { sessions: registrySessions } = useRegistry()
-	const sessions = registrySessions as unknown as SessionInfo[]
+	// Sessions come from localStorage (private to this browser)
+	const [sessions, setSessions] = useState<SessionInfo[]>(() => getSessions())
 	const [authSource, setAuthSource] = useState<AuthSource>(null)
 	const [hasGhToken, setHasGhToken] = useState<boolean | null>(null)
 	const [showSettings, setShowSettings] = useState(false)
@@ -87,6 +88,12 @@ export function AppShell() {
 		setJoinedSharedSessions(getJoinedSharedSessions())
 	}, [])
 
+	// Reload sessions from localStorage
+	const refreshSessions = useCallback(() => {
+		setSessions(getSessions())
+		setPendingProject(null)
+	}, [])
+
 	// Auto-collapse sidebar when first navigating to a session or shared page
 	const prevPathRef = useRef(location.pathname)
 	useEffect(() => {
@@ -108,13 +115,12 @@ export function AppShell() {
 			setSidebarCollapsed(false)
 			localStorage.setItem("sidebarCollapsed", "false")
 		}
-	}, [location.pathname])
 
-	// Sessions are now live-updated via the registry SSE stream.
-	// refreshSessions is kept as a no-op for API compatibility with consumers.
-	const refreshSessions = useCallback(async () => {
-		setPendingProject(null)
-	}, [])
+		// Refresh sessions when returning to home (pick up any status updates)
+		if (!isDeep) {
+			refreshSessions()
+		}
+	}, [location.pathname, refreshSessions])
 
 	const refreshSettings = useCallback(async () => {
 		const ghToken = checkHasGhToken()
@@ -123,6 +129,12 @@ export function AppShell() {
 		// Check local credentials first
 		if (checkHasApiKey()) {
 			setAuthSource("api-key")
+			return
+		}
+
+		// Check for manually-set OAuth token (takes priority over keychain)
+		if (isManualOauth() && getOauthToken()) {
+			setAuthSource("oauth")
 			return
 		}
 
@@ -165,7 +177,8 @@ export function AppShell() {
 		async (sessionId: string) => {
 			try {
 				await deleteSession(sessionId)
-				// session_deleted event arrives via SSE — no manual refresh needed
+				removeSessionFromStore(sessionId)
+				refreshSessions()
 				if (location.pathname === `/session/${sessionId}`) {
 					navigate("/")
 				}
@@ -173,7 +186,7 @@ export function AppShell() {
 				console.error("Failed to delete session:", err)
 			}
 		},
-		[location.pathname, navigate],
+		[location.pathname, navigate, refreshSessions],
 	)
 
 	const ctx: AppContextValue = {

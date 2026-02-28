@@ -92,10 +92,6 @@ export interface GhBranch {
 
 // --- Session CRUD ---
 
-export function listSessions() {
-	return request<{ sessions: SessionInfo[] }>("/sessions")
-}
-
 export function getSession(id: string) {
 	return request<SessionInfo>(`/sessions/${id}`)
 }
@@ -109,7 +105,7 @@ export function createLocalSession(description?: string) {
 }
 
 export function createSession(description: string, name?: string) {
-	return request<{ sessionId: string; streamUrl: string; appPort?: number }>("/sessions", {
+	return request<{ sessionId: string; session: SessionInfo }>("/sessions", {
 		method: "POST",
 		body: { description, name, agentMode: getAgentMode(), ...credentialFields() },
 	})
@@ -197,13 +193,13 @@ export function fetchKeychainCredentials() {
 }
 
 export function resumeFromGithub(repoUrl: string, branch?: string) {
-	return request<{ sessionId: string; streamUrl: string; hasPlan: boolean }>("/sessions/resume", {
+	return request<{ sessionId: string; session: SessionInfo }>("/sessions/resume", {
 		method: "POST",
 		body: { repoUrl, branch, ...credentialFields() },
 	})
 }
 
-// --- Shared Sessions ---
+// --- Shared Sessions (Rooms) ---
 
 export function createSharedSession(name: string) {
 	const participant = getOrCreateParticipant()
@@ -233,11 +229,21 @@ export function leaveSharedSession(sharedSessionId: string) {
 	})
 }
 
-export function linkSession(sharedSessionId: string, sessionId: string) {
+export function linkSession(
+	sharedSessionId: string,
+	sessionId: string,
+	sessionName: string,
+	sessionDescription: string,
+) {
 	const participant = getOrCreateParticipant()
 	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/sessions`, {
 		method: "POST",
-		body: { sessionId, linkedBy: participant.displayName },
+		body: {
+			sessionId,
+			sessionName,
+			sessionDescription,
+			linkedBy: participant.displayName,
+		},
 	})
 }
 
