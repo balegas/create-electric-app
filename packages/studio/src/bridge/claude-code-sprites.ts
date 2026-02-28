@@ -11,7 +11,8 @@ import * as readline from "node:readline"
 import { DurableStream } from "@durable-streams/client"
 import type { EngineEvent } from "@electric-agent/protocol"
 import { ts } from "@electric-agent/protocol"
-import type { Sprite, SpriteCommand } from "@fly/sprites"
+import type { Sprite } from "@fly/sprites"
+import { SpriteCommand } from "@fly/sprites"
 import type { StreamConnectionInfo } from "../streams.js"
 import { createStreamJsonParser } from "./stream-json-parser.js"
 import type { SessionBridge, StreamMessage } from "./types.js"
@@ -158,10 +159,12 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 		const escapedArgs = claudeArgs.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")
 		const fullCmd = `source /etc/profile.d/npm-global.sh 2>/dev/null; source /etc/profile.d/electric-agent.sh 2>/dev/null; cd '${this.config.cwd}' && claude ${escapedArgs}`
 
-		this.cmd = this.sprite.createSession("bash", ["-c", fullCmd], {
-			detachable: true,
-			sessionId: SPRITES_SESSION_ID,
+		// Use SpriteCommand with tty:true (for streaming) but NOT detachable
+		// (detachable creates a tmux session which causes immediate exit)
+		this.cmd = new SpriteCommand(this.sprite, "bash", ["-c", fullCmd], {
+			tty: true,
 		})
+		await this.cmd.start()
 
 		console.log(`[claude-code-sprites] Started: session=${this.sessionId}`)
 
@@ -218,10 +221,11 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	// -----------------------------------------------------------------------
 
 	private handleLine(line: string): void {
-		const trimmed = line.trim()
-		if (!trimmed) return
+		// Strip ANSI escape sequences and terminal control chars added by tty mode
+		const cleaned = stripAnsi(line).trim()
+		if (!cleaned) return
 
-		const events = this.parser.parse(trimmed)
+		const events = this.parser.parse(cleaned)
 		for (const event of events) {
 			this.dispatchEvent(event)
 		}
@@ -276,4 +280,15 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 		})
 		this.cmd.stdin.write(`${msg}\n`)
 	}
+}
+
+/** Strip ANSI escape sequences and control characters from tty output */
+function stripAnsi(str: string): string {
+	const ESC = "\x1b"
+	const csi = new RegExp(`${ESC}\\[[0-9;]*[a-zA-Z]`, "g")
+	const osc1 = new RegExp(`${ESC}\\][^\\x07]*\\x07`, "g")
+	const osc2 = new RegExp(`${ESC}\\][^${ESC}]*${ESC}\\\\`, "g")
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: strip C0 control chars except \n \r
+	const ctrl = /[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/g
+	return str.replace(csi, "").replace(osc1, "").replace(osc2, "").replace(ctrl, "")
 }
