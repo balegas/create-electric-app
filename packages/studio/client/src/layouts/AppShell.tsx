@@ -177,13 +177,13 @@ export function AppShell() {
 		async (sessionId: string) => {
 			try {
 				await deleteSession(sessionId)
-				removeSessionFromStore(sessionId)
-				refreshSessions()
-				if (location.pathname === `/session/${sessionId}`) {
-					navigate("/")
-				}
 			} catch (err) {
 				console.error("Failed to delete session:", err)
+			}
+			removeSessionFromStore(sessionId)
+			refreshSessions()
+			if (location.pathname === `/session/${sessionId}`) {
+				navigate("/")
 			}
 		},
 		[location.pathname, navigate, refreshSessions],
