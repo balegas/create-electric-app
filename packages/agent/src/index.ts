@@ -6,6 +6,7 @@ import dotenv from "dotenv"
 import { headlessCommand } from "./cli/headless.js"
 import { serveCommand } from "./cli/serve.js"
 import { findUp } from "./find-env.js"
+import { scaffold } from "./scaffold/index.js"
 
 dotenv.config({ path: findUp(".env") })
 
@@ -42,5 +43,28 @@ program
 			open: opts.open,
 		})
 	})
+
+program
+	.command("scaffold")
+	.description("Scaffold a new Electric + TanStack DB project")
+	.argument("<dir>", "Target project directory")
+	.option("-n, --name <name>", "Project name")
+	.option("--skip-install", "Skip dependency installation")
+	.option("--skip-git", "Skip git initialization")
+	.action(
+		async (dir: string, opts: { name?: string; skipInstall?: boolean; skipGit?: boolean }) => {
+			const result = await scaffold(dir, {
+				projectName: opts.name,
+				skipInstall: opts.skipInstall,
+				skipGit: opts.skipGit,
+			})
+			if (result.errors.length > 0) {
+				console.error("Scaffold completed with errors:")
+				for (const e of result.errors) console.error(`  - ${e}`)
+				process.exit(1)
+			}
+			console.log(`Scaffolded project at ${result.projectDir}`)
+		},
+	)
 
 program.parse()
