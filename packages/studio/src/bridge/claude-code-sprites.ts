@@ -249,26 +249,28 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 			}
 		})
 
-		// Handle process exit
+		// Handle process exit — defer to let pending readline events flush first,
+		// which prevents duplicate session_end (the parser emits one from "result").
 		currentCmd.on("exit", (code) => {
 			console.log(`[claude-code-sprites] Process exited: code=${code} session=${this.sessionId}`)
-
-			// Capture session ID from parser state before marking not running
-			if (this.parser.state.sessionId) {
-				this.claudeSessionId = this.parser.state.sessionId
-			}
-			this.running = false
-
-			// Only emit session_end from exit handler if the parser didn't already
-			// emit one (via a "result" message). This prevents double session_end.
-			if (!this.closed && !this.resultReceived) {
-				const endEvent: EngineEvent = {
-					type: "session_end",
-					success: code === 0,
-					ts: ts(),
+			setTimeout(() => {
+				// Capture session ID from parser state before marking not running
+				if (this.parser.state.sessionId) {
+					this.claudeSessionId = this.parser.state.sessionId
 				}
-				this.dispatchEvent(endEvent)
-			}
+				this.running = false
+
+				// Only emit session_end from exit handler if the parser didn't already
+				// emit one (via a "result" message). This prevents double session_end.
+				if (!this.closed && !this.resultReceived) {
+					const endEvent: EngineEvent = {
+						type: "session_end",
+						success: code === 0,
+						ts: ts(),
+					}
+					this.dispatchEvent(endEvent)
+				}
+			}, 100)
 		})
 	}
 

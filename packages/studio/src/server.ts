@@ -1098,8 +1098,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			// Track Claude Code session ID for --resume on iterate
 			bridge.onAgentEvent((event) => {
-				if (event.type === "session_start" && "session_id" in event) {
-					const ccSessionId = (event as EngineEvent & { session_id: string }).session_id
+				if (event.type === "session_start") {
+					const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+					console.log(`[session:${sessionId}] Captured Claude Code session ID: ${ccSessionId}`)
 					if (ccSessionId) {
 						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
 					}
