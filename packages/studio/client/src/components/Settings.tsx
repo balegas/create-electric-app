@@ -3,12 +3,15 @@ import { createPortal } from "react-dom"
 import { useEscapeKey } from "../hooks/useKeyboardShortcut"
 import type { AuthSource } from "../layouts/AppShell"
 import {
+	type AgentMode,
 	applyFontSize,
 	clearApiKey,
 	clearGhToken,
 	clearOauthToken,
 	type FontSize,
+	getAgentMode,
 	getFontSize,
+	setAgentMode as saveAgentMode,
 	setApiKey as saveApiKey,
 	setFontSize as saveFontSize,
 	setGhToken as saveGhToken,
@@ -35,11 +38,17 @@ export function Settings({
 	const [ghPat, setGhPat] = useState("")
 	const [copied, setCopied] = useState(false)
 	const [fontSize, setFontSize] = useState<FontSize>(getFontSize)
+	const [agentMode, setAgentMode] = useState<AgentMode>(getAgentMode)
 
 	const handleFontSize = useCallback((size: FontSize) => {
 		setFontSize(size)
 		saveFontSize(size)
 		applyFontSize(size)
+	}, [])
+
+	const handleAgentMode = useCallback((mode: AgentMode) => {
+		setAgentMode(mode)
+		saveAgentMode(mode)
 	}, [])
 
 	const handleSaveApiKey = useCallback(() => {
@@ -180,6 +189,28 @@ export function Settings({
 						>
 							github.com/settings/tokens
 						</a>
+					</div>
+				</div>
+
+				{/* Agent mode */}
+				<div className="settings-divider" />
+				<div className="settings-section-label">Agent</div>
+				<div className="settings-field">
+					<label style={{ margin: 0, marginBottom: 4 }}>Agent Mode</label>
+					<div style={{ fontSize: 11, color: "var(--text-subtle)", marginBottom: 8 }}>
+						Applies to new sessions only
+					</div>
+					<div className="font-size-options">
+						{(["claude-code", "electric-agent"] as const).map((mode) => (
+							<button
+								key={mode}
+								type="button"
+								className={`font-size-option${agentMode === mode ? " active" : ""}`}
+								onClick={() => handleAgentMode(mode)}
+							>
+								{mode === "claude-code" ? "Claude Code" : "Electric Agent"}
+							</button>
+						))}
 					</div>
 				</div>
 

@@ -80,3 +80,22 @@ export function applyFontSize(size?: FontSize): void {
 	const s = size ?? getFontSize()
 	document.documentElement.setAttribute("data-font-size", s)
 }
+
+/* Agent mode preference */
+const AGENT_MODE_KEY = "electric-agent:agent-mode"
+
+export type AgentMode = "claude-code" | "electric-agent"
+
+export function getAgentMode(): AgentMode {
+	const val = localStorage.getItem(AGENT_MODE_KEY)
+	if (val === "electric-agent") return val
+	return "claude-code"
+}
+
+export function setAgentMode(mode: AgentMode): void {
+	if (mode === "claude-code") {
+		localStorage.removeItem(AGENT_MODE_KEY)
+	} else {
+		localStorage.setItem(AGENT_MODE_KEY, mode)
+	}
+}

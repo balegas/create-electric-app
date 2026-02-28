@@ -1,4 +1,4 @@
-import { getApiKey, getGhToken, getOauthToken } from "./credentials"
+import { getAgentMode, getApiKey, getGhToken, getOauthToken } from "./credentials"
 import { getOrCreateParticipant } from "./participant"
 
 const API_BASE = "/api"
@@ -111,7 +111,7 @@ export function createLocalSession(description?: string) {
 export function createSession(description: string, name?: string) {
 	return request<{ sessionId: string; streamUrl: string; appPort?: number }>("/sessions", {
 		method: "POST",
-		body: { description, name, ...credentialFields() },
+		body: { description, name, agentMode: getAgentMode(), ...credentialFields() },
 	})
 }
 

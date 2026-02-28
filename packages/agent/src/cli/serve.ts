@@ -80,12 +80,15 @@ export async function serveCommand(opts: {
 	}
 
 	// Determine bridge mode:
-	//   BRIDGE_MODE=stdio  → always stdin/stdout (required for Daytona without internet)
-	//   BRIDGE_MODE=stream → always hosted Durable Streams (default for Docker & Sprites)
-	//   (unset)            → "stdio" for Daytona, "stream" for Docker/Sprites
+	//   BRIDGE_MODE=stdio       → always stdin/stdout (required for Daytona without internet)
+	//   BRIDGE_MODE=stream      → always hosted Durable Streams (default for Docker & Sprites)
+	//   BRIDGE_MODE=claude-code → Claude Code CLI in sandbox with stream-json I/O
+	//   (unset)                 → "stdio" for Daytona, "stream" for Docker/Sprites
 	const bridgeModeEnv = process.env.BRIDGE_MODE?.toLowerCase()
-	let bridgeMode: "stream" | "stdio"
-	if (bridgeModeEnv === "stdio") {
+	let bridgeMode: "stream" | "stdio" | "claude-code"
+	if (bridgeModeEnv === "claude-code") {
+		bridgeMode = "claude-code"
+	} else if (bridgeModeEnv === "stdio") {
 		bridgeMode = "stdio"
 	} else if (bridgeModeEnv === "stream") {
 		bridgeMode = "stream"
