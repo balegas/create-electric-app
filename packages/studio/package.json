@@ -38,9 +38,13 @@
 			"types": "./dist/shared-sessions.d.ts",
 			"import": "./dist/shared-sessions.js"
 		},
-		"./registry": {
-			"types": "./dist/registry.d.ts",
-			"import": "./dist/registry.js"
+		"./room-registry": {
+			"types": "./dist/room-registry.d.ts",
+			"import": "./dist/room-registry.js"
+		},
+		"./active-sessions": {
+			"types": "./dist/active-sessions.d.ts",
+			"import": "./dist/active-sessions.js"
 		}
 	},
 	"files": [

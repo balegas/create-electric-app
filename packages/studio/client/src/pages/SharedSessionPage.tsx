@@ -18,7 +18,7 @@ import { addJoinedSharedSession, removeJoinedSharedSession } from "../lib/shared
 export function SharedSessionPage() {
 	const { code } = useParams<{ code: string }>()
 	const navigate = useNavigate()
-	const { sessions, refreshSessions, refreshJoinedSharedSessions } = useAppContext()
+	const { sessions, refreshJoinedSharedSessions } = useAppContext()
 	const [sharedSessionId, setSharedSessionId] = useState<string | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [joining, setJoining] = useState(true)
@@ -91,8 +91,15 @@ export function SharedSessionPage() {
 	const handleLinkSession = useCallback(
 		async (sessionId: string) => {
 			if (!sharedSessionId) return
+			// Find session metadata from localStorage
+			const session = sessions.find((s) => s.id === sessionId)
 			try {
-				await linkSession(sharedSessionId, sessionId)
+				await linkSession(
+					sharedSessionId,
+					sessionId,
+					session?.projectName || "",
+					session?.description || "",
+				)
 				setShowLinkModal(false)
 				// Auto-expand the newly linked panel
 				setExpandedPanels((prev) => new Set([...prev, sessionId]))
@@ -100,7 +107,7 @@ export function SharedSessionPage() {
 				console.error("Failed to link session:", err)
 			}
 		},
-		[sharedSessionId],
+		[sharedSessionId, sessions],
 	)
 
 	const handleUnlinkSession = useCallback(
@@ -131,11 +138,6 @@ export function SharedSessionPage() {
 			return next
 		})
 	}, [])
-
-	// Refresh sessions list for linking
-	useEffect(() => {
-		refreshSessions()
-	}, [refreshSessions])
 
 	if (error) {
 		return (
@@ -198,6 +200,7 @@ export function SharedSessionPage() {
 							<LinkedSessionPanel
 								key={sid}
 								sessionId={sid}
+								sessionName={sharedSession.sessionNames.get(sid)}
 								expanded={expandedPanels.has(sid)}
 								onToggle={() => togglePanel(sid)}
 								onUnlink={handleUnlinkSession}
@@ -262,11 +265,13 @@ function ChevronIcon() {
 
 function LinkedSessionPanel({
 	sessionId,
+	sessionName,
 	expanded,
 	onToggle,
 	onUnlink,
 }: {
 	sessionId: string
+	sessionName?: string
 	expanded: boolean
 	onToggle: () => void
 	onUnlink: (sessionId: string) => void
@@ -277,7 +282,7 @@ function LinkedSessionPanel({
 		<div className={`shared-session-panel ${expanded ? "expanded" : "collapsed"}`}>
 			<div className="shared-session-panel-header" onClick={onToggle}>
 				<ChevronIcon />
-				<span className="shared-session-panel-id">{sessionId.slice(0, 8)}</span>
+				<span className="shared-session-panel-id">{sessionName || sessionId.slice(0, 8)}</span>
 				{isComplete ? (
 					<span
 						className="session-header-status"

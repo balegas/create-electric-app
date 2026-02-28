@@ -14,6 +14,7 @@ import {
 	sendIterate,
 } from "../lib/api"
 import type { ConsoleEntry } from "../lib/event-types"
+import { addSession, getSessionById, updateSession } from "../lib/session-store"
 
 interface OutletCtx {
 	openMobileDrawer: () => void
@@ -67,7 +68,6 @@ export function SessionPage() {
 	const navigate = useNavigate()
 	const { openMobileDrawer } = useOutletContext<OutletCtx>()
 	const {
-		sessions,
 		showSettings,
 		setShowSettings,
 		authSource,
@@ -112,9 +112,10 @@ export function SessionPage() {
 		setInitializing(true)
 
 		createSession(state.description)
-			.then(async ({ sessionId, appPort: port }) => {
-				if (port) setAppPort(port)
-				await refreshSessions()
+			.then(({ sessionId, session }) => {
+				// Save session to localStorage (private to this user)
+				addSession(session)
+				refreshSessions()
 				setRealSessionId(sessionId)
 				setInitializing(false)
 				navigate(`/session/${sessionId}`, { replace: true })
@@ -129,23 +130,30 @@ export function SessionPage() {
 	const { entries, isLive, isComplete, appReady, totalCost, markGateResolved } =
 		useSession(effectiveId)
 
-	const [activeSession, setActiveSession] = useState<SessionInfo | null>(null)
+	// Load session from localStorage
+	const [activeSession, setActiveSession] = useState<SessionInfo | null>(() =>
+		effectiveId ? (getSessionById(effectiveId) ?? null) : null,
+	)
 	const [appState, setAppState] = useState<AppState>("hidden")
-	const [appPort, setAppPort] = useState<number | undefined>(
-		() => sessions.find((s) => s.id === effectiveId)?.appPort,
-	)
-	const [previewUrl, setPreviewUrl] = useState<string | undefined>(
-		() => sessions.find((s) => s.id === effectiveId)?.previewUrl,
-	)
+	const [appPort, setAppPort] = useState<number | undefined>(() => activeSession?.appPort)
+	const [previewUrl, setPreviewUrl] = useState<string | undefined>(() => activeSession?.previewUrl)
 
 	useEffect(() => {
 		if (effectiveId) {
-			const session = sessions.find((s) => s.id === effectiveId)
+			const session = getSessionById(effectiveId)
 			setActiveSession(session ?? null)
 			if (session?.appPort) setAppPort(session.appPort)
 			if (session?.previewUrl) setPreviewUrl(session.previewUrl)
 		}
-	}, [effectiveId, sessions])
+	}, [effectiveId])
+
+	// Update localStorage when session completes
+	useEffect(() => {
+		if (effectiveId && isComplete) {
+			updateSession(effectiveId, { status: "complete" })
+			refreshSessions()
+		}
+	}, [effectiveId, isComplete, refreshSessions])
 
 	// Poll app status when session is complete/error or when Vite reports ready
 	const sessionDone =
@@ -167,6 +175,13 @@ export function SessionPage() {
 				setAppState(status.running ? "running" : "stopped")
 				if (status.port) setAppPort(status.port)
 				if (status.previewUrl) setPreviewUrl(status.previewUrl)
+				// Update localStorage with port/preview info
+				if (status.port || status.previewUrl) {
+					updateSession(effectiveId, {
+						...(status.port ? { appPort: status.port } : {}),
+						...(status.previewUrl ? { previewUrl: status.previewUrl } : {}),
+					})
+				}
 			} catch {
 				setAppState("stopped")
 			}
@@ -181,19 +196,19 @@ export function SessionPage() {
 			if (!effectiveId) return
 			try {
 				await sendIterate(effectiveId, request)
-				await refreshSessions()
 			} catch (err) {
 				console.error("Failed to send iteration:", err)
 			}
 		},
-		[effectiveId, refreshSessions],
+		[effectiveId],
 	)
 
 	const handleCancel = useCallback(async () => {
 		if (!effectiveId) return
 		try {
 			await cancelSession(effectiveId)
-			await refreshSessions()
+			updateSession(effectiveId, { status: "cancelled" })
+			refreshSessions()
 		} catch (err) {
 			console.error("Failed to cancel:", err)
 		}
