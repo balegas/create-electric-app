@@ -33,6 +33,12 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 	sections.push(PROJECT_CONTEXT)
 	sections.push("")
 
+	const sandbox = sandboxEnvironment(opts.runtime)
+	if (sandbox) {
+		sections.push(sandbox)
+		sections.push("")
+	}
+
 	if (!opts.isIteration) {
 		sections.push("## Current Task")
 		sections.push(opts.description)
@@ -68,6 +74,12 @@ export function generateElectricAgentClaudeMd(opts: ClaudeMdOptions): string {
 	sections.push("")
 	sections.push(PROJECT_CONTEXT)
 	sections.push("")
+
+	const sandbox = sandboxEnvironment(opts.runtime)
+	if (sandbox) {
+		sections.push(sandbox)
+		sections.push("")
+	}
 
 	if (!opts.isIteration) {
 		sections.push("## Current Task")
@@ -158,6 +170,36 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - snake_case for SQL table/column names
 - Foreign keys with onDelete: "cascade" where appropriate`
 
+function sandboxEnvironment(runtime?: string): string {
+	if (runtime === "sprites" || runtime === "daytona") {
+		return `## Sandbox Environment (IMPORTANT — READ FIRST)
+You are running inside a cloud micro-VM (Fly.io Sprite). This is NOT a local machine.
+
+### Networking & Port Exposure
+- The Sprite HTTP proxy routes all external traffic to **port 8080** inside the VM
+- Your app MUST listen on port 8080 to be accessible via the preview URL — this is pre-configured via the \`VITE_PORT\` environment variable
+- The app MUST bind to \`0.0.0.0\` (not localhost) — pre-configured via \`host: true\` in vite.config.ts
+- The preview URL follows the pattern: \`https://<sprite-name>.sprites.app\`
+- There is NO way to expose other ports — only port 8080 is proxied
+
+### What's Available
+- Node.js (via nvm at \`/.sprite/languages/node/nvm/\`)
+- pnpm, git, gh CLI
+- Outbound internet access (npm install, API calls, etc.)
+- \`DATABASE_URL\` — remote Postgres (Neon), no local database
+
+### What's NOT Available
+- Docker, docker-compose, or any container runtime
+- Local Postgres or any local database
+- Ports other than 8080 for external HTTP access
+
+### PATH
+- npm global binaries are NOT in PATH by default
+- If you need a globally installed tool, source the profile first: \`source /etc/profile.d/npm-global.sh\``
+	}
+	return ""
+}
+
 function devServerInstructions(runtime?: string): string {
 	if (runtime === "sprites" || runtime === "daytona") {
 		return `## Dev Server & Migrations
@@ -166,7 +208,7 @@ function devServerInstructions(runtime?: string): string {
 - \`pnpm dev:stop\` — stop the dev server
 - \`pnpm dev:restart\` — stop then start
 
-The app is exposed on the VITE_PORT environment variable (default: 5173).
+The app listens on port 8080 (set via VITE_PORT) — this is the only port the Sprite proxy exposes.
 The database and Electric sync service are remote (cloud-hosted) — there is no local Postgres or Docker.
 
 ### Migrations (CRITICAL)
@@ -175,13 +217,6 @@ After modifying src/db/schema.ts, ALWAYS run migrations:
 pnpm drizzle-kit generate   # generate SQL from schema changes
 pnpm drizzle-kit migrate    # apply migration to the database
 \`\`\`
-
-### Sprites Environment Gotchas
-- npm global binaries are NOT in PATH by default. If you need to run a globally installed tool, source the profile first: \`source /etc/profile.d/npm-global.sh\`
-- Node.js is managed via nvm at \`/.sprite/languages/node/nvm/\`
-- The sandbox is a cloud micro-VM — there is no Docker, no docker-compose, no local Postgres
-- The database connection string is in DATABASE_URL (remote Neon Postgres)
-- **CRITICAL**: vite.config.ts MUST have \`server: { allowedHosts: true }\` — without it, Vite rejects connections from the proxy URL and the preview will not work
 
 ### Workflow
 After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`
