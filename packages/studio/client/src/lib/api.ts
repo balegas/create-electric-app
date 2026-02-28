@@ -12,6 +12,16 @@ function credentialFields(): { apiKey?: string; oauthToken?: string; ghToken?: s
 	if (apiKey) fields.apiKey = apiKey
 	else if (oauthToken) fields.oauthToken = oauthToken
 	if (ghToken) fields.ghToken = ghToken
+
+	const authType = apiKey ? "apiKey" : oauthToken ? "oauthToken" : "none"
+	const tokenPreview = apiKey
+		? `${apiKey.slice(0, 10)}...`
+		: oauthToken
+			? `${oauthToken.slice(0, 10)}...`
+			: "N/A"
+	console.log(
+		`[credentials] Sending: type=${authType} token=${tokenPreview} ghToken=${ghToken ? "yes" : "no"}`,
+	)
 	return fields
 }
 

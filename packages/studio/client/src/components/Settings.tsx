@@ -1,7 +1,8 @@
-import { useCallback, useId, useState } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom"
 import { useEscapeKey } from "../hooks/useKeyboardShortcut"
 import type { AuthSource } from "../layouts/AppShell"
+import { fetchKeychainCredentials } from "../lib/api"
 import {
 	type AgentMode,
 	applyFontSize,
@@ -10,7 +11,10 @@ import {
 	clearOauthToken,
 	type FontSize,
 	getAgentMode,
+	getApiKey,
 	getFontSize,
+	getGhToken,
+	getOauthToken,
 	isManualOauth,
 	setAgentMode as saveAgentMode,
 	setApiKey as saveApiKey,
@@ -299,12 +303,15 @@ export function Settings({
 				{onCopyLog && (
 					<>
 						<div className="settings-divider" />
-						<div className="settings-section-label">Debug</div>
+						<div className="settings-section-label">Session Log</div>
 						<button type="button" className="btn" onClick={handleCopy}>
 							{copied ? "Copied!" : "Copy session log"}
 						</button>
 					</>
 				)}
+
+				<div className="settings-divider" />
+				<DebugPanel authSource={authSource} />
 
 				<div className="modal-actions" style={{ marginTop: 16 }}>
 					<button type="button" className="modal-btn" onClick={onClose}>
@@ -314,5 +321,113 @@ export function Settings({
 			</div>
 		</div>,
 		document.body,
+	)
+}
+
+function tokenPreview(token: string | null): string {
+	if (!token) return "(none)"
+	if (token.length <= 20) return `${token.slice(0, 6)}...(${token.length} chars)`
+	return `${token.slice(0, 10)}...${token.slice(-6)} (${token.length} chars)`
+}
+
+function DebugPanel({ authSource }: { authSource: AuthSource }) {
+	const [expanded, setExpanded] = useState(false)
+	const [debugCopied, setDebugCopied] = useState(false)
+	const [keychainToken, setKeychainToken] = useState<string | null | "loading" | "error">("loading")
+
+	useEffect(() => {
+		if (!expanded) return
+		setKeychainToken("loading")
+		fetchKeychainCredentials()
+			.then(({ oauthToken }) => setKeychainToken(oauthToken))
+			.catch(() => setKeychainToken("error"))
+	}, [expanded])
+
+	const storedApiKey = getApiKey()
+	const storedOauth = getOauthToken()
+	const storedGhToken = getGhToken()
+	const manualOauth = isManualOauth()
+
+	const keychainDisplay =
+		keychainToken === "loading"
+			? "..."
+			: keychainToken === "error"
+				? "(unreachable)"
+				: tokenPreview(keychainToken)
+	const keychainMatch =
+		keychainToken === "loading" || keychainToken === "error"
+			? "?"
+			: keychainToken === storedOauth
+				? "YES"
+				: "NO"
+
+	const debugLines = [
+		`Auth source: ${authSource ?? "none"}`,
+		`API key: ${tokenPreview(storedApiKey)}`,
+		`OAuth token: ${tokenPreview(storedOauth)}`,
+		`OAuth manual flag: ${manualOauth}`,
+		`GH token: ${tokenPreview(storedGhToken)}`,
+		`Keychain token: ${keychainDisplay}`,
+		`Keychain vs stored match: ${keychainMatch}`,
+		`User agent: ${navigator.userAgent}`,
+		`Timestamp: ${new Date().toISOString()}`,
+	]
+
+	const handleCopyDebug = useCallback(() => {
+		const text = debugLines.join("\n")
+		navigator.clipboard.writeText(text).then(() => {
+			setDebugCopied(true)
+			setTimeout(() => setDebugCopied(false), 2000)
+		})
+	}, [debugLines])
+
+	return (
+		<>
+			<div className="settings-section-label">
+				<button
+					type="button"
+					onClick={() => setExpanded((v) => !v)}
+					style={{
+						background: "none",
+						border: "none",
+						color: "inherit",
+						font: "inherit",
+						cursor: "pointer",
+						padding: 0,
+						display: "flex",
+						alignItems: "center",
+						gap: 6,
+					}}
+				>
+					<span style={{ fontSize: 10, opacity: 0.6 }}>{expanded ? "\u25BC" : "\u25B6"}</span>
+					Debug
+				</button>
+			</div>
+			{expanded && (
+				<div className="settings-field">
+					<pre
+						style={{
+							fontSize: 11,
+							lineHeight: 1.6,
+							background: "var(--bg-2, #1a1a1a)",
+							padding: "10px 12px",
+							borderRadius: 6,
+							overflowX: "auto",
+							whiteSpace: "pre-wrap",
+							wordBreak: "break-all",
+							color: "var(--text-subtle)",
+							margin: "4px 0 8px",
+							maxHeight: 240,
+							overflowY: "auto",
+						}}
+					>
+						{debugLines.join("\n")}
+					</pre>
+					<button type="button" className="btn" onClick={handleCopyDebug}>
+						{debugCopied ? "Copied!" : "Copy debug info"}
+					</button>
+				</div>
+			)}
+		</>
 	)
 }

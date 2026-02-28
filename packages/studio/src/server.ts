@@ -798,6 +798,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			return c.json({ error: "description is required" }, 400)
 		}
 
+		// Debug: log which credential type was received from the client
+		const authType = body.apiKey ? "apiKey" : body.oauthToken ? "oauthToken" : "none"
+		const tokenPreview = body.apiKey
+			? `${body.apiKey.slice(0, 10)}...`
+			: body.oauthToken
+				? `${body.oauthToken.slice(0, 10)}...`
+				: "N/A"
+		console.log(
+			`[session:new] Auth received: type=${authType} token=${tokenPreview} ghToken=${body.ghToken ? "yes" : "no"}`,
+		)
+
 		// Per-session bridge mode: "claude-code" if explicitly requested, else server default
 		const sessionBridgeMode: BridgeMode =
 			body.agentMode === "claude-code" ? "claude-code" : config.bridgeMode
@@ -948,7 +959,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					? undefined
 					: getStreamEnvVars(sessionId, config.streamConfig)
 			console.log(
-				`[session:${sessionId}] Creating sandbox: runtime=${config.sandbox.runtime} project=${projectName} bridgeMode=${sessionBridgeMode}`,
+				`[session:${sessionId}] Creating sandbox: runtime=${config.sandbox.runtime} project=${projectName} bridgeMode=${sessionBridgeMode} auth=${authType} token=${tokenPreview}`,
 			)
 			const handle = await config.sandbox.create(sessionId, {
 				projectName,

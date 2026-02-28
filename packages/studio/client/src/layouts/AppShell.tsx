@@ -128,12 +128,15 @@ export function AppShell() {
 
 		// Check local credentials first
 		if (checkHasApiKey()) {
+			console.log("[auth] Using API key from localStorage")
 			setAuthSource("api-key")
 			return
 		}
 
 		// Check for manually-set OAuth token (takes priority over keychain)
 		if (isManualOauth() && getOauthToken()) {
+			const token = getOauthToken()
+			console.log(`[auth] Using manual OAuth token: ${token?.slice(0, 10)}...`)
 			setAuthSource("oauth")
 			return
 		}
@@ -143,17 +146,24 @@ export function AppShell() {
 		try {
 			const { oauthToken } = await fetchKeychainCredentials()
 			if (oauthToken) {
+				console.log(
+					`[auth] Using keychain OAuth token: ${oauthToken.slice(0, 10)}... (overwrites any cached token)`,
+				)
 				setOauthToken(oauthToken)
 				setAuthSource("keychain")
 				return
 			}
+			console.log("[auth] Keychain returned no token")
 		} catch {
 			// Server not reachable or not on macOS — fall back to cached token
 			if (getOauthToken()) {
+				const token = getOauthToken()
+				console.log(`[auth] Keychain unreachable, using cached token: ${token?.slice(0, 10)}...`)
 				setAuthSource("keychain")
 				return
 			}
 		}
+		console.log("[auth] No credentials found — showing settings")
 		setAuthSource(null)
 		setShowSettings(true)
 	}, [])

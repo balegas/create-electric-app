@@ -47,8 +47,15 @@ function findFreePort(): Promise<number> {
 }
 
 function resolveAuthEnv(opts?: { apiKey?: string; oauthToken?: string }): [string, string] | null {
-	if (opts?.apiKey) return ["ANTHROPIC_API_KEY", opts.apiKey]
-	if (opts?.oauthToken) return ["CLAUDE_CODE_OAUTH_TOKEN", opts.oauthToken]
+	if (opts?.apiKey) {
+		console.log(`[docker] Auth env: ANTHROPIC_API_KEY=${opts.apiKey.slice(0, 10)}...`)
+		return ["ANTHROPIC_API_KEY", opts.apiKey]
+	}
+	if (opts?.oauthToken) {
+		console.log(`[docker] Auth env: CLAUDE_CODE_OAUTH_TOKEN=${opts.oauthToken.slice(0, 10)}...`)
+		return ["CLAUDE_CODE_OAUTH_TOKEN", opts.oauthToken]
+	}
+	console.log("[docker] Auth env: none — no apiKey or oauthToken provided")
 	return null
 }
 

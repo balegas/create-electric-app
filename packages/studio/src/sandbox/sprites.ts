@@ -142,8 +142,12 @@ export class SpritesSandboxProvider implements SandboxProvider {
 
 		if (opts?.apiKey) {
 			envVars.ANTHROPIC_API_KEY = opts.apiKey
+			console.log(`[sprites] Auth env: ANTHROPIC_API_KEY=${opts.apiKey.slice(0, 10)}...`)
 		} else if (opts?.oauthToken) {
 			envVars.CLAUDE_CODE_OAUTH_TOKEN = opts.oauthToken
+			console.log(`[sprites] Auth env: CLAUDE_CODE_OAUTH_TOKEN=${opts.oauthToken.slice(0, 10)}...`)
+		} else {
+			console.log("[sprites] Auth env: none — no apiKey or oauthToken provided")
 		}
 
 		if (opts?.ghToken) {

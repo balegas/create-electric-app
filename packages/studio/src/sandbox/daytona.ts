@@ -76,8 +76,12 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 
 		if (opts?.apiKey) {
 			envVars.ANTHROPIC_API_KEY = opts.apiKey
+			console.log(`[daytona] Auth env: ANTHROPIC_API_KEY=${opts.apiKey.slice(0, 10)}...`)
 		} else if (opts?.oauthToken) {
 			envVars.CLAUDE_CODE_OAUTH_TOKEN = opts.oauthToken
+			console.log(`[daytona] Auth env: CLAUDE_CODE_OAUTH_TOKEN=${opts.oauthToken.slice(0, 10)}...`)
+		} else {
+			console.log("[daytona] Auth env: none — no apiKey or oauthToken provided")
 		}
 
 		if (opts?.ghToken) {
