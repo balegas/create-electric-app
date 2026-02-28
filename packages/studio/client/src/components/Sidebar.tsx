@@ -1,6 +1,9 @@
+import { useCallback, useEffect, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAppContext } from "../layouts/AppShell"
-import { SessionListItem } from "./SessionListItem"
+import { createSharedSession } from "../lib/api"
+import { removeJoinedSharedSession } from "../lib/shared-session-store"
+import { getAvatarColor, SessionListItem } from "./SessionListItem"
 
 interface SidebarProps {
 	collapsed: boolean
@@ -33,13 +36,57 @@ function CollapseIcon({ collapsed }: { collapsed: boolean }) {
 	)
 }
 
+function LinkIcon() {
+	return (
+		<svg
+			viewBox="0 0 16 16"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			width="14"
+			height="14"
+		>
+			<title>Join room</title>
+			<path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5l-1 1" />
+			<path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5l1-1" />
+		</svg>
+	)
+}
+
 export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
-	const { sessions, pendingProject, handleDeleteSession } = useAppContext()
+	const {
+		sessions,
+		pendingProject,
+		handleDeleteSession,
+		joinedSharedSessions,
+		refreshJoinedSharedSessions,
+	} = useAppContext()
 	const navigate = useNavigate()
 	const location = useLocation()
 
+	const [joinInputOpen, setJoinInputOpen] = useState(false)
+	const [joinCode, setJoinCode] = useState("")
+	const [createInputOpen, setCreateInputOpen] = useState(false)
+	const [createName, setCreateName] = useState("")
+
+	// Close inline inputs when sidebar collapses
+	useEffect(() => {
+		if (collapsed) {
+			setJoinInputOpen(false)
+			setJoinCode("")
+			setCreateInputOpen(false)
+			setCreateName("")
+		}
+	}, [collapsed])
+
 	const activeSessionId = location.pathname.startsWith("/session/")
 		? location.pathname.split("/session/")[1]
+		: null
+
+	const activeSharedCode = location.pathname.startsWith("/shared/")
+		? location.pathname.split("/shared/")[1]
 		: null
 
 	const sortedSessions = [...sessions].sort(
@@ -50,6 +97,37 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		navigate(path)
 		onMobileClose?.()
 	}
+
+	const handleJoin = useCallback(() => {
+		const trimmed = joinCode.trim()
+		if (!trimmed) return
+		navigate(`/shared/${trimmed}`)
+		setJoinCode("")
+		setJoinInputOpen(false)
+		onMobileClose?.()
+	}, [joinCode, navigate, onMobileClose])
+
+	const handleRemoveShared = useCallback(
+		(code: string) => {
+			removeJoinedSharedSession(code)
+			refreshJoinedSharedSessions()
+		},
+		[refreshJoinedSharedSessions],
+	)
+
+	const handleCreateShared = useCallback(async () => {
+		const trimmed = createName.trim()
+		if (!trimmed) return
+		try {
+			const { code } = await createSharedSession(trimmed)
+			setCreateName("")
+			setCreateInputOpen(false)
+			navigate(`/shared/${code}`)
+			onMobileClose?.()
+		} catch (err) {
+			console.error("Failed to create shared session:", err)
+		}
+	}, [createName, navigate, onMobileClose])
 
 	return (
 		<aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
@@ -69,6 +147,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 			</div>
 
 			<div className="sidebar-sessions">
+				<div className="sidebar-section-label">Sessions</div>
+
 				<div className="session-item" onClick={() => handleNavigate("/")} title="New App">
 					<span className="session-avatar new-project-avatar">+</span>
 					<div className="session-item-details">
@@ -95,6 +175,135 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						onDelete={() => handleDeleteSession(s.id)}
 					/>
 				))}
+
+				<div className="sidebar-section-label">Rooms</div>
+
+				{createInputOpen && !collapsed ? (
+					<div className="sidebar-join-input">
+						<input
+							type="text"
+							placeholder="Room name..."
+							value={createName}
+							onChange={(e) => setCreateName(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleCreateShared()
+								if (e.key === "Escape") {
+									setCreateInputOpen(false)
+									setCreateName("")
+								}
+							}}
+						/>
+						<button
+							type="button"
+							className="sidebar-join-go"
+							onClick={handleCreateShared}
+							disabled={!createName.trim()}
+						>
+							Go
+						</button>
+					</div>
+				) : (
+					<div
+						className="session-item"
+						onClick={() => {
+							if (collapsed) {
+								onToggle()
+							}
+							setCreateInputOpen(true)
+						}}
+						title="Create room"
+					>
+						<span className="session-avatar new-project-avatar">+</span>
+						<div className="session-item-details">
+							<div className="session-item-name">Create</div>
+						</div>
+					</div>
+				)}
+
+				{joinInputOpen && !collapsed ? (
+					<div className="sidebar-join-input">
+						<input
+							type="text"
+							placeholder="Invite code..."
+							value={joinCode}
+							onChange={(e) => setJoinCode(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleJoin()
+								if (e.key === "Escape") {
+									setJoinInputOpen(false)
+									setJoinCode("")
+								}
+							}}
+						/>
+						<button
+							type="button"
+							className="sidebar-join-go"
+							onClick={handleJoin}
+							disabled={!joinCode.trim()}
+						>
+							Go
+						</button>
+					</div>
+				) : (
+					<div
+						className="session-item"
+						onClick={() => {
+							if (collapsed) {
+								onToggle()
+							}
+							setJoinInputOpen(true)
+						}}
+						title="Join room"
+					>
+						<span className="session-avatar new-project-avatar">
+							<LinkIcon />
+						</span>
+						<div className="session-item-details">
+							<div className="session-item-name">Join</div>
+						</div>
+					</div>
+				)}
+
+				{joinedSharedSessions.map((s) => {
+					const color = getAvatarColor(s.id)
+					const initials = s.name
+						.split(/[-_ ]+/)
+						.slice(0, 2)
+						.map((w) => w.charAt(0).toUpperCase())
+						.join("")
+					return (
+						<div
+							key={s.code}
+							className={`session-item ${activeSharedCode === s.code ? "active" : ""}`}
+							onClick={() => handleNavigate(`/shared/${s.code}`)}
+							title={s.name}
+						>
+							<span
+								className="session-avatar session-avatar-shared"
+								style={{ background: color.bg, color: color.fg }}
+							>
+								{initials}
+							</span>
+							<div className="session-item-details">
+								<div className="session-item-name">{s.name}</div>
+								<div className="session-item-meta">
+									<span>{s.code}</span>
+								</div>
+							</div>
+							<button
+								type="button"
+								className="session-item-delete"
+								onClick={(e) => {
+									e.stopPropagation()
+									handleRemoveShared(s.code)
+								}}
+								title="Remove"
+							>
+								&times;
+							</button>
+						</div>
+					)
+				})}
 			</div>
 
 			<div className="sidebar-collapse">

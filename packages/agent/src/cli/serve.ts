@@ -1,3 +1,7 @@
+import { execFileSync, spawn } from "node:child_process"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { Registry } from "@electric-agent/studio/registry"
 import type { SandboxProvider } from "@electric-agent/studio/sandbox"
 import { DaytonaSandboxProvider } from "@electric-agent/studio/sandbox/daytona"
 import { getSnapshotStatus } from "@electric-agent/studio/sandbox/daytona-registry"
@@ -91,24 +95,70 @@ export async function serveCommand(opts: {
 	}
 	console.log(`[serve] Bridge mode: ${bridgeMode}`)
 
-	await startWebServer({ port, dataDir, sandbox, streamConfig, bridgeMode, inferProjectName })
+	// Create registry (hydrates from durable stream)
+	console.log("[serve] Hydrating registry from durable stream...")
+	const registry = await Registry.create(streamConfig)
+
+	await startWebServer({
+		port,
+		dataDir,
+		registry,
+		sandbox,
+		streamConfig,
+		bridgeMode,
+		inferProjectName,
+	})
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)
 
+	// Start Caddy reverse proxy for HTTP/2 (required for concurrent SSE streams)
+	let caddyProcess: ReturnType<typeof spawn> | null = null
+	const caddyPort = 4443
+	try {
+		execFileSync("caddy", ["version"], { stdio: "ignore" })
+		// Resolve Caddyfile: agent dist is at packages/agent/dist/cli/serve.js
+		// Caddyfile is at packages/studio/Caddyfile
+		const thisDir = path.dirname(fileURLToPath(import.meta.url))
+		const caddyfile = path.resolve(thisDir, "../../../studio/Caddyfile")
+		caddyProcess = spawn("caddy", ["run", "--config", caddyfile], {
+			stdio: ["ignore", "pipe", "pipe"],
+		})
+		caddyProcess.stderr?.on("data", (chunk: Buffer) => {
+			const line = chunk.toString().trim()
+			if (line) console.log(`[caddy] ${line}`)
+		})
+		caddyProcess.on("error", (err) => {
+			console.warn(`[caddy] Failed to start: ${err.message}`)
+			caddyProcess = null
+		})
+		caddyProcess.on("exit", (code) => {
+			if (code !== null && code !== 0) {
+				console.warn(`[caddy] Exited with code ${code}`)
+			}
+			caddyProcess = null
+		})
+		console.log(`  → HTTPS (HTTP/2): https://localhost:${caddyPort}`)
+	} catch {
+		console.log(
+			`  → Install Caddy for HTTP/2 support (required for concurrent SSE): brew install caddy`,
+		)
+	}
+
+	const publicUrl = caddyProcess ? `https://localhost:${caddyPort}` : `http://127.0.0.1:${port}`
+
 	if (opts.open) {
 		const { exec } = await import("node:child_process")
-		const url = `http://127.0.0.1:${port}`
 		const platform = process.platform
 		const cmd =
 			platform === "darwin"
-				? `open ${url}`
+				? `open ${publicUrl}`
 				: platform === "win32"
-					? `start ${url}`
-					: `xdg-open ${url}`
+					? `start ${publicUrl}`
+					: `xdg-open ${publicUrl}`
 		exec(cmd)
 	}
 
-	// Graceful shutdown — force exit on second Ctrl+C
+	// Graceful shutdown — kill Caddy, force exit on second Ctrl+C
 	let shuttingDown = false
 	const shutdown = async () => {
 		if (shuttingDown) {
@@ -116,6 +166,9 @@ export async function serveCommand(opts: {
 		}
 		shuttingDown = true
 		console.log("\nShutting down...")
+		if (caddyProcess) {
+			caddyProcess.kill("SIGTERM")
+		}
 		process.exit(0)
 	}
 	process.on("SIGINT", shutdown)

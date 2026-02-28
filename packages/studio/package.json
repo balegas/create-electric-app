@@ -37,6 +37,10 @@
 		"./shared-sessions": {
 			"types": "./dist/shared-sessions.d.ts",
 			"import": "./dist/shared-sessions.js"
+		},
+		"./registry": {
+			"types": "./dist/registry.d.ts",
+			"import": "./dist/registry.js"
 		}
 	},
 	"files": [
@@ -50,6 +54,7 @@
 		"dev": "tsc --watch",
 		"dev:web": "vite --config client/vite.config.ts",
 		"test": "node --import tsx --test tests/*.test.ts",
+		"dev:proxy": "caddy run --config Caddyfile --watch",
 		"clean": "rm -rf dist"
 	},
 	"license": "Apache-2.0",

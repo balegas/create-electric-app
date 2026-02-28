@@ -34,8 +34,8 @@ function hashString(str: string): number {
 	return Math.abs(hash)
 }
 
-function getAvatarColor(sessionId: string) {
-	return AVATAR_COLORS[hashString(sessionId) % AVATAR_COLORS.length]
+export function getAvatarColor(id: string) {
+	return AVATAR_COLORS[hashString(id) % AVATAR_COLORS.length]
 }
 
 function formatTimeAgo(dateStr: string): string {

@@ -4,7 +4,7 @@ import { PromptInput } from "../components/PromptInput"
 import { RepoPickerModal } from "../components/RepoPickerModal"
 import { Settings } from "../components/Settings"
 import { useAppContext } from "../layouts/AppShell"
-import { createSharedSession, resumeFromGithub } from "../lib/api"
+import { resumeFromGithub } from "../lib/api"
 
 interface OutletCtx {
 	openMobileDrawer: () => void
@@ -26,29 +26,6 @@ export function HomePage() {
 	const { openMobileDrawer } = useOutletContext<OutletCtx>()
 	const [showRepoPicker, setShowRepoPicker] = useState(false)
 	const [resuming, setResuming] = useState(false)
-	const [joinCode, setJoinCode] = useState("")
-	const [showJoinInput, setShowJoinInput] = useState(false)
-	const [creatingShared, setCreatingShared] = useState(false)
-
-	const handleCreateSharedSession = useCallback(async () => {
-		const name = prompt("Shared session name:")
-		if (!name?.trim()) return
-		setCreatingShared(true)
-		try {
-			const { code } = await createSharedSession(name.trim())
-			navigate(`/shared/${code}`)
-		} catch (err) {
-			console.error("Failed to create shared session:", err)
-		} finally {
-			setCreatingShared(false)
-		}
-	}, [navigate])
-
-	const handleJoinSharedSession = useCallback(() => {
-		const trimmed = joinCode.trim()
-		if (!trimmed) return
-		navigate(`/shared/${trimmed}`)
-	}, [joinCode, navigate])
 
 	const handleResumeFromGithub = useCallback(
 		async (repoUrl: string, branch: string) => {
@@ -127,45 +104,6 @@ export function HomePage() {
 						{resuming ? "Cloning..." : "Resume from GitHub"}
 					</button>
 				)}
-				<div className="hero-shared-actions">
-					<button
-						type="button"
-						className="hero-resume-btn"
-						onClick={handleCreateSharedSession}
-						disabled={creatingShared}
-					>
-						{creatingShared ? "Creating..." : "Create Shared Session"}
-					</button>
-
-					{showJoinInput ? (
-						<span className="hero-join-group">
-							<input
-								type="text"
-								className="hero-join-input"
-								placeholder="Enter invite code..."
-								value={joinCode}
-								onChange={(e) => setJoinCode(e.target.value)}
-								onKeyDown={(e) => e.key === "Enter" && handleJoinSharedSession()}
-							/>
-							<button
-								type="button"
-								className="hero-resume-btn"
-								onClick={handleJoinSharedSession}
-								disabled={!joinCode.trim()}
-							>
-								Join
-							</button>
-						</span>
-					) : (
-						<button
-							type="button"
-							className="hero-resume-btn"
-							onClick={() => setShowJoinInput(true)}
-						>
-							Join Shared Session
-						</button>
-					)}
-				</div>
 			</div>
 
 			{showRepoPicker && (

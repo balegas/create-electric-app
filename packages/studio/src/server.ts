@@ -18,28 +18,15 @@ import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from ".
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
 import { resolveProjectDir } from "./project-utils.js"
+import type { Registry } from "./registry.js"
 import type { DaytonaSandboxProvider as DaytonaSandboxProviderType } from "./sandbox/daytona.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
+import type { SessionInfo } from "./sessions.js"
+import { generateInviteCode, type SharedSessionEntry } from "./shared-sessions.js"
 import {
-	addSession,
-	cleanupStaleSessions,
-	deleteSession,
-	getSession,
-	readSessionIndex,
-	type SessionInfo,
-	updateSessionInfo,
-} from "./sessions.js"
-import {
-	addSharedSession,
-	generateInviteCode,
-	getSharedSessionByCode,
-	getSharedSession as getSharedSessionEntry,
-	revokeSharedSession,
-	type SharedSessionEntry,
-} from "./shared-sessions.js"
-import {
+	getRegistryConnectionInfo,
 	getSharedStreamConnectionInfo,
 	getStreamConnectionInfo,
 	getStreamEnvVars,
@@ -52,6 +39,7 @@ type BridgeMode = "stream" | "stdio"
 interface ServerConfig {
 	port: number
 	dataDir: string
+	registry: Registry
 	sandbox: SandboxProvider
 	/** Hosted stream config — required */
 	streamConfig: StreamConfig
@@ -63,6 +51,9 @@ interface ServerConfig {
 
 /** Active session bridges — one per running session */
 const bridges = new Map<string, SessionBridge>()
+
+/** Inflight hook session creations — prevents duplicate sessions from concurrent hooks */
+const inflightHookCreations = new Map<string, Promise<string>>()
 
 function parseRepoNameFromUrl(url: string | null): string | null {
 	if (!url) return null
@@ -343,16 +334,65 @@ export function createApp(config: ServerConfig) {
 
 	// List all sessions (lazily clean up stale ones)
 	app.get("/api/sessions", (c) => {
-		cleanupStaleSessions(config.dataDir)
-		const index = readSessionIndex(config.dataDir)
-		return c.json(index)
+		config.registry.cleanupStaleSessions()
+		return c.json({ sessions: config.registry.listSessions() })
 	})
 
 	// Get single session
 	app.get("/api/sessions/:id", (c) => {
-		const session = getSession(config.dataDir, c.req.param("id"))
+		const session = config.registry.getSession(c.req.param("id"))
 		if (!session) return c.json({ error: "Session not found" }, 404)
 		return c.json(session)
+	})
+
+	// --- Registry SSE Proxy ---
+
+	// Server-side SSE proxy for the registry stream. The React SPA subscribes
+	// to this to get live session/room updates without polling.
+	app.get("/api/registry/events", async (c) => {
+		const connection = getRegistryConnectionInfo(config.streamConfig)
+		const lastEventId = c.req.header("Last-Event-ID") || "-1"
+
+		const reader = new DurableStream({
+			url: connection.url,
+			headers: connection.headers,
+			contentType: "application/json",
+		})
+
+		const { readable, writable } = new TransformStream()
+		const writer = writable.getWriter()
+		const encoder = new TextEncoder()
+		let cancelled = false
+
+		const response = await reader.stream<Record<string, unknown>>({
+			offset: lastEventId,
+			live: true,
+		})
+
+		const cancel = response.subscribeJson<Record<string, unknown>>((batch) => {
+			if (cancelled) return
+			for (const item of batch.items) {
+				const data = JSON.stringify(item)
+				writer.write(encoder.encode(`id:${batch.offset}\ndata:${data}\n\n`)).catch(() => {
+					cancelled = true
+				})
+			}
+		})
+
+		c.req.raw.signal.addEventListener("abort", () => {
+			cancelled = true
+			cancel()
+			writer.close().catch(() => {})
+		})
+
+		return new Response(readable, {
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				Connection: "keep-alive",
+				"Access-Control-Allow-Origin": "*",
+			},
+		})
 	})
 
 	// --- Local Claude Code session endpoints ---
@@ -388,7 +428,7 @@ export function createApp(config: ServerConfig) {
 			lastActiveAt: new Date().toISOString(),
 			status: "running",
 		}
-		addSession(config.dataDir, session)
+		await config.registry.addSession(session)
 
 		// Pre-create a bridge so hook-event can emit to it immediately
 		getOrCreateBridge(config, sessionId)
@@ -437,7 +477,7 @@ export function createApp(config: ServerConfig) {
 			status: "running",
 			claudeSessionId: claudeSessionId || undefined,
 		}
-		addSession(config.dataDir, session)
+		await config.registry.addSession(session)
 
 		// Create bridge and emit the SessionStart event
 		const bridge = getOrCreateBridge(config, sessionId)
@@ -473,11 +513,11 @@ export function createApp(config: ServerConfig) {
 		}
 
 		// Bump lastActiveAt on every hook event
-		updateSessionInfo(config.dataDir, sessionId, {})
+		await config.registry.updateSession(sessionId, {})
 
 		// SessionEnd: mark session complete and close the bridge
 		if (hookEvent.type === "session_end") {
-			updateSessionInfo(config.dataDir, sessionId, { status: "complete" })
+			await config.registry.updateSession(sessionId, { status: "complete" })
 			closeBridge(sessionId)
 			return c.json({ ok: true })
 		}
@@ -512,6 +552,241 @@ export function createApp(config: ServerConfig) {
 		}
 
 		return c.json({ ok: true })
+	})
+
+	// --- Unified Hook Endpoint (transcript_path correlation) ---
+
+	// Single endpoint for all Claude Code hook events. Uses transcript_path
+	// from the hook JSON as the correlation key — stable across resume/compact,
+	// changes on /clear. Replaces the need for client-side session tracking.
+	app.post("/api/hook", async (c) => {
+		const body = (await c.req.json()) as Record<string, unknown>
+		const transcriptPath = body.transcript_path as string | undefined
+
+		// Look up or create session via transcript_path
+		let sessionId: string | undefined
+		if (transcriptPath) {
+			sessionId = config.registry.getSessionByTranscript(transcriptPath)
+		}
+
+		if (!sessionId) {
+			// Check inflight creation to prevent duplicate sessions from concurrent hooks
+			if (transcriptPath && inflightHookCreations.has(transcriptPath)) {
+				// Another request is already creating a session for this transcript — wait for it
+				sessionId = await inflightHookCreations.get(transcriptPath)
+			}
+		}
+
+		if (!sessionId) {
+			// Create a new session (with inflight guard)
+			const createPromise = (async () => {
+				const newId = crypto.randomUUID()
+
+				// Create the durable stream
+				const conn = sessionStream(config, newId)
+				try {
+					await DurableStream.create({
+						url: conn.url,
+						headers: conn.headers,
+						contentType: "application/json",
+					})
+				} catch (err) {
+					console.error(`[hook] Failed to create durable stream:`, err)
+					throw err
+				}
+
+				// Derive project name from cwd
+				const cwd = body.cwd as string | undefined
+				const projectName = cwd ? path.basename(cwd) : "local-session"
+
+				const session: SessionInfo = {
+					id: newId,
+					projectName,
+					sandboxProjectDir: cwd || "",
+					description: `Local session: ${projectName}`,
+					createdAt: new Date().toISOString(),
+					lastActiveAt: new Date().toISOString(),
+					status: "running",
+				}
+				await config.registry.addSession(session)
+
+				// Durably map transcript_path → session
+				if (transcriptPath) {
+					await config.registry.mapTranscriptToSession(transcriptPath, newId)
+				}
+
+				console.log(
+					`[hook] Created session: ${newId} (project: ${session.projectName}, transcript: ${transcriptPath ?? "none"})`,
+				)
+				return newId
+			})()
+
+			if (transcriptPath) {
+				inflightHookCreations.set(transcriptPath, createPromise)
+			}
+			try {
+				sessionId = await createPromise
+			} catch {
+				return c.json({ error: "Failed to create event stream" }, 500)
+			} finally {
+				if (transcriptPath) {
+					inflightHookCreations.delete(transcriptPath)
+				}
+			}
+		}
+
+		// Ensure bridge exists
+		const bridge = getOrCreateBridge(config, sessionId)
+
+		// On SessionStart (resume/compact), re-activate the session
+		const hookName = body.hook_event_name as string | undefined
+		if (hookName === "SessionStart") {
+			const session = config.registry.getSession(sessionId)
+			if (session && session.status !== "running") {
+				await config.registry.updateSession(sessionId, { status: "running" })
+			}
+		}
+
+		// Map hook JSON → EngineEvent
+		const hookEvent = mapHookToEngineEvent(body)
+		if (!hookEvent) {
+			return c.json({ ok: true, sessionId })
+		}
+
+		try {
+			await bridge.emit(hookEvent)
+		} catch (err) {
+			console.error(`[hook] Failed to emit:`, err)
+			return c.json({ error: "Failed to write event" }, 500)
+		}
+
+		// Bump lastActiveAt
+		await config.registry.updateSession(sessionId, {})
+
+		// SessionEnd: mark complete and close bridge (keep mapping for potential re-open)
+		if (hookEvent.type === "session_end") {
+			await config.registry.updateSession(sessionId, { status: "complete" })
+			closeBridge(sessionId)
+			return c.json({ ok: true, sessionId })
+		}
+
+		// AskUserQuestion: block until the user answers via the web UI
+		if (hookEvent.type === "ask_user_question") {
+			const toolUseId = hookEvent.tool_use_id
+			console.log(`[hook] Blocking for ask_user_question gate: ${toolUseId}`)
+			try {
+				const gateTimeout = 5 * 60 * 1000
+				const answer = await Promise.race([
+					createGate<{ answer: string }>(sessionId, `ask_user_question:${toolUseId}`),
+					new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error("AskUserQuestion gate timed out")), gateTimeout),
+					),
+				])
+				console.log(`[hook] ask_user_question gate resolved: ${toolUseId}`)
+				return c.json({
+					sessionId,
+					hookSpecificOutput: {
+						hookEventName: "PreToolUse",
+						permissionDecision: "allow",
+						updatedInput: {
+							questions: (body.tool_input as Record<string, unknown>)?.questions,
+							answers: { [hookEvent.question]: answer.answer },
+						},
+					},
+				})
+			} catch (err) {
+				console.error(`[hook] ask_user_question gate error:`, err)
+				return c.json({ ok: true, sessionId })
+			}
+		}
+
+		return c.json({ ok: true, sessionId })
+	})
+
+	// --- Hook Setup Installer ---
+
+	// Returns a shell script that installs forward.sh and configures Claude Code hooks
+	// in the current project directory (.claude/hooks/ and .claude/settings.local.json).
+	// Usage: cd <project> && curl -s http://localhost:4400/api/hooks/setup | bash
+	app.get("/api/hooks/setup", (c) => {
+		const port = config.port
+		const script = `#!/bin/bash
+# Electric Agent — Claude Code hook installer (project-scoped)
+# Installs the hook forwarder into the current project's .claude/ directory.
+
+set -e
+
+HOOKS_DIR=".claude/hooks"
+SETTINGS_FILE=".claude/settings.local.json"
+FORWARD_SH="\${HOOKS_DIR}/forward.sh"
+EA_PORT="${port}"
+
+mkdir -p "\${HOOKS_DIR}"
+
+# Write the forwarder script
+cat > "\${FORWARD_SH}" << 'HOOKEOF'
+#!/bin/bash
+# Forward Claude Code hook events to Electric Agent studio.
+# Installed by: curl -s http://localhost:EA_PORT/api/hooks/setup | bash
+
+EA_PORT="\${EA_PORT:-EA_PORT_PLACEHOLDER}"
+BODY="$(cat)"
+
+RESPONSE=$(curl -s -X POST "http://localhost:\${EA_PORT}/api/hook" \\
+  -H "Content-Type: application/json" \\
+  -d "\${BODY}" \\
+  --max-time 360 \\
+  --connect-timeout 2 \\
+  2>/dev/null)
+
+# If the response contains hookSpecificOutput, print it so Claude Code reads it
+if echo "\${RESPONSE}" | grep -q '"hookSpecificOutput"'; then
+  echo "\${RESPONSE}"
+fi
+
+exit 0
+HOOKEOF
+
+# Replace placeholder with actual port
+sed -i.bak "s/EA_PORT_PLACEHOLDER/${port}/" "\${FORWARD_SH}" && rm -f "\${FORWARD_SH}.bak"
+chmod +x "\${FORWARD_SH}"
+
+# Merge hook config into project-level settings.local.json
+HOOK_ENTRY="\${FORWARD_SH}"
+
+if command -v node > /dev/null 2>&1; then
+  node -e "
+const fs = require('fs');
+const file = process.argv[1];
+const hook = process.argv[2];
+let settings = {};
+try { settings = JSON.parse(fs.readFileSync(file, 'utf-8')); } catch {}
+if (!settings.hooks) settings.hooks = {};
+const events = ['PreToolUse','PostToolUse','PostToolUseFailure','Stop','SessionStart','SessionEnd','UserPromptSubmit','SubagentStart','SubagentStop'];
+for (const ev of events) {
+  if (!settings.hooks[ev]) settings.hooks[ev] = [];
+  const arr = settings.hooks[ev];
+  if (!arr.some(h => h.command === hook)) {
+    arr.push({ type: 'command', command: hook });
+  }
+}
+fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\\\\n');
+" "\${SETTINGS_FILE}" "\${HOOK_ENTRY}"
+else
+  echo "Warning: node not found. Please add the hook manually to \${SETTINGS_FILE}"
+  echo "See: https://docs.anthropic.com/en/docs/claude-code/hooks"
+  exit 1
+fi
+
+echo ""
+echo "Electric Agent hooks installed in project: $(pwd)"
+echo "  Forwarder: $(pwd)/\${FORWARD_SH}"
+echo "  Settings:  $(pwd)/\${SETTINGS_FILE}"
+echo "  Server:    http://localhost:\${EA_PORT}"
+echo ""
+echo "Start claude in this project — the session will appear in the studio UI."
+`
+		return c.text(script, 200, { "Content-Type": "text/plain" })
 	})
 
 	// Start new project
@@ -572,7 +847,7 @@ export function createApp(config: ServerConfig) {
 			lastActiveAt: new Date().toISOString(),
 			status: "running",
 		}
-		addSession(config.dataDir, session)
+		await config.registry.addSession(session)
 
 		// Write user prompt to the stream so it shows in the UI
 		await bridge.emit({ type: "user_prompt", message: body.description, ts: ts() })
@@ -643,7 +918,7 @@ export function createApp(config: ServerConfig) {
 						repoName: gateValue.repoName,
 						visibility: gateValue.repoVisibility ?? "private",
 					}
-					updateSessionInfo(config.dataDir, sessionId, {
+					await config.registry.updateSession(sessionId, {
 						git: {
 							branch: "main",
 							remoteUrl: null,
@@ -694,7 +969,7 @@ export function createApp(config: ServerConfig) {
 				ts: ts(),
 			})
 
-			updateSessionInfo(config.dataDir, sessionId, {
+			await config.registry.updateSession(sessionId, {
 				appPort: handle.port,
 				sandboxProjectDir: handle.projectDir,
 				previewUrl: handle.previewUrl,
@@ -756,7 +1031,7 @@ export function createApp(config: ServerConfig) {
 				try {
 					const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
 					if (gs.initialized) {
-						const existing = getSession(config.dataDir, sessionId)
+						const existing = config.registry.getSession(sessionId)
 						updates.git = {
 							branch: gs.branch ?? "main",
 							remoteUrl: existing?.git?.remoteUrl ?? null,
@@ -770,7 +1045,7 @@ export function createApp(config: ServerConfig) {
 				} catch {
 					// Container may already be stopped
 				}
-				updateSessionInfo(config.dataDir, sessionId, updates)
+				await config.registry.updateSession(sessionId, updates)
 			})
 
 			console.log(`[session:${sessionId}] Starting bridge listener...`)
@@ -792,9 +1067,9 @@ export function createApp(config: ServerConfig) {
 			console.log(`[session:${sessionId}] Command sent, waiting for agent...`)
 		}
 
-		asyncFlow().catch((err) => {
+		asyncFlow().catch(async (err) => {
 			console.error(`[session:${sessionId}] Session creation flow failed:`, err)
-			updateSessionInfo(config.dataDir, sessionId, { status: "error" })
+			await config.registry.updateSession(sessionId, { status: "error" })
 		})
 
 		return c.json({ sessionId }, 201)
@@ -803,7 +1078,7 @@ export function createApp(config: ServerConfig) {
 	// Send iteration request
 	app.post("/api/sessions/:id/iterate", async (c) => {
 		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
+		const session = config.registry.getSession(sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const body = (await c.req.json()) as { request: string }
@@ -881,7 +1156,7 @@ export function createApp(config: ServerConfig) {
 		const bridge = getOrCreateBridge(config, sessionId)
 		await bridge.emit({ type: "user_prompt", message: body.request, ts: ts() })
 
-		updateSessionInfo(config.dataDir, sessionId, { status: "running" })
+		await config.registry.updateSession(sessionId, { status: "running" })
 
 		await bridge.sendCommand({
 			command: "iterate",
@@ -1038,7 +1313,7 @@ export function createApp(config: ServerConfig) {
 	// Check app status
 	app.get("/api/sessions/:id/app-status", async (c) => {
 		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
+		const session = config.registry.getSession(sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const handle = config.sandbox.get(sessionId)
@@ -1056,7 +1331,7 @@ export function createApp(config: ServerConfig) {
 	// Start the generated app
 	app.post("/api/sessions/:id/start-app", async (c) => {
 		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
+		const session = config.registry.getSession(sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const handle = config.sandbox.get(sessionId)
@@ -1070,7 +1345,7 @@ export function createApp(config: ServerConfig) {
 	// Stop the generated app
 	app.post("/api/sessions/:id/stop-app", async (c) => {
 		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
+		const session = config.registry.getSession(sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const handle = config.sandbox.get(sessionId)
@@ -1090,7 +1365,7 @@ export function createApp(config: ServerConfig) {
 		if (handle) await config.sandbox.destroy(handle)
 
 		rejectAllGates(sessionId)
-		updateSessionInfo(config.dataDir, sessionId, { status: "cancelled" })
+		await config.registry.updateSession(sessionId, { status: "cancelled" })
 		return c.json({ ok: true })
 	})
 
@@ -1105,7 +1380,7 @@ export function createApp(config: ServerConfig) {
 
 		rejectAllGates(sessionId)
 
-		const deleted = deleteSession(config.dataDir, sessionId)
+		const deleted = await config.registry.deleteSession(sessionId)
 		if (!deleted) return c.json({ error: "Session not found" }, 404)
 		return c.json({ ok: true })
 	})
@@ -1246,7 +1521,7 @@ export function createApp(config: ServerConfig) {
 			createdAt: new Date().toISOString(),
 			revoked: false,
 		}
-		addSharedSession(config.dataDir, entry)
+		await config.registry.addRoom(entry)
 
 		console.log(`[shared-session] Created: id=${id} code=${code}`)
 		return c.json({ id, code }, 201)
@@ -1255,7 +1530,7 @@ export function createApp(config: ServerConfig) {
 	// Resolve invite code → shared session ID
 	app.get("/api/shared-sessions/join/:code", (c) => {
 		const code = c.req.param("code")
-		const entry = getSharedSessionByCode(config.dataDir, code)
+		const entry = config.registry.getRoomByCode(code)
 		if (!entry) return c.json({ error: "Shared session not found" }, 404)
 		return c.json({ id: entry.id, code: entry.code, revoked: entry.revoked })
 	})
@@ -1263,7 +1538,7 @@ export function createApp(config: ServerConfig) {
 	// Join a shared session as participant
 	app.post("/api/shared-sessions/:id/join", async (c) => {
 		const id = c.req.param("id")
-		const entry = getSharedSessionEntry(config.dataDir, id)
+		const entry = config.registry.getRoom(id)
 		if (!entry) return c.json({ error: "Shared session not found" }, 404)
 		if (entry.revoked) return c.json({ error: "Invite code has been revoked" }, 403)
 
@@ -1321,7 +1596,7 @@ export function createApp(config: ServerConfig) {
 		}
 
 		// Verify session exists
-		const session = getSession(config.dataDir, body.sessionId)
+		const session = config.registry.getSession(body.sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const conn = sharedSessionStream(config, id)
@@ -1365,7 +1640,7 @@ export function createApp(config: ServerConfig) {
 	// SSE proxy for shared session events
 	app.get("/api/shared-sessions/:id/events", async (c) => {
 		const id = c.req.param("id")
-		const entry = getSharedSessionEntry(config.dataDir, id)
+		const entry = config.registry.getRoom(id)
 		if (!entry) return c.json({ error: "Shared session not found" }, 404)
 
 		const connection = sharedSessionStream(config, id)
@@ -1416,7 +1691,7 @@ export function createApp(config: ServerConfig) {
 	// Revoke a shared session's invite code
 	app.post("/api/shared-sessions/:id/revoke", async (c) => {
 		const id = c.req.param("id")
-		const revoked = revokeSharedSession(config.dataDir, id)
+		const revoked = await config.registry.revokeRoom(id)
 		if (!revoked) return c.json({ error: "Shared session not found" }, 404)
 
 		const conn = sharedSessionStream(config, id)
@@ -1441,7 +1716,7 @@ export function createApp(config: ServerConfig) {
 	app.get("/api/sessions/:id/events", async (c) => {
 		const sessionId = c.req.param("id")
 		console.log(`[sse] Client connected: session=${sessionId}`)
-		const session = getSession(config.dataDir, sessionId)
+		const session = config.registry.getSession(sessionId)
 		if (!session) {
 			console.log(`[sse] Session not found: ${sessionId}`)
 			return c.json({ error: "Session not found" }, 404)
@@ -1522,7 +1797,7 @@ export function createApp(config: ServerConfig) {
 	// Get git status for a session
 	app.get("/api/sessions/:id/git-status", async (c) => {
 		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
+		const session = config.registry.getSession(sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const handle = config.sandbox.get(sessionId)
@@ -1543,7 +1818,7 @@ export function createApp(config: ServerConfig) {
 	// List all files in the project directory
 	app.get("/api/sessions/:id/files", async (c) => {
 		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
+		const session = config.registry.getSession(sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const handle = config.sandbox.get(sessionId)
@@ -1558,7 +1833,7 @@ export function createApp(config: ServerConfig) {
 	// Read a file's content
 	app.get("/api/sessions/:id/file-content", async (c) => {
 		const sessionId = c.req.param("id")
-		const session = getSession(config.dataDir, sessionId)
+		const session = config.registry.getSession(sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
 		const filePath = c.req.query("path")
@@ -1700,7 +1975,7 @@ export function createApp(config: ServerConfig) {
 					lastCheckpointAt: null,
 				},
 			}
-			addSession(config.dataDir, session)
+			await config.registry.addSession(session)
 
 			// Write initial message to stream
 			const bridge = getOrCreateBridge(config, sessionId)
@@ -1741,6 +2016,7 @@ export function createApp(config: ServerConfig) {
 export async function startWebServer(opts: {
 	port?: number
 	dataDir?: string
+	registry: Registry
 	sandbox: SandboxProvider
 	streamConfig: StreamConfig
 	bridgeMode?: BridgeMode
@@ -1749,6 +2025,7 @@ export async function startWebServer(opts: {
 	const config: ServerConfig = {
 		port: opts.port ?? 4400,
 		dataDir: opts.dataDir ?? path.resolve(process.cwd(), ".electric-agent"),
+		registry: opts.registry,
 		sandbox: opts.sandbox,
 		streamConfig: opts.streamConfig,
 		bridgeMode: opts.bridgeMode ?? "stream",
@@ -1758,7 +2035,7 @@ export async function startWebServer(opts: {
 	fs.mkdirSync(config.dataDir, { recursive: true })
 
 	// Clean up stale sessions from previous runs
-	const cleaned = cleanupStaleSessions(config.dataDir)
+	const cleaned = config.registry.cleanupStaleSessions()
 	if (cleaned > 0) {
 		console.log(`[startup] Cleaned up ${cleaned} stale session(s)`)
 	}

@@ -730,3 +730,38 @@
 	color: var(--brand-1);
 	background: rgba(126, 120, 219, 0.1);
 }
+
+/* ── Link session picker (inside modal) ── */
+.link-session-list {
+	max-height: 300px;
+	overflow-y: auto;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	margin-top: 12px;
+}
+
+.link-session-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 14px;
+	font-size: 13px;
+	font-family: var(--font-mono);
+	cursor: pointer;
+	border-bottom: 1px solid var(--border);
+	transition: background 0.1s;
+	border: none;
+	background: transparent;
+	width: 100%;
+	text-align: left;
+	color: var(--text-muted);
+}
+
+.link-session-item:last-child {
+	border-bottom: none;
+}
+
+.link-session-item:hover {
+	background: var(--bg-hover);
+	color: var(--text);
+}

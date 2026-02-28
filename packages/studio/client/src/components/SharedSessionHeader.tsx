@@ -8,6 +8,7 @@ interface SharedSessionHeaderProps {
 	revoked: boolean
 	isLive: boolean
 	onLeave: () => void
+	onLinkSession: () => void
 }
 
 export function SharedSessionHeader({
@@ -17,6 +18,7 @@ export function SharedSessionHeader({
 	revoked,
 	isLive,
 	onLeave,
+	onLinkSession,
 }: SharedSessionHeaderProps) {
 	const [copied, setCopied] = useState(false)
 
@@ -36,13 +38,6 @@ export function SharedSessionHeader({
 				</span>
 			)}
 
-			<span className="shared-session-header-code">
-				<button type="button" className="shared-session-code-btn" onClick={handleCopyCode}>
-					{copied ? "Copied!" : code}
-					{revoked && " (revoked)"}
-				</button>
-			</span>
-
 			<span className="shared-session-header-participants">
 				{participants.map((p) => (
 					<span key={p.id} className="shared-session-participant" title={p.displayName}>
@@ -50,6 +45,16 @@ export function SharedSessionHeader({
 					</span>
 				))}
 			</span>
+
+			<span className="invite-code-label">Join code:</span>
+			<button type="button" className="invite-code-btn" onClick={handleCopyCode}>
+				{copied ? "Copied!" : code}
+				{revoked && " (revoked)"}
+			</button>
+
+			<button type="button" className="session-header-action primary" onClick={onLinkSession}>
+				Link Session
+			</button>
 
 			<button type="button" className="session-header-action" onClick={onLeave}>
 				Leave

@@ -2,13 +2,15 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
-import { deleteSession, fetchKeychainCredentials, listSessions, type SessionInfo } from "../lib/api"
+import { useRegistry } from "../hooks/useRegistry"
+import { deleteSession, fetchKeychainCredentials, type SessionInfo } from "../lib/api"
 import {
 	hasApiKey as checkHasApiKey,
 	hasGhToken as checkHasGhToken,
 	getOauthToken,
 	setOauthToken,
 } from "../lib/credentials"
+import { getJoinedSharedSessions, type JoinedSharedSession } from "../lib/shared-session-store"
 
 export type AuthSource = "api-key" | "keychain" | null
 
@@ -28,6 +30,8 @@ interface AppContextValue {
 	handleNewProject: (description: string) => Promise<void>
 	handleDeleteSession: (sessionId: string) => Promise<void>
 	loading: boolean
+	joinedSharedSessions: JoinedSharedSession[]
+	refreshJoinedSharedSessions: () => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -50,12 +54,16 @@ function useIsMobile() {
 }
 
 export function AppShell() {
-	const [sessions, setSessions] = useState<SessionInfo[]>([])
+	const { sessions: registrySessions } = useRegistry()
+	const sessions = registrySessions as unknown as SessionInfo[]
 	const [authSource, setAuthSource] = useState<AuthSource>(null)
 	const [hasGhToken, setHasGhToken] = useState<boolean | null>(null)
 	const [showSettings, setShowSettings] = useState(false)
 	const [loading] = useState(false)
 	const [pendingProject, setPendingProject] = useState<PendingProject | null>(null)
+	const [joinedSharedSessions, setJoinedSharedSessions] = useState<JoinedSharedSession[]>(() =>
+		getJoinedSharedSessions(),
+	)
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		() => localStorage.getItem("sidebarCollapsed") === "true",
 	)
@@ -75,37 +83,37 @@ export function AppShell() {
 	const navigate = useNavigate()
 	const location = useLocation()
 
-	// Auto-collapse sidebar when first navigating to a session page
+	const refreshJoinedSharedSessions = useCallback(() => {
+		setJoinedSharedSessions(getJoinedSharedSessions())
+	}, [])
+
+	// Auto-collapse sidebar when first navigating to a session or shared page
 	const prevPathRef = useRef(location.pathname)
 	useEffect(() => {
-		const wasSession = prevPathRef.current.startsWith("/session/")
-		const isSession = location.pathname.startsWith("/session/")
+		const isDeepPage = (p: string) => p.startsWith("/session/") || p.startsWith("/shared/")
+		const wasDeep = isDeepPage(prevPathRef.current)
+		const isDeep = isDeepPage(location.pathname)
 		prevPathRef.current = location.pathname
 
 		// Close mobile drawer on any navigation
 		setMobileDrawerOpen(false)
 
-		// Only auto-collapse when entering a session from a non-session page
-		if (isSession && !wasSession) {
+		// Only auto-collapse when entering a session/shared page from a non-session page
+		if (isDeep && !wasDeep) {
 			setSidebarCollapsed(true)
 			localStorage.setItem("sidebarCollapsed", "true")
 		}
 		// Auto-expand when going back to home
-		if (!isSession && wasSession) {
+		if (!isDeep && wasDeep) {
 			setSidebarCollapsed(false)
 			localStorage.setItem("sidebarCollapsed", "false")
 		}
 	}, [location.pathname])
 
+	// Sessions are now live-updated via the registry SSE stream.
+	// refreshSessions is kept as a no-op for API compatibility with consumers.
 	const refreshSessions = useCallback(async () => {
-		try {
-			const data = await listSessions()
-			setSessions(data.sessions)
-			// Clear pending project once real sessions have loaded
-			setPendingProject(null)
-		} catch {
-			// ignore
-		}
+		setPendingProject(null)
 	}, [])
 
 	const refreshSettings = useCallback(async () => {
@@ -117,12 +125,9 @@ export function AppShell() {
 			setAuthSource("api-key")
 			return
 		}
-		if (getOauthToken()) {
-			setAuthSource("keychain")
-			return
-		}
 
-		// Try loading OAuth token from macOS Keychain via server
+		// Always refresh OAuth token from macOS Keychain (token may have been
+		// rotated via `claude /login` since the last page load)
 		try {
 			const { oauthToken } = await fetchKeychainCredentials()
 			if (oauthToken) {
@@ -131,16 +136,19 @@ export function AppShell() {
 				return
 			}
 		} catch {
-			// Server not reachable or not on macOS — ignore
+			// Server not reachable or not on macOS — fall back to cached token
+			if (getOauthToken()) {
+				setAuthSource("keychain")
+				return
+			}
 		}
 		setAuthSource(null)
 		setShowSettings(true)
 	}, [])
 
 	useEffect(() => {
-		refreshSessions()
 		refreshSettings()
-	}, [refreshSessions, refreshSettings])
+	}, [refreshSettings])
 
 	const handleNewProject = useCallback(
 		(description: string) => {
@@ -157,8 +165,7 @@ export function AppShell() {
 		async (sessionId: string) => {
 			try {
 				await deleteSession(sessionId)
-				await refreshSessions()
-				// Navigate home if the deleted session was active
+				// session_deleted event arrives via SSE — no manual refresh needed
 				if (location.pathname === `/session/${sessionId}`) {
 					navigate("/")
 				}
@@ -166,7 +173,7 @@ export function AppShell() {
 				console.error("Failed to delete session:", err)
 			}
 		},
-		[refreshSessions, location.pathname, navigate],
+		[location.pathname, navigate],
 	)
 
 	const ctx: AppContextValue = {
@@ -181,6 +188,8 @@ export function AppShell() {
 		handleNewProject,
 		handleDeleteSession,
 		loading,
+		joinedSharedSessions,
+		refreshJoinedSharedSessions,
 	}
 
 	return (
