@@ -89,7 +89,7 @@ export function HomePage() {
 						placeholder={
 							!authSource
 								? "Set an API key in Settings to get started..."
-								: "Describe the app you want to build.\nBe as specific as you can..."
+								: "Describe the app you want to build..."
 						}
 						disabled={loading || !authSource}
 					/>

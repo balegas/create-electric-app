@@ -306,7 +306,7 @@
 	}
 
 	.hero-prompt .prompt-bar textarea {
-		min-height: 80px;
+		min-height: 48px;
 		font-size: 16px;
 		padding: 12px;
 	}

@@ -68,30 +68,6 @@ export function hasGhToken(): boolean {
 	return !!getGhToken()
 }
 
-/* Font size preference */
-const FONT_SIZE_KEY = "electric-agent:font-size"
-
-export type FontSize = "default" | "large" | "larger"
-
-export function getFontSize(): FontSize {
-	const val = localStorage.getItem(FONT_SIZE_KEY)
-	if (val === "large" || val === "larger") return val
-	return "default"
-}
-
-export function setFontSize(size: FontSize): void {
-	if (size === "default") {
-		localStorage.removeItem(FONT_SIZE_KEY)
-	} else {
-		localStorage.setItem(FONT_SIZE_KEY, size)
-	}
-}
-
-export function applyFontSize(size?: FontSize): void {
-	const s = size ?? getFontSize()
-	document.documentElement.setAttribute("data-font-size", s)
-}
-
 /* Agent mode preference */
 const AGENT_MODE_KEY = "electric-agent:agent-mode"
 

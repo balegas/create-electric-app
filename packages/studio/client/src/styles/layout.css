@@ -418,15 +418,14 @@
 	border: 1px solid var(--border);
 	border-radius: 14px;
 	overflow: hidden;
-	align-items: stretch;
-	height: auto;
+	align-items: center;
 }
 
 .hero-prompt .prompt-bar textarea {
 	border: none;
 	border-radius: 0;
 	background: transparent;
-	min-height: 80px;
+	min-height: 52px;
 	font-size: 15px;
 	padding: 14px 14px;
 }
