@@ -1,5 +1,6 @@
 import type { Participant, SharedSessionEvent } from "@electric-agent/protocol"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { getRoomToken } from "../lib/session-store"
 
 export interface SharedSessionState {
 	name: string
@@ -99,7 +100,11 @@ export function useSharedSession(sharedSessionId: string | null) {
 				return
 			}
 
-			eventSource = new EventSource(`/api/shared-sessions/${sharedSessionId}/events`)
+			const roomTokenValue = getRoomToken(sharedSessionId)
+			const sseUrl = roomTokenValue
+				? `/api/shared-sessions/${sharedSessionId}/events?token=${encodeURIComponent(roomTokenValue)}`
+				: `/api/shared-sessions/${sharedSessionId}/events`
+			eventSource = new EventSource(sseUrl)
 
 			eventSource.onopen = () => {
 				if (!cancelled) {
