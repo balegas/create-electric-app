@@ -52,6 +52,11 @@ function resolveAuthEnv(opts?: { apiKey?: string; oauthToken?: string }): [strin
 	return null
 }
 
+function resolveOpenAiEnv(opts?: { openaiApiKey?: string }): [string, string] | null {
+	if (opts?.openaiApiKey) return ["OPENAI_API_KEY", opts.openaiApiKey]
+	return null
+}
+
 function generateComposeFile(
 	port: number,
 	auth: [string, string] | null,
@@ -59,6 +64,7 @@ function generateComposeFile(
 	streamEnv: Record<string, string> = {},
 	deferAgentStart = false,
 	ghToken?: string,
+	openaiAuth?: [string, string] | null,
 ): string {
 	const isCloud = infra.mode === "cloud"
 
@@ -77,6 +83,9 @@ function generateComposeFile(
 	}
 	if (ghToken) {
 		agentEnv.push(`GH_TOKEN=${ghToken}`)
+	}
+	if (openaiAuth) {
+		agentEnv.push(`${openaiAuth[0]}=${openaiAuth[1]}`)
 	}
 
 	// Add stream env vars for hosted Durable Streams communication
@@ -228,6 +237,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 		const composeDir = fs.mkdtempSync(path.join(os.tmpdir(), `${project}-`))
 		const composePath = path.join(composeDir, "docker-compose.yml")
 		const auth = resolveAuthEnv(opts)
+		const openaiAuth = resolveOpenAiEnv(opts)
 		fs.writeFileSync(
 			composePath,
 			generateComposeFile(
@@ -237,6 +247,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 				opts?.streamEnv ?? {},
 				opts?.deferAgentStart,
 				opts?.ghToken,
+				openaiAuth,
 			),
 			"utf-8",
 		)

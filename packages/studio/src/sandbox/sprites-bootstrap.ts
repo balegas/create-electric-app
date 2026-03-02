@@ -42,6 +42,13 @@ export async function bootstrapSprite(sprite: Sprite, opts?: BootstrapOptions): 
 		"source /etc/profile.d/npm-global.sh 2>/dev/null; npm install -g @anthropic-ai/claude-code",
 	])
 
+	// Install Codex CLI (for codex bridge mode)
+	console.log(`[sprites-bootstrap] Installing Codex CLI...`)
+	await sprite.execFile("bash", [
+		"-c",
+		"source /etc/profile.d/npm-global.sh 2>/dev/null; npm install -g @openai/codex",
+	])
+
 	// Create the workspace directory structure matching other runtimes
 	await sprite.exec("mkdir -p /home/agent/workspace")
 

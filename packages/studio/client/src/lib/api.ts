@@ -1,18 +1,26 @@
-import { getAgentMode, getApiKey, getGhToken, getOauthToken } from "./credentials"
+import { getAgentMode, getApiKey, getGhToken, getOauthToken, getOpenaiApiKey } from "./credentials"
 import { getOrCreateParticipant } from "./participant"
 import { getRoomToken, getSessionToken, setRoomToken, setSessionToken } from "./session-store"
 
 const API_BASE = "/api"
 
 /** Return user-provided credentials (if set) for inclusion in request bodies. */
-function credentialFields(): { apiKey?: string; oauthToken?: string; ghToken?: string } {
-	const fields: { apiKey?: string; oauthToken?: string; ghToken?: string } = {}
+function credentialFields(): {
+	apiKey?: string
+	oauthToken?: string
+	ghToken?: string
+	openaiApiKey?: string
+} {
+	const fields: { apiKey?: string; oauthToken?: string; ghToken?: string; openaiApiKey?: string } =
+		{}
 	const apiKey = getApiKey()
 	const oauthToken = getOauthToken()
 	const ghToken = getGhToken()
+	const openaiApiKey = getOpenaiApiKey()
 	if (oauthToken) fields.oauthToken = oauthToken
 	else if (apiKey) fields.apiKey = apiKey
 	if (ghToken) fields.ghToken = ghToken
+	if (openaiApiKey) fields.openaiApiKey = openaiApiKey
 	return fields
 }
 

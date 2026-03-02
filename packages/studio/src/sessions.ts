@@ -21,7 +21,7 @@ export interface SessionInfo {
 	/** Claude Code's own session ID — maps Claude sessions to EA sessions */
 	claudeSessionId?: string
 	/** Agent mode used to create this session */
-	agentMode?: "electric-agent" | "claude-code"
+	agentMode?: "electric-agent" | "claude-code" | "codex"
 	/** Git state — populated after scaffold or publish */
 	git?: {
 		branch: string

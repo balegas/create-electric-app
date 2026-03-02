@@ -25,6 +25,9 @@ RUN apk add --no-cache git curl github-cli bash
 # Install Claude CLI (required by the agent SDK)
 RUN npm install -g @anthropic-ai/claude-code
 
+# Install Codex CLI (for codex bridge mode)
+RUN npm install -g @openai/codex
+
 # Install pnpm (used by generated projects)
 RUN npm install -g pnpm
 

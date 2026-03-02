@@ -7,12 +7,15 @@ import {
 	clearApiKey,
 	clearGhToken,
 	clearOauthToken,
+	clearOpenaiApiKey,
 	getAgentMode,
+	hasOpenaiApiKey,
 	isManualOauth,
 	setAgentMode as saveAgentMode,
 	setApiKey as saveApiKey,
 	setGhToken as saveGhToken,
 	setManualOauthToken as saveOauthToken,
+	setOpenaiApiKey as saveOpenaiApiKey,
 } from "../lib/credentials"
 
 interface SettingsProps {
@@ -33,9 +36,11 @@ export function Settings({
 	const apiInputId = useId()
 	const oauthInputId = useId()
 	const ghInputId = useId()
+	const openaiInputId = useId()
 	const [apiKey, setApiKey] = useState("")
 	const [oauthToken, setOauthToken] = useState("")
 	const [ghPat, setGhPat] = useState("")
+	const [openaiKey, setOpenaiKey] = useState("")
 	const [copied, setCopied] = useState(false)
 	const [agentMode, setAgentMode] = useState<AgentMode>(getAgentMode)
 
@@ -80,6 +85,18 @@ export function Settings({
 		onKeySaved()
 	}, [onKeySaved])
 
+	const handleSaveOpenaiKey = useCallback(() => {
+		if (!openaiKey.trim()) return
+		saveOpenaiApiKey(openaiKey.trim())
+		setOpenaiKey("")
+		onKeySaved()
+	}, [openaiKey, onKeySaved])
+
+	const handleClearOpenaiKey = useCallback(() => {
+		clearOpenaiApiKey()
+		onKeySaved()
+	}, [onKeySaved])
+
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {
 			if (e.key === "Enter") {
@@ -108,6 +125,16 @@ export function Settings({
 			}
 		},
 		[handleSaveGhPat],
+	)
+
+	const handleOpenaiKeyDown = useCallback(
+		(e: React.KeyboardEvent) => {
+			if (e.key === "Enter") {
+				e.preventDefault()
+				handleSaveOpenaiKey()
+			}
+		},
+		[handleSaveOpenaiKey],
 	)
 
 	const handleCopy = useCallback(() => {
@@ -253,18 +280,68 @@ export function Settings({
 						Applies to new sessions only
 					</div>
 					<div className="font-size-options">
-						{(["claude-code", "electric-agent"] as const).map((mode) => (
+						{(["claude-code", "electric-agent", "codex"] as const).map((mode) => (
 							<button
 								key={mode}
 								type="button"
 								className={`font-size-option${agentMode === mode ? " active" : ""}`}
 								onClick={() => handleAgentMode(mode)}
 							>
-								{mode === "claude-code" ? "Claude Code" : "Electric Agent"}
+								{mode === "claude-code"
+									? "Claude Code"
+									: mode === "codex"
+										? "Codex"
+										: "Electric Agent"}
 							</button>
 						))}
 					</div>
 				</div>
+
+				{/* OpenAI API Key (shown when Codex mode is selected) */}
+				{agentMode === "codex" && (
+					<div className="settings-field" style={{ marginTop: 8 }}>
+						<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+							<label htmlFor={openaiInputId} style={{ margin: 0 }}>
+								OpenAI API Key
+							</label>
+							<span className={`settings-status ${hasOpenaiApiKey() ? "active" : "missing"}`}>
+								{hasOpenaiApiKey() ? "API key set" : "No credentials"}
+							</span>
+						</div>
+						<div className="settings-input-row">
+							<input
+								id={openaiInputId}
+								type="password"
+								value={openaiKey}
+								onChange={(e) => setOpenaiKey(e.target.value)}
+								onKeyDown={handleOpenaiKeyDown}
+								placeholder={hasOpenaiApiKey() ? "Enter new key to override..." : "sk-..."}
+							/>
+							{openaiKey.trim() ? (
+								<button type="button" onClick={handleSaveOpenaiKey} className="primary">
+									Save
+								</button>
+							) : (
+								hasOpenaiApiKey() && (
+									<button type="button" onClick={handleClearOpenaiKey} className="btn btn-danger">
+										Remove
+									</button>
+								)
+							)}
+						</div>
+						<div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
+							Required for Codex CLI. Create one at{" "}
+							<a
+								href="https://platform.openai.com/api-keys"
+								target="_blank"
+								rel="noopener noreferrer"
+								style={{ color: "var(--brand-1)" }}
+							>
+								platform.openai.com/api-keys
+							</a>
+						</div>
+					</div>
+				)}
 
 				{onCopyLog && (
 					<>

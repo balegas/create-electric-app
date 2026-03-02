@@ -55,6 +55,8 @@ export interface CreateSandboxOpts {
 	apiKey?: string
 	oauthToken?: string
 	ghToken?: string
+	/** OpenAI API key for Codex CLI mode */
+	openaiApiKey?: string
 	projectName?: string
 	infra?: InfraConfig
 	/** Stream env vars to inject into the sandbox for --stream mode */

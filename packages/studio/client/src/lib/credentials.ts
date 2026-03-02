@@ -9,6 +9,7 @@ const ANTHROPIC_KEY = "electric-agent:anthropic-api-key"
 const OAUTH_TOKEN_KEY = "electric-agent:oauth-token"
 const OAUTH_MANUAL_KEY = "electric-agent:oauth-manual"
 const GH_TOKEN_KEY = "electric-agent:gh-token"
+const OPENAI_KEY = "electric-agent:openai-api-key"
 
 export function getApiKey(): string | null {
 	return localStorage.getItem(ANTHROPIC_KEY)
@@ -68,14 +69,32 @@ export function hasGhToken(): boolean {
 	return !!getGhToken()
 }
 
+/* OpenAI API Key (for Codex mode) */
+
+export function getOpenaiApiKey(): string | null {
+	return localStorage.getItem(OPENAI_KEY)
+}
+
+export function setOpenaiApiKey(key: string): void {
+	localStorage.setItem(OPENAI_KEY, key)
+}
+
+export function clearOpenaiApiKey(): void {
+	localStorage.removeItem(OPENAI_KEY)
+}
+
+export function hasOpenaiApiKey(): boolean {
+	return !!getOpenaiApiKey()
+}
+
 /* Agent mode preference */
 const AGENT_MODE_KEY = "electric-agent:agent-mode"
 
-export type AgentMode = "claude-code" | "electric-agent"
+export type AgentMode = "claude-code" | "electric-agent" | "codex"
 
 export function getAgentMode(): AgentMode {
 	const val = localStorage.getItem(AGENT_MODE_KEY)
-	if (val === "electric-agent") return val
+	if (val === "electric-agent" || val === "codex") return val
 	return "claude-code"
 }
 

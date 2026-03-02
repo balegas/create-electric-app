@@ -16,6 +16,9 @@ import {
 	type ClaudeCodeSpritesConfig,
 } from "./bridge/claude-code-sprites.js"
 import { generateClaudeMd } from "./bridge/claude-md-generator.js"
+import { CodexDockerBridge, type CodexDockerConfig } from "./bridge/codex-docker.js"
+import { generateCodexMd } from "./bridge/codex-md-generator.js"
+import { CodexSpritesBridge, type CodexSpritesConfig } from "./bridge/codex-sprites.js"
 import { DaytonaSessionBridge } from "./bridge/daytona.js"
 import { DockerStdioBridge } from "./bridge/docker-stdio.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
@@ -41,7 +44,7 @@ import {
 	type StreamConnectionInfo,
 } from "./streams.js"
 
-type BridgeMode = "stream" | "stdio" | "claude-code"
+type BridgeMode = "stream" | "stdio" | "claude-code" | "codex"
 
 interface ServerConfig {
 	port: number
@@ -53,7 +56,7 @@ interface ServerConfig {
 	sandbox: SandboxProvider
 	/** Hosted stream config — required */
 	streamConfig: StreamConfig
-	/** Bridge mode: "stream" (hosted DS, default), "stdio" (stdin/stdout via SDK/Docker), or "claude-code" (Claude Code CLI in sandbox) */
+	/** Bridge mode: "stream" (hosted DS, default), "stdio" (stdin/stdout via SDK/Docker), "claude-code" (Claude Code CLI in sandbox), or "codex" (Codex CLI in sandbox) */
 	bridgeMode: BridgeMode
 	/** Optional: infer a short project name from a description (calls an LLM). Falls back to slugified description. */
 	inferProjectName?: (description: string) => Promise<string>
@@ -161,6 +164,40 @@ function createClaudeCodeBridge(
 			containerId,
 			claudeConfig as ClaudeCodeDockerConfig,
 		)
+	}
+
+	closeBridge(sessionId)
+	bridges.set(sessionId, bridge)
+	return bridge
+}
+
+/**
+ * Create a Codex bridge for a session.
+ * Spawns `codex exec --json` inside the sandbox.
+ */
+function createCodexBridge(
+	config: ServerConfig,
+	sessionId: string,
+	codexConfig: CodexDockerConfig | CodexSpritesConfig,
+): SessionBridge {
+	const conn = sessionStream(config, sessionId)
+	let bridge: SessionBridge
+
+	if (config.sandbox.runtime === "sprites") {
+		const spritesProvider = config.sandbox as SpritesSandboxProviderType
+		const sprite = spritesProvider.getSpriteObject(sessionId)
+		if (!sprite) {
+			throw new Error(`No Sprites sandbox object for session ${sessionId}`)
+		}
+		bridge = new CodexSpritesBridge(sessionId, conn, sprite, codexConfig)
+	} else {
+		// Docker (default for codex mode)
+		const dockerProvider = config.sandbox as DockerSandboxProviderType
+		const containerId = dockerProvider.getContainerId(sessionId)
+		if (!containerId) {
+			throw new Error(`No Docker container found for session ${sessionId}`)
+		}
+		bridge = new CodexDockerBridge(sessionId, conn, containerId, codexConfig as CodexDockerConfig)
 	}
 
 	closeBridge(sessionId)
@@ -840,17 +877,22 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			apiKey?: string
 			oauthToken?: string
 			ghToken?: string
-			/** Per-session agent mode: "electric-agent" (default) or "claude-code" */
-			agentMode?: "electric-agent" | "claude-code"
+			openaiApiKey?: string
+			/** Per-session agent mode: "electric-agent", "claude-code", or "codex" */
+			agentMode?: "electric-agent" | "claude-code" | "codex"
 		}
 
 		if (!body.description) {
 			return c.json({ error: "description is required" }, 400)
 		}
 
-		// Per-session bridge mode: "claude-code" if explicitly requested, else server default
+		// Per-session bridge mode: "claude-code" or "codex" if explicitly requested, else server default
 		const sessionBridgeMode: BridgeMode =
-			body.agentMode === "claude-code" ? "claude-code" : config.bridgeMode
+			body.agentMode === "claude-code"
+				? "claude-code"
+				: body.agentMode === "codex"
+					? "codex"
+					: config.bridgeMode
 
 		const sessionId = crypto.randomUUID()
 		const inferredName =
@@ -894,7 +936,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			createdAt: new Date().toISOString(),
 			lastActiveAt: new Date().toISOString(),
 			status: "running",
-			agentMode: sessionBridgeMode === "claude-code" ? "claude-code" : "electric-agent",
+			agentMode:
+				sessionBridgeMode === "claude-code"
+					? "claude-code"
+					: sessionBridgeMode === "codex"
+						? "codex"
+						: "electric-agent",
 		}
 		config.sessions.add(session)
 
@@ -992,9 +1039,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				ts: ts(),
 			})
 
-			// Only pass stream env vars when using hosted stream bridge (not stdio or claude-code)
+			// Only pass stream env vars when using hosted stream bridge (not stdio, claude-code, or codex)
 			const streamEnv =
-				sessionBridgeMode === "stdio" || sessionBridgeMode === "claude-code"
+				sessionBridgeMode === "stdio" ||
+				sessionBridgeMode === "claude-code" ||
+				sessionBridgeMode === "codex"
 					? undefined
 					: getStreamEnvVars(sessionId, config.streamConfig)
 			console.log(
@@ -1004,10 +1053,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				projectName,
 				infra,
 				streamEnv,
-				deferAgentStart: sessionBridgeMode === "stdio" || sessionBridgeMode === "claude-code",
+				deferAgentStart:
+					sessionBridgeMode === "stdio" ||
+					sessionBridgeMode === "claude-code" ||
+					sessionBridgeMode === "codex",
 				apiKey: body.apiKey,
 				oauthToken: body.oauthToken,
 				ghToken: body.ghToken,
+				openaiApiKey: body.openaiApiKey,
 			})
 			console.log(
 				`[session:${sessionId}] Sandbox created: projectDir=${handle.projectDir} port=${handle.port} previewUrl=${handle.previewUrl ?? "none"}`,
@@ -1100,6 +1153,71 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					cwd: handle.projectDir,
 				}
 				bridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
+			} else if (sessionBridgeMode === "codex") {
+				console.log(`[session:${sessionId}] Setting up Codex bridge...`)
+
+				// Copy pre-scaffolded project from the image and customize per-session
+				await bridge.emit({
+					type: "log",
+					level: "build",
+					message: "Setting up project...",
+					ts: ts(),
+				})
+				try {
+					if (config.sandbox.runtime === "docker") {
+						await config.sandbox.exec(handle, `cp -r /opt/scaffold-base '${handle.projectDir}'`)
+						await config.sandbox.exec(
+							handle,
+							`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`,
+						)
+					} else {
+						await config.sandbox.exec(
+							handle,
+							`source /etc/profile.d/npm-global.sh 2>/dev/null; electric-agent scaffold '${handle.projectDir}' --name '${projectName}' --skip-git`,
+						)
+					}
+					await config.sandbox.exec(
+						handle,
+						`mkdir -p '${handle.projectDir}/_agent' && echo '# Error Log\n' > '${handle.projectDir}/_agent/errors.md' && echo '# Session State\n' > '${handle.projectDir}/_agent/session.md'`,
+					)
+					console.log(`[session:${sessionId}] Project setup complete`)
+					await bridge.emit({
+						type: "log",
+						level: "done",
+						message: "Project ready",
+						ts: ts(),
+					})
+				} catch (err) {
+					console.error(`[session:${sessionId}] Project setup failed:`, err)
+					await bridge.emit({
+						type: "log",
+						level: "error",
+						message: `Project setup failed: ${err instanceof Error ? err.message : "unknown"}`,
+						ts: ts(),
+					})
+				}
+
+				// Write AGENTS.md to the sandbox workspace (Codex reads AGENTS.md)
+				const agentsMd = generateCodexMd({
+					description: body.description,
+					projectName,
+					projectDir: handle.projectDir,
+					runtime: config.sandbox.runtime,
+				})
+				try {
+					await config.sandbox.exec(
+						handle,
+						`cat > '${handle.projectDir}/AGENTS.md' << 'AGENTSMD_EOF'\n${agentsMd}\nAGENTSMD_EOF`,
+					)
+				} catch (err) {
+					console.error(`[session:${sessionId}] Failed to write AGENTS.md:`, err)
+				}
+
+				const codexConfig: CodexDockerConfig = {
+					prompt: body.description,
+					cwd: handle.projectDir,
+				}
+				bridge = createCodexBridge(config, sessionId, codexConfig)
 			} else if (sessionBridgeMode === "stdio") {
 				console.log(`[session:${sessionId}] Creating stdio bridge...`)
 				bridge = createStdioBridge(config, sessionId)
@@ -1180,9 +1298,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}
 				config.sessions.update(sessionId, updates)
 
-				// For Claude Code mode: check if the app is running after completion
+				// For Claude Code / Codex mode: check if the app is running after completion
 				// and emit app_ready so the UI shows the preview link
-				if (sessionBridgeMode === "claude-code" && success) {
+				if ((sessionBridgeMode === "claude-code" || sessionBridgeMode === "codex") && success) {
 					try {
 						const appRunning = await config.sandbox.isAppRunning(handle)
 						if (appRunning) {
@@ -1289,8 +1407,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				return c.json({ error: "Container is not running" }, 400)
 			}
 
-			if (session.agentMode === "claude-code") {
-				// In Claude Code mode, send git requests as user messages
+			if (session.agentMode === "claude-code" || session.agentMode === "codex") {
+				// In Claude Code / Codex mode, send git requests as user messages
 				await bridge.sendCommand({
 					command: "iterate",
 					request: body.request,

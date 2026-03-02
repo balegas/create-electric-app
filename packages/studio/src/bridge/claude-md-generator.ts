@@ -112,13 +112,13 @@ export function generateElectricAgentClaudeMd(opts: ClaudeMdOptions): string {
 }
 
 // ---------------------------------------------------------------------------
-// Shared sections (used by both variants)
+// Shared sections (used by both variants and codex-md-generator)
 // ---------------------------------------------------------------------------
 
-const PROJECT_CONTEXT =
+export const PROJECT_CONTEXT =
 	"## Project Context\nThis is a reactive, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start."
 
-const SCAFFOLD_STRUCTURE = `## Scaffold Structure (DO NOT EXPLORE)
+export const SCAFFOLD_STRUCTURE = `## Scaffold Structure (DO NOT EXPLORE)
 The project is scaffolded from a known template. DO NOT read or explore scaffold files before coding. You already know the structure:
 - src/db/schema.ts — placeholder Drizzle schema (you will overwrite)
 - src/db/zod-schemas.ts — placeholder Zod derivation (you will overwrite)
@@ -131,7 +131,7 @@ The project is scaffolded from a known template. DO NOT read or explore scaffold
 
 DO NOT use Bash/ls/find to explore the project. DO NOT read files you aren't about to modify. Start writing code.`
 
-const DRIZZLE_WORKFLOW = `## Drizzle Workflow (CRITICAL)
+export const DRIZZLE_WORKFLOW = `## Drizzle Workflow (CRITICAL)
 Always follow this order:
 1. Edit src/db/schema.ts (Drizzle pgTable definitions)
 2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas — ALWAYS import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()]).default(() => new Date()) — the .default() is required so collection.insert() works without timestamps)
@@ -139,7 +139,7 @@ Always follow this order:
 4. Create API routes (proxy + mutation)
 5. Create UI components`
 
-const GUARDRAILS = `## Guardrails (MUST FOLLOW)
+export const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 
 ### Protected Files — DO NOT MODIFY
 - docker-compose.yml
@@ -170,7 +170,7 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - snake_case for SQL table/column names
 - Foreign keys with onDelete: "cascade" where appropriate`
 
-function sandboxEnvironment(runtime?: string): string {
+export function sandboxEnvironment(runtime?: string): string {
 	if (runtime === "sprites" || runtime === "daytona") {
 		return `## Sandbox Environment (IMPORTANT — READ FIRST)
 You are running inside a cloud micro-VM (Fly.io Sprite). This is NOT a local machine.
@@ -200,7 +200,7 @@ You are running inside a cloud micro-VM (Fly.io Sprite). This is NOT a local mac
 	return ""
 }
 
-function devServerInstructions(runtime?: string): string {
+export function devServerInstructions(runtime?: string): string {
 	if (runtime === "sprites" || runtime === "daytona") {
 		return `## Dev Server & Migrations
 ### Dev Server
@@ -242,7 +242,7 @@ pnpm drizzle-kit migrate    # apply migration to the database
 After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`
 }
 
-const SSR_RULES = `## SSR Configuration (CRITICAL)
+export const SSR_RULES = `## SSR Configuration (CRITICAL)
 NEVER add ssr: false to __root.tsx — it renders the HTML shell and must always SSR.
 Instead, add ssr: false to each LEAF route that uses useLiveQuery or collections.
 This is needed because useLiveQuery uses useSyncExternalStore without getServerSnapshot.`
@@ -251,7 +251,7 @@ This is needed because useLiveQuery uses useSyncExternalStore without getServerS
 // Claude Code–only sections
 // ---------------------------------------------------------------------------
 
-const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
+export const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
 Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.
 
 ### Available Skills
@@ -284,7 +284,7 @@ Read with the Read tool at these exact paths:
 - ONLY read playbooks relevant to your current phase
 - Do NOT use include_references — the SKILL.md content is sufficient`
 
-const INFRASTRUCTURE = `## Infrastructure (Pre-configured — DO NOT MODIFY)
+export const INFRASTRUCTURE = `## Infrastructure (Pre-configured — DO NOT MODIFY)
 The database (Postgres) and Electric sync service are already provisioned and configured via environment variables:
 - \`DATABASE_URL\` — Postgres connection string
 - \`ELECTRIC_URL\` — Electric sync service URL
