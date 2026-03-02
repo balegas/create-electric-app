@@ -4,17 +4,13 @@ import { useEscapeKey } from "../hooks/useKeyboardShortcut"
 import type { AuthSource } from "../layouts/AppShell"
 import {
 	type AgentMode,
-	applyFontSize,
 	clearApiKey,
 	clearGhToken,
 	clearOauthToken,
-	type FontSize,
 	getAgentMode,
-	getFontSize,
 	isManualOauth,
 	setAgentMode as saveAgentMode,
 	setApiKey as saveApiKey,
-	setFontSize as saveFontSize,
 	setGhToken as saveGhToken,
 	setManualOauthToken as saveOauthToken,
 } from "../lib/credentials"
@@ -41,14 +37,7 @@ export function Settings({
 	const [oauthToken, setOauthToken] = useState("")
 	const [ghPat, setGhPat] = useState("")
 	const [copied, setCopied] = useState(false)
-	const [fontSize, setFontSize] = useState<FontSize>(getFontSize)
 	const [agentMode, setAgentMode] = useState<AgentMode>(getAgentMode)
-
-	const handleFontSize = useCallback((size: FontSize) => {
-		setFontSize(size)
-		saveFontSize(size)
-		applyFontSize(size)
-	}, [])
 
 	const handleAgentMode = useCallback((mode: AgentMode) => {
 		setAgentMode(mode)
@@ -272,25 +261,6 @@ export function Settings({
 								onClick={() => handleAgentMode(mode)}
 							>
 								{mode === "claude-code" ? "Claude Code" : "Electric Agent"}
-							</button>
-						))}
-					</div>
-				</div>
-
-				{/* Font size */}
-				<div className="settings-divider" />
-				<div className="settings-section-label">Display</div>
-				<div className="settings-field">
-					<label style={{ margin: 0, marginBottom: 8 }}>Font Size</label>
-					<div className="font-size-options">
-						{(["default", "large", "larger"] as const).map((size) => (
-							<button
-								key={size}
-								type="button"
-								className={`font-size-option${fontSize === size ? " active" : ""}`}
-								onClick={() => handleFontSize(size)}
-							>
-								{size === "default" ? "Default" : size === "large" ? "Large" : "Extra Large"}
 							</button>
 						))}
 					</div>

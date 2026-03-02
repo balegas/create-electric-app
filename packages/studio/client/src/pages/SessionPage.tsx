@@ -346,43 +346,42 @@ export function SessionPage() {
 				)}
 			</div>
 
-			{/* Mobile-only preview bar — visible when session is done */}
-			{(previewUrl || appPort) && sessionDone && (
-				<div className="mobile-preview-bar">
-					<a
-						href={previewUrl ?? `http://localhost:${appPort}`}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="mobile-preview-link"
-					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						>
-							<title>Open preview</title>
-							<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-							<polyline points="15 3 21 3 21 9" />
-							<line x1="10" y1="14" x2="21" y2="3" />
-						</svg>
-						Open Preview
-					</a>
-				</div>
-			)}
-
 			<div className="session-content">
+				{/* Mobile-only preview bar — visible when session is done */}
+				{(previewUrl || appPort) && sessionDone && (
+					<div className="mobile-preview-bar">
+						<a
+							href={previewUrl ?? `http://localhost:${appPort}`}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="mobile-preview-link"
+						>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="2"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							>
+								<title>Open preview</title>
+								<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+								<polyline points="15 3 21 3 21 9" />
+								<line x1="10" y1="14" x2="21" y2="3" />
+							</svg>
+							Open Preview
+						</a>
+					</div>
+				)}
 				{initializing ? (
 					<div className="session-initializing">
 						<div className="session-initializing-spinner" />
 						<span>Setting up your project...</span>
 					</div>
 				) : !isLive && !isComplete ? (
-					<div style={{ padding: 16, flex: 1 }}>
+					<div className="session-loading">
 						<Skeleton variant="block" />
 						<Skeleton variant="line" width="80%" />
 						<Skeleton variant="line" width="60%" />
@@ -398,9 +397,7 @@ export function SessionPage() {
 				)}
 				<PromptInput
 					onSubmit={handleIterate}
-					placeholder={
-						isRunning ? "Send a follow-up message..." : "Describe changes you want to make..."
-					}
+					placeholder={isRunning ? "Message..." : "Ask anything..."}
 					disabled={initializing}
 					isRunning={isRunning}
 					onCancel={handleCancel}
