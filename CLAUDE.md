@@ -252,10 +252,9 @@ packages/
 When Claude Code is used to generate Electric SQL apps (via hooks or bridges), the `/create-app` skill replicates the electric-agent's multi-phase pipeline:
 
 1. **Clarification** — evaluates description completeness, asks targeted questions if vague
-2. **Playbook reading** — reads guardrails and skill playbooks before planning
-3. **Planning** — generates PLAN.md with complete data model + phased tasks, presents for approval
-4. **Data model validation gate** — writes schema + zod-schemas + tests, runs `pnpm test` before proceeding
-5. **Code generation** — collections, API routes, UI, build, final tests, ARCHITECTURE.md
+2. **Planning** — generates PLAN.md with complete data model + phased tasks, presents for approval
+3. **Data model validation gate** — writes schema + zod-schemas + tests, runs `pnpm test` before proceeding
+4. **Code generation** — collections, API routes, UI, build, final tests, ARCHITECTURE.md
 
 **Auto-triggering**: When a user prompt describes creating a new app (e.g., "create a kanban board", "build a todo app with categories"), Claude Code should invoke `/create-app <description>` to follow the structured pipeline instead of coding ad-hoc.
 

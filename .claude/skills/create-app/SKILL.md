@@ -30,25 +30,9 @@ Keep questions specific to the described app type. After getting answers, enrich
 
 **If the description scores 70+**, proceed immediately without questions.
 
-## Phase 1: Read Playbooks
+## Phase 1: Generate PLAN.md
 
-Read the guardrails and key playbooks from the scaffolded project. These are in `node_modules/`:
-
-1. **MUST read first**: `packages/agent/playbooks/electric-app-guardrails/SKILL.md` — critical integration rules
-2. Find and read the schemas playbook: look for `SKILL.md` in `node_modules/@electric-sql/playbook/skills/schemas/` or similar
-3. Find and read the collections playbook
-4. Find and read the mutations playbook
-5. Find and read the live-queries playbook
-
-Use Glob to discover playbook locations if needed:
-```
-node_modules/@electric-sql/playbook/skills/*/SKILL.md
-node_modules/@tanstack/db-playbook/skills/*/SKILL.md
-```
-
-## Phase 2: Generate PLAN.md
-
-Based on the description and playbook knowledge, write a complete `PLAN.md` file with this structure:
+Based on the description, write a complete `PLAN.md` file with this structure:
 
 ```markdown
 # [App Name] — Implementation Plan
@@ -70,9 +54,6 @@ export const entityName = pgTable("entity_name", {
 (Repeat for EVERY entity)
 
 ## Implementation Tasks
-
-### Phase 0: Read Guardrails
-- [ ] Read electric-app-guardrails — critical integration rules
 
 ### Phase 1: Data Model & Migrations
 - [ ] Define all Drizzle table schemas in src/db/schema.ts
@@ -118,11 +99,11 @@ export const entityName = pgTable("entity_name", {
 
 Write the approved PLAN.md to disk.
 
-## Phase 3: Data Model Validation (CRITICAL GATE)
+## Phase 2: Data Model Validation (CRITICAL GATE)
 
-This phase validates the data model BEFORE writing any application code. **Do NOT proceed to Phase 4 until tests pass.**
+This phase validates the data model BEFORE writing any application code. **Do NOT proceed to Phase 3 until tests pass.**
 
-### Step 3a: Write Schema
+### Step 2a: Write Schema
 Write `src/db/schema.ts` with all Drizzle pgTable definitions from PLAN.md.
 
 Conventions:
@@ -131,7 +112,7 @@ Conventions:
 - `.references(() => table.id, { onDelete: "cascade" })` for FKs
 - Do NOT import `relations` from drizzle-orm
 
-### Step 3b: Write Zod Schemas
+### Step 2b: Write Zod Schemas
 Write `src/db/zod-schemas.ts`:
 - Import `z` from `"zod/v4"` (NOT `"zod"`)
 - Use `createSelectSchema` and `createInsertSchema` from `drizzle-zod`
@@ -139,12 +120,12 @@ Write `src/db/zod-schemas.ts`:
 - The `.default()` is required for `collection.insert()` to work without timestamps
 - Export both select and insert schemas for each entity
 
-### Step 3c: Run Migrations
+### Step 2c: Run Migrations
 ```bash
 pnpm drizzle-kit generate && pnpm drizzle-kit migrate
 ```
 
-### Step 3d: Write Schema Tests
+### Step 2d: Write Schema Tests
 Write `tests/schema.test.ts`:
 ```typescript
 import { generateValidRow, generateRowWithout } from "./helpers/schema-test-utils"
@@ -166,7 +147,7 @@ describe("entity schema", () => {
 - ONLY import from `@/db/zod-schemas` and `@/db/schema`
 - Use `generateValidRow(schema)` — never hand-write test data
 
-### Step 3e: Run Tests
+### Step 2e: Run Tests
 ```bash
 pnpm test
 ```
@@ -174,7 +155,7 @@ pnpm test
 **If tests fail**: fix the schema/zod-schemas and re-run. Do NOT proceed until green.
 **If tests pass**: mark Phase 1 tasks as `[x]` in PLAN.md and continue.
 
-## Phase 4: Collections & API Routes
+## Phase 3: Collections & API Routes
 
 ### Collections
 For each entity, create `src/db/collections/<entity>.ts`:
@@ -208,14 +189,14 @@ export const Route = createFileRoute("/api/<entity>")({
 - PUT/PATCH: destructure out `created_at` and `updated_at` before spreading
 - Return `{ txid }` from each mutation
 
-## Phase 5: UI Components
+## Phase 4: UI Components
 
 - Create page routes with `useLiveQuery` — add `ssr: false` to leaf routes (NOT `__root.tsx`)
 - Wrap `useLiveQuery` components in `ClientOnly` when used from `__root.tsx`
 - Use `lucide-react` for icons (NOT `@radix-ui/react-icons`)
 - Style with Radix UI Themes components
 
-## Phase 6: Build & Verify
+## Phase 5: Build & Verify
 
 Run the build tool:
 ```bash
@@ -224,7 +205,7 @@ pnpm run build && pnpm run check
 
 Fix any errors. Re-run until clean.
 
-## Phase 7: Final Tests
+## Phase 6: Final Tests
 
 Write additional tests:
 - `tests/collections.test.ts` — collection insert validation (import from zod-schemas only)
@@ -232,7 +213,7 @@ Write additional tests:
 
 Run `pnpm test` — fix until green.
 
-## Phase 8: Architecture Reference
+## Phase 7: Architecture Reference
 
 Write `ARCHITECTURE.md` in the project root (under 1500 tokens):
 ```markdown
