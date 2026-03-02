@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import toast from "react-hot-toast"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
+import { getSessionToken } from "../lib/session-store"
 
 export function useSession(sessionId: string | null) {
 	const [entries, setEntries] = useState<ConsoleEntry[]>([])
@@ -204,7 +205,11 @@ export function useSession(sessionId: string | null) {
 				return
 			}
 
-			eventSource = new EventSource(`/api/sessions/${sessionId}/events`)
+			const token = getSessionToken(sessionId)
+			const sseUrl = token
+				? `/api/sessions/${sessionId}/events?token=${encodeURIComponent(token)}`
+				: `/api/sessions/${sessionId}/events`
+			eventSource = new EventSource(sseUrl)
 
 			eventSource.onopen = () => {
 				if (!cancelled) {

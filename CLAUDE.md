@@ -159,6 +159,7 @@ packages/
 │   │   ├── electric-api.ts          # Electric SQL provisioning API
 │   │   ├── git.ts                   # GitHub listing fns (ghListAccounts, etc.)
 │   │   ├── project-utils.ts         # resolveProjectDir utility
+│   │   ├── session-auth.ts           # HMAC session token derivation + validation
 │   │   ├── index.ts                 # Barrel exports
 │   │   ├── sandbox/                 # Container management providers
 │   │   │   ├── types.ts             # SandboxProvider interface
@@ -187,9 +188,11 @@ packages/
 │   │       ├── pages/               # HomePage, SessionPage
 │   │       └── lib/
 │   │           ├── api.ts           # fetch wrappers for /api/*
+│   │           ├── session-store.ts # localStorage session + token storage
 │   │           └── event-types.ts   # Re-exports EngineEvent from protocol
 │   └── tests/
 │       ├── hook-bridge.test.ts
+│       ├── session-auth.test.ts     # Session token auth unit + integration tests
 │       ├── streams.test.ts
 │       ├── sandbox.test.ts
 │       ├── sprites.test.ts
@@ -234,6 +237,7 @@ packages/
 - **MCP Tools**: Created via `tool()` + `createSdkMcpServer()`. Referenced as `mcp__<server>__<tool>` in `allowedTools`.
 - **Agent SDK**: Uses `query()` with async generators. Planner uses Sonnet (10 turns), Coder uses Sonnet (200 turns, $25), Git Agent uses Haiku (5 turns, $0.25).
 - **Session resumption**: Coder returns `session_id` from SDK, stored and passed as `{ resume: sessionId }` on subsequent runs.
+- **Session token auth**: Stateless HMAC-SHA256 tokens protect session-scoped API endpoints. Server derives `HMAC(DS_SECRET, sessionId)` on creation, client stores in localStorage and sends via `Authorization: Bearer` header (or `?token=` query param for SSE/EventSource). No server-side token storage — tokens are re-derived and validated on each request. Hook endpoints (`/hook-event`, `/api/hook`) are exempt (local trusted traffic).
 - **Workspace dependency graph**: `protocol` → `studio` → `agent`. Studio imports types from protocol; agent imports from both.
 
 ## Conventions
@@ -307,5 +311,7 @@ The following secrets are configured on the GitHub repository (set via `gh secre
 - **Sprites `exec()` splits by whitespace**: Never use `sprite.exec()` for commands with shell features. Use `sprite.execFile("bash", ["-c", "..."])` instead. This applies to the SDK, not the CLI.
 - **Sprites CLI flag order**: The `sprite` CLI uses Go-style flags — flags must come before positional arguments (e.g., `sprite destroy -force <name>`).
 - **Sprites PATH**: npm global binaries (like `electric-agent`) are not in PATH by default. Always source `/etc/profile.d/npm-global.sh` before running them.
+- **Session token auth & Hono middleware**: The auth middleware on `/api/sessions/:id/*` also matches creation routes like `/api/sessions/local` (Hono treats `local` as `:id`). The middleware explicitly skips `authExemptIds` (`local`, `auto`, `resume`). If you add a new creation route under `/api/sessions/<name>`, add the name to `authExemptIds` in `server.ts`.
+- **Session tokens use DS_SECRET**: Tokens are derived from `DS_SECRET` (Durable Streams secret) — no additional secret needed. Changing `DS_SECRET` invalidates all existing session tokens.
 - **GitHub token flow**: API keys and GH tokens are stored in the browser's localStorage, sent to the server via POST body (`ghToken` field) or `X-GH-Token` header (GET requests), and passed explicitly to `gh` CLI functions. Do not rely on ambient `GH_TOKEN` env vars on the server.
 - **Studio subpath exports**: Studio exposes `./server`, `./streams`, `./sessions`, `./sandbox`, `./sandbox/*`, `./bridge`. Import from specific subpaths, not the barrel `@electric-agent/studio`.

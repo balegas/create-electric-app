@@ -1,5 +1,6 @@
 import { getAgentMode, getApiKey, getGhToken, getOauthToken } from "./credentials"
 import { getOrCreateParticipant } from "./participant"
+import { getSessionToken, setSessionToken } from "./session-store"
 
 const API_BASE = "/api"
 
@@ -27,12 +28,27 @@ function participantHeaders(): Record<string, string> {
 	return { "X-Participant-Id": p.id, "X-Participant-Name": p.displayName }
 }
 
+/** Extract session ID from API paths like /sessions/:id or /sessions/:id/... */
+function extractSessionId(path: string): string | undefined {
+	const match = path.match(/^\/sessions\/([^/]+)/)
+	return match?.[1]
+}
+
 async function request<T>(
 	path: string,
 	opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
 ): Promise<T> {
 	const headers: Record<string, string> = { ...participantHeaders(), ...opts?.headers }
 	if (opts?.body) headers["Content-Type"] = "application/json"
+
+	// Attach session token for session-scoped requests
+	const sessionId = extractSessionId(path)
+	if (sessionId) {
+		const token = getSessionToken(sessionId)
+		if (token) {
+			headers.Authorization = `Bearer ${token}`
+		}
+	}
 
 	const res = await fetch(`${API_BASE}${path}`, {
 		method: opts?.method ?? "GET",
@@ -97,18 +113,29 @@ export function getSession(id: string) {
 }
 
 /** Create a local session for Claude Code hook forwarding (no sandbox). */
-export function createLocalSession(description?: string) {
-	return request<{ sessionId: string }>("/sessions/local", {
+export async function createLocalSession(description?: string) {
+	const result = await request<{ sessionId: string; sessionToken: string }>("/sessions/local", {
 		method: "POST",
 		body: { description },
 	})
+	if (result.sessionToken) {
+		setSessionToken(result.sessionId, result.sessionToken)
+	}
+	return result
 }
 
-export function createSession(description: string, name?: string) {
-	return request<{ sessionId: string; session: SessionInfo }>("/sessions", {
-		method: "POST",
-		body: { description, name, agentMode: getAgentMode(), ...credentialFields() },
-	})
+export async function createSession(description: string, name?: string) {
+	const result = await request<{ sessionId: string; session: SessionInfo; sessionToken: string }>(
+		"/sessions",
+		{
+			method: "POST",
+			body: { description, name, agentMode: getAgentMode(), ...credentialFields() },
+		},
+	)
+	if (result.sessionToken) {
+		setSessionToken(result.sessionId, result.sessionToken)
+	}
+	return result
 }
 
 export function sendIterate(sessionId: string, userRequest: string) {
@@ -192,11 +219,19 @@ export function fetchKeychainCredentials() {
 	return request<{ oauthToken: string | null }>("/credentials/keychain")
 }
 
-export function resumeFromGithub(repoUrl: string, branch?: string) {
-	return request<{ sessionId: string; session: SessionInfo }>("/sessions/resume", {
+export async function resumeFromGithub(repoUrl: string, branch?: string) {
+	const result = await request<{
+		sessionId: string
+		session: SessionInfo
+		sessionToken: string
+	}>("/sessions/resume", {
 		method: "POST",
 		body: { repoUrl, branch, ...credentialFields() },
 	})
+	if (result.sessionToken) {
+		setSessionToken(result.sessionId, result.sessionToken)
+	}
+	return result
 }
 
 // --- Shared Sessions (Rooms) ---
