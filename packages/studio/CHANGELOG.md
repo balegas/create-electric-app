@@ -1,5 +1,16 @@
 # @electric-agent/studio
 
+## 1.2.0
+
+### Minor Changes
+
+- 77b1eef: Add stateless HMAC-based session token authentication to protect session-scoped API endpoints. Tokens are derived from DS_SECRET and returned on session creation. Client stores tokens in localStorage and attaches them as Authorization headers (or query params for SSE).
+
+### Patch Changes
+
+- 9675f38: Fix credential priority to prefer OAuth token over API key across all sandbox providers and the client.
+- 0ae9f33: Glassmorphic session topbar with transparent blurry background, shorter prompt placeholders, remove font size settings, and prevent horizontal scroll on mobile.
+
 ## 1.1.2
 
 ### Patch Changes
