@@ -9,8 +9,8 @@ function credentialFields(): { apiKey?: string; oauthToken?: string; ghToken?: s
 	const apiKey = getApiKey()
 	const oauthToken = getOauthToken()
 	const ghToken = getGhToken()
-	if (apiKey) fields.apiKey = apiKey
-	else if (oauthToken) fields.oauthToken = oauthToken
+	if (oauthToken) fields.oauthToken = oauthToken
+	else if (apiKey) fields.apiKey = apiKey
 	if (ghToken) fields.ghToken = ghToken
 	return fields
 }

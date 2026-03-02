@@ -47,8 +47,8 @@ function findFreePort(): Promise<number> {
 }
 
 function resolveAuthEnv(opts?: { apiKey?: string; oauthToken?: string }): [string, string] | null {
-	if (opts?.apiKey) return ["ANTHROPIC_API_KEY", opts.apiKey]
 	if (opts?.oauthToken) return ["CLAUDE_CODE_OAUTH_TOKEN", opts.oauthToken]
+	if (opts?.apiKey) return ["ANTHROPIC_API_KEY", opts.apiKey]
 	return null
 }
 

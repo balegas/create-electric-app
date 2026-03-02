@@ -126,13 +126,7 @@ export function AppShell() {
 		const ghToken = checkHasGhToken()
 		setHasGhToken(ghToken)
 
-		// Check local credentials first
-		if (checkHasApiKey()) {
-			setAuthSource("api-key")
-			return
-		}
-
-		// Check for manually-set OAuth token (takes priority over keychain)
+		// Check for manually-set OAuth token (takes priority over everything)
 		if (isManualOauth() && getOauthToken()) {
 			setAuthSource("oauth")
 			return
@@ -153,6 +147,12 @@ export function AppShell() {
 				setAuthSource("keychain")
 				return
 			}
+		}
+
+		// Fall back to API key
+		if (checkHasApiKey()) {
+			setAuthSource("api-key")
+			return
 		}
 		setAuthSource(null)
 		setShowSettings(true)

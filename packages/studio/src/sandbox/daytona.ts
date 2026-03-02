@@ -74,10 +74,10 @@ export class DaytonaSandboxProvider implements SandboxProvider {
 			envVars.ELECTRIC_SECRET = infra.secret
 		}
 
-		if (opts?.apiKey) {
-			envVars.ANTHROPIC_API_KEY = opts.apiKey
-		} else if (opts?.oauthToken) {
+		if (opts?.oauthToken) {
 			envVars.CLAUDE_CODE_OAUTH_TOKEN = opts.oauthToken
+		} else if (opts?.apiKey) {
+			envVars.ANTHROPIC_API_KEY = opts.apiKey
 		}
 
 		if (opts?.ghToken) {
