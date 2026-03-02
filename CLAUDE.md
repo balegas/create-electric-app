@@ -251,6 +251,19 @@ packages/
 - **Changesets** for versioning — each PR should include a changeset (`pnpm exec changeset`)
 - **Event types**: `EngineEvent` is defined in `@electric-agent/protocol`. Client re-exports it. When adding/removing event types, update the protocol package, the `useSession.ts` reducer, and any `GatePrompt.tsx` gate components.
 
+## Claude Code App Generation
+
+When Claude Code is used to generate Electric SQL apps (via hooks or bridges), the `/create-app` skill replicates the electric-agent's multi-phase pipeline:
+
+1. **Clarification** — evaluates description completeness, asks targeted questions if vague
+2. **Planning** — generates PLAN.md with complete data model + phased tasks, presents for approval
+3. **Data model validation gate** — writes schema + zod-schemas + tests, runs `pnpm test` before proceeding
+4. **Code generation** — collections, API routes, UI, build, final tests, ARCHITECTURE.md
+
+**Auto-triggering**: When a user prompt describes creating a new app (e.g., "create a kanban board", "build a todo app with categories"), Claude Code should invoke `/create-app <description>` to follow the structured pipeline instead of coding ad-hoc.
+
+The skill is defined in `.claude/skills/create-app/SKILL.md`. For scaffolded projects, copy it to the project's `.claude/skills/` directory or include it in the hook setup script.
+
 ## Adding New Features
 
 ### New agent
