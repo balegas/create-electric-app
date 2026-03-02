@@ -1624,6 +1624,21 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// --- Shared Sessions ---
 
+	// Protect /api/shared-sessions/:id/* (all sub-routes)
+	// Exempt: "join" (Hono matches join/:code as :id/*)
+	const sharedSessionExemptIds = new Set(["join"])
+
+	app.use("/api/shared-sessions/:id/*", async (c, next) => {
+		const id = c.req.param("id")
+		if (sharedSessionExemptIds.has(id)) return next()
+
+		const token = extractToken(c)
+		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+			return c.json({ error: "Invalid or missing room token" }, 401)
+		}
+		return next()
+	})
+
 	// Create a shared session
 	app.post("/api/shared-sessions", async (c) => {
 		const body = (await c.req.json()) as {
@@ -1682,16 +1697,18 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			revoked: false,
 		})
 
+		const roomToken = deriveSessionToken(config.streamConfig.secret, id)
 		console.log(`[shared-session] Created: id=${id} code=${code}`)
-		return c.json({ id, code }, 201)
+		return c.json({ id, code, roomToken }, 201)
 	})
 
-	// Resolve invite code → shared session ID
+	// Resolve invite code → shared session ID + room token
 	app.get("/api/shared-sessions/join/:code", (c) => {
 		const code = c.req.param("code")
 		const entry = config.rooms.getRoomByCode(code)
 		if (!entry) return c.json({ error: "Shared session not found" }, 404)
-		return c.json({ id: entry.id, code: entry.code, revoked: entry.revoked })
+		const roomToken = deriveSessionToken(config.streamConfig.secret, entry.id)
+		return c.json({ id: entry.id, code: entry.code, revoked: entry.revoked, roomToken })
 	})
 
 	// Join a shared session as participant

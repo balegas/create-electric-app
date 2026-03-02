@@ -77,3 +77,33 @@ export function removeSessionToken(sessionId: string): void {
 	delete tokens[sessionId]
 	localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens))
 }
+
+// --- Room Token Storage ---
+
+const ROOM_TOKEN_STORAGE_KEY = "electric-agent:room-tokens"
+
+function getRoomTokenMap(): Record<string, string> {
+	try {
+		const raw = localStorage.getItem(ROOM_TOKEN_STORAGE_KEY)
+		if (!raw) return {}
+		return JSON.parse(raw) as Record<string, string>
+	} catch {
+		return {}
+	}
+}
+
+export function setRoomToken(roomId: string, token: string): void {
+	const tokens = getRoomTokenMap()
+	tokens[roomId] = token
+	localStorage.setItem(ROOM_TOKEN_STORAGE_KEY, JSON.stringify(tokens))
+}
+
+export function getRoomToken(roomId: string): string | undefined {
+	return getRoomTokenMap()[roomId]
+}
+
+export function removeRoomToken(roomId: string): void {
+	const tokens = getRoomTokenMap()
+	delete tokens[roomId]
+	localStorage.setItem(ROOM_TOKEN_STORAGE_KEY, JSON.stringify(tokens))
+}

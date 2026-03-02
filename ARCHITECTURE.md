@@ -103,6 +103,43 @@ app.use("/api/sessions/:id", ...)    // Base path (GET/DELETE only)
 
 No grace period is needed. `ActiveSessions` is in-memory only — server restarts clear it. Old localStorage sessions will 404 on `GET /api/sessions/:id`, and the client handles this gracefully. Users simply create new sessions.
 
+## Room Token Authentication
+
+Shared sessions (rooms) use the same HMAC token mechanism as sessions. The invite code serves as the initial authentication — knowing the code grants the room token.
+
+### How It Works
+
+```
+        Creator                          Joiner (via invite code)
+        ───────                          ────────────────────────
+
+Server: roomId = UUID                   GET /api/shared-sessions/join/:code
+        roomToken = HMAC(DS_SECRET,       → Returns { id, roomToken }
+                         roomId)
+        Return { id, code, roomToken }  Client stores roomToken
+
+Client: Store roomToken in             All subsequent requests:
+        localStorage                    Authorization: Bearer <roomToken>
+        (key: "electric-agent:room-tokens")
+```
+
+### Protected vs Exempt Endpoints
+
+| Endpoint | Auth Required | Notes |
+|----------|:---:|-------|
+| `POST /api/shared-sessions` | No | Creation — returns `roomToken` |
+| `GET /api/shared-sessions/join/:code` | No | Code lookup — returns `roomToken` |
+| `POST /api/shared-sessions/:id/join` | Yes | Join as participant |
+| `POST /api/shared-sessions/:id/leave` | Yes | Leave room |
+| `POST /api/shared-sessions/:id/sessions` | Yes | Link a session |
+| `DELETE /api/shared-sessions/:id/sessions/:sid` | Yes | Unlink a session |
+| `GET /api/shared-sessions/:id/events` | Yes | SSE stream (`?token=` query param) |
+| `POST /api/shared-sessions/:id/revoke` | Yes | Revoke invite code |
+
+### Client Integration
+
+Same pattern as session tokens: `request()` extracts the shared session ID from the URL path and attaches `Authorization: Bearer <roomToken>`. SSE uses `?token=` query param. Tokens stored in `"electric-agent:room-tokens"` localStorage key.
+
 ## Sandbox Providers
 
 Three sandbox runtimes are supported, selected via `SANDBOX_RUNTIME` env var:

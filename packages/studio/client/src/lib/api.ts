@@ -1,6 +1,6 @@
 import { getAgentMode, getApiKey, getGhToken, getOauthToken } from "./credentials"
 import { getOrCreateParticipant } from "./participant"
-import { getSessionToken, setSessionToken } from "./session-store"
+import { getRoomToken, getSessionToken, setRoomToken, setSessionToken } from "./session-store"
 
 const API_BASE = "/api"
 
@@ -34,6 +34,15 @@ function extractSessionId(path: string): string | undefined {
 	return match?.[1]
 }
 
+/** Extract shared session ID from API paths like /shared-sessions/:id/... */
+function extractSharedSessionId(path: string): string | undefined {
+	const match = path.match(/^\/shared-sessions\/([^/]+)/)
+	if (!match) return undefined
+	// Don't match the "join" path (it's the code-lookup route, not a room ID)
+	if (match[1] === "join") return undefined
+	return match[1]
+}
+
 async function request<T>(
 	path: string,
 	opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
@@ -45,6 +54,15 @@ async function request<T>(
 	const sessionId = extractSessionId(path)
 	if (sessionId) {
 		const token = getSessionToken(sessionId)
+		if (token) {
+			headers.Authorization = `Bearer ${token}`
+		}
+	}
+
+	// Attach room token for shared-session-scoped requests
+	const sharedSessionId = extractSharedSessionId(path)
+	if (sharedSessionId) {
+		const token = getRoomToken(sharedSessionId)
 		if (token) {
 			headers.Authorization = `Bearer ${token}`
 		}
@@ -236,16 +254,29 @@ export async function resumeFromGithub(repoUrl: string, branch?: string) {
 
 // --- Shared Sessions (Rooms) ---
 
-export function createSharedSession(name: string) {
+export async function createSharedSession(name: string) {
 	const participant = getOrCreateParticipant()
-	return request<{ id: string; code: string }>("/shared-sessions", {
-		method: "POST",
-		body: { name, participant },
-	})
+	const result = await request<{ id: string; code: string; roomToken: string }>(
+		"/shared-sessions",
+		{
+			method: "POST",
+			body: { name, participant },
+		},
+	)
+	if (result.roomToken) {
+		setRoomToken(result.id, result.roomToken)
+	}
+	return result
 }
 
-export function joinSharedSession(code: string) {
-	return request<{ id: string; code: string; revoked: boolean }>(`/shared-sessions/join/${code}`)
+export async function joinSharedSession(code: string) {
+	const result = await request<{ id: string; code: string; revoked: boolean; roomToken: string }>(
+		`/shared-sessions/join/${code}`,
+	)
+	if (result.roomToken) {
+		setRoomToken(result.id, result.roomToken)
+	}
+	return result
 }
 
 export function joinAsParticipant(sharedSessionId: string) {

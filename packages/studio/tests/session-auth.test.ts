@@ -353,3 +353,184 @@ describe("session-auth integration", () => {
 		assert.equal(res.status, 401)
 	})
 })
+
+// ---------------------------------------------------------------------------
+// Room Token Auth Integration Tests
+// ---------------------------------------------------------------------------
+
+describe("room-auth integration", () => {
+	before(async () => {
+		await server.start()
+		dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "room-auth-test-"))
+		sessions = new ActiveSessions()
+		rooms = await RoomRegistry.create(server.config)
+	})
+
+	after(async () => {
+		await server.stop()
+		fs.rmSync(dataDir, { recursive: true, force: true })
+	})
+
+	const participant = { id: "test-user", displayName: "Test User" }
+
+	it("POST /api/shared-sessions returns roomToken", async () => {
+		const app = createTestApp()
+		const res = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Test Room", participant }),
+		})
+		assert.equal(res.status, 201)
+		const body = (await res.json()) as { id: string; code: string; roomToken: string }
+		assert.ok(body.roomToken, "Should return roomToken")
+		assert.equal(body.roomToken.length, 64)
+	})
+
+	it("GET /api/shared-sessions/join/:code returns roomToken", async () => {
+		const app = createTestApp()
+
+		// Create a room first
+		const createRes = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Join Test", participant }),
+		})
+		const { code } = (await createRes.json()) as { id: string; code: string; roomToken: string }
+
+		// Join by code
+		const joinRes = await appFetch(app, `/api/shared-sessions/join/${code}`)
+		assert.equal(joinRes.status, 200)
+		const body = (await joinRes.json()) as { id: string; roomToken: string }
+		assert.ok(body.roomToken, "Should return roomToken on join")
+		assert.equal(body.roomToken.length, 64)
+	})
+
+	it("POST /api/shared-sessions/:id/join returns 401 without token", async () => {
+		const app = createTestApp()
+
+		const createRes = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Auth Test", participant }),
+		})
+		const { id } = (await createRes.json()) as { id: string }
+
+		// Try to join without token
+		const res = await appFetch(app, `/api/shared-sessions/${id}/join`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ participant: { id: "other", displayName: "Other" } }),
+		})
+		assert.equal(res.status, 401)
+	})
+
+	it("POST /api/shared-sessions/:id/join returns 200 with valid token", async () => {
+		const app = createTestApp()
+
+		const createRes = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Auth OK Test", participant }),
+		})
+		const { id, roomToken } = (await createRes.json()) as {
+			id: string
+			roomToken: string
+		}
+
+		const res = await appFetch(app, `/api/shared-sessions/${id}/join`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${roomToken}`,
+			},
+			body: JSON.stringify({ participant: { id: "other", displayName: "Other" } }),
+		})
+		assert.equal(res.status, 200)
+	})
+
+	it("room token from room A is rejected on room B", async () => {
+		const app = createTestApp()
+
+		// Create room A
+		const resA = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Room A", participant }),
+		})
+		const { roomToken: tokenA } = (await resA.json()) as { roomToken: string }
+
+		// Create room B
+		const resB = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Room B", participant }),
+		})
+		const { id: idB } = (await resB.json()) as { id: string }
+
+		// Use token A on room B
+		const res = await appFetch(app, `/api/shared-sessions/${idB}/join`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${tokenA}`,
+			},
+			body: JSON.stringify({ participant: { id: "intruder", displayName: "Intruder" } }),
+		})
+		assert.equal(res.status, 401)
+	})
+
+	it("GET /api/shared-sessions/:id/events?token=... accepts query param token", async () => {
+		const app = createTestApp()
+
+		const createRes = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "SSE Test", participant }),
+		})
+		const { id, roomToken } = (await createRes.json()) as {
+			id: string
+			roomToken: string
+		}
+
+		const controller = new AbortController()
+		const res = await appFetch(app, `/api/shared-sessions/${id}/events?token=${roomToken}`, {
+			signal: controller.signal,
+		})
+		assert.notEqual(res.status, 401, "Should not reject valid query param token")
+		controller.abort()
+	})
+
+	it("GET /api/shared-sessions/:id/events returns 401 without token", async () => {
+		const app = createTestApp()
+
+		const createRes = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "SSE No Auth", participant }),
+		})
+		const { id } = (await createRes.json()) as { id: string }
+
+		const controller = new AbortController()
+		const res = await appFetch(app, `/api/shared-sessions/${id}/events`, {
+			signal: controller.signal,
+		})
+		assert.equal(res.status, 401)
+		controller.abort()
+	})
+
+	it("POST /api/shared-sessions/:id/revoke returns 401 without token", async () => {
+		const app = createTestApp()
+
+		const createRes = await appFetch(app, "/api/shared-sessions", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "Revoke Auth Test", participant }),
+		})
+		const { id } = (await createRes.json()) as { id: string }
+
+		const res = await appFetch(app, `/api/shared-sessions/${id}/revoke`, {
+			method: "POST",
+		})
+		assert.equal(res.status, 401)
+	})
+})
