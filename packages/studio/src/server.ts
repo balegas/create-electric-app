@@ -30,6 +30,7 @@ import type { DaytonaSandboxProvider as DaytonaSandboxProviderType } from "./san
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
+import { deriveSessionToken, validateSessionToken } from "./session-auth.js"
 import type { SessionInfo } from "./sessions.js"
 import { generateInviteCode } from "./shared-sessions.js"
 import {
@@ -380,6 +381,53 @@ export function createApp(config: ServerConfig) {
 		}
 	})
 
+	// --- Session Token Auth Middleware ---
+	// Protects session-scoped endpoints. Hook endpoints and creation routes are exempt.
+	// Hono's wildcard middleware matches creation routes like /api/sessions/local as
+	// :id="local", so we must explicitly skip those.
+
+	const authExemptIds = new Set(["local", "auto", "resume"])
+	const hookExemptSuffixes = new Set(["/hook-event"])
+
+	/** Extract session token from Authorization header or query param. */
+	function extractToken(c: {
+		req: {
+			header: (name: string) => string | undefined
+			query: (name: string) => string | undefined
+		}
+	}): string | undefined {
+		const authHeader = c.req.header("Authorization")
+		if (authHeader?.startsWith("Bearer ")) return authHeader.slice(7)
+		return c.req.query("token") ?? undefined
+	}
+
+	// Protect /api/sessions/:id/* and /api/sessions/:id
+	app.use("/api/sessions/:id/*", async (c, next) => {
+		const id = c.req.param("id")
+		if (authExemptIds.has(id)) return next()
+
+		const subPath = c.req.path.replace(/^\/api\/sessions\/[^/]+/, "")
+		if (hookExemptSuffixes.has(subPath)) return next()
+
+		const token = extractToken(c)
+		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+			return c.json({ error: "Invalid or missing session token" }, 401)
+		}
+		return next()
+	})
+
+	app.use("/api/sessions/:id", async (c, next) => {
+		const id = c.req.param("id")
+		if (authExemptIds.has(id)) return next()
+		if (c.req.method !== "GET" && c.req.method !== "DELETE") return next()
+
+		const token = extractToken(c)
+		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+			return c.json({ error: "Invalid or missing session token" }, 401)
+		}
+		return next()
+	})
+
 	// Get single session (from in-memory active sessions)
 	app.get("/api/sessions/:id", (c) => {
 		const session = config.sessions.get(c.req.param("id"))
@@ -425,8 +473,9 @@ export function createApp(config: ServerConfig) {
 		// Pre-create a bridge so hook-event can emit to it immediately
 		getOrCreateBridge(config, sessionId)
 
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
 		console.log(`[local-session] Created session: ${sessionId}`)
-		return c.json({ sessionId }, 201)
+		return c.json({ sessionId, sessionToken }, 201)
 	})
 
 	// Auto-register a local session on first hook event (SessionStart).
@@ -478,8 +527,9 @@ export function createApp(config: ServerConfig) {
 			await bridge.emit(hookEvent)
 		}
 
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
 		console.log(`[auto-session] Created session: ${sessionId} (project: ${projectName})`)
-		return c.json({ sessionId }, 201)
+		return c.json({ sessionId, sessionToken }, 201)
 	})
 
 	// Receive a hook event from Claude Code (via forward.sh) and write it
@@ -1172,7 +1222,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			config.sessions.update(sessionId, { status: "error" })
 		})
 
-		return c.json({ sessionId, session }, 201)
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+		return c.json({ sessionId, session, sessionToken }, 201)
 	})
 
 	// Send iteration request
@@ -2094,7 +2145,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				ts: ts(),
 			})
 
-			return c.json({ sessionId, session, appPort: handle.port }, 201)
+			const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+			return c.json({ sessionId, session, sessionToken, appPort: handle.port }, 201)
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : "Failed to resume from repo"
 			return c.json({ error: msg }, 500)
