@@ -1443,6 +1443,25 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	app.post("/api/sessions/:id/cancel", async (c) => {
 		const sessionId = c.req.param("id")
 
+		// Write session_end to the stream so SSE clients see the cancellation
+		const conn = sessionStream(config, sessionId)
+		try {
+			const stream = new DurableStream({
+				url: conn.url,
+				headers: conn.headers,
+				contentType: "application/json",
+			})
+			const endEvent = {
+				source: "server",
+				type: "session_end",
+				success: false,
+				ts: ts(),
+			}
+			await stream.append(JSON.stringify(endEvent))
+		} catch {
+			// Best effort — stream may not exist yet
+		}
+
 		closeBridge(sessionId)
 
 		const handle = config.sandbox.get(sessionId)
