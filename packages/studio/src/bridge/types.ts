@@ -66,6 +66,14 @@ export interface SessionBridge {
 	start(): Promise<void>
 
 	/**
+	 * Interrupt the current prompt processing without closing the bridge.
+	 * Kills the active Claude process but keeps the sandbox alive so
+	 * the user can send a new message via iterate.
+	 * Returns true if a process was interrupted, false if nothing was running.
+	 */
+	interrupt(): boolean
+
+	/**
 	 * Close the bridge and release resources.
 	 * Cancels any active subscriptions.
 	 */

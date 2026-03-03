@@ -116,6 +116,11 @@ export class HostedStreamBridge implements SessionBridge {
 		})
 	}
 
+	interrupt(): boolean {
+		// HostedStreamBridge doesn't run Claude directly — nothing to interrupt
+		return false
+	}
+
 	close(): void {
 		this.closed = true
 		if (this.cancelSubscription) {

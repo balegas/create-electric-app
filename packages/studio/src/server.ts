@@ -1439,6 +1439,21 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ success: true })
 	})
 
+	// Interrupt the current prompt (like Escape in Claude Code)
+	// Kills the Claude process but keeps the sandbox alive for follow-up messages
+	app.post("/api/sessions/:id/interrupt", async (c) => {
+		const sessionId = c.req.param("id")
+
+		const bridge = bridges.get(sessionId)
+		if (bridge) {
+			bridge.interrupt()
+		}
+
+		rejectAllGates(sessionId)
+		config.sessions.update(sessionId, { status: "complete" })
+		return c.json({ ok: true })
+	})
+
 	// Cancel a running session
 	app.post("/api/sessions/:id/cancel", async (c) => {
 		const sessionId = c.req.param("id")
