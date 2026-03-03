@@ -1,5 +1,11 @@
 # @electric-agent/studio
 
+## 1.5.0
+
+### Minor Changes
+
+- 6c3de57: Start Claude Code automatically on resume from GitHub instead of leaving the session idle
+
 ## 1.4.0
 
 ### Minor Changes
