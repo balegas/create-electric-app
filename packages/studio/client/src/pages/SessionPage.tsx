@@ -202,6 +202,7 @@ export function SessionPage() {
 		try {
 			await cancelSession(effectiveId)
 			updateSession(effectiveId, { status: "cancelled" })
+			setActiveSession((prev) => (prev ? { ...prev, status: "cancelled" } : null))
 			refreshSessions()
 		} catch (err) {
 			console.error("Failed to cancel:", err)

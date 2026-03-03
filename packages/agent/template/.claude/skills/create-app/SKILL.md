@@ -263,6 +263,18 @@ _Last updated: [ISO date]_
 5. Create API routes (proxy + mutation)
 6. Create UI components
 
+## Deployment & Preview (Sprites / Cloud Sandboxes)
+
+When the app runs inside a cloud sandbox (Fly.io Sprite), the following constraints apply:
+
+- **Port 8080 is the ONLY externally accessible port.** The Sprite HTTP proxy routes all traffic to port 8080 inside the VM. The app MUST listen on this port — this is pre-configured via the `VITE_PORT` environment variable (set to `8080` in sprites, `5173` in Docker).
+- **The app MUST bind to `0.0.0.0`**, not `localhost`. This is pre-configured in `vite.config.ts` via `host: true`.
+- **`allowedHosts: true`** is set in `vite.config.ts` so that Sprite hostnames (`*.sprites.app`) can access the dev server. Without this, Vite rejects requests from non-localhost origins.
+- **The preview URL** follows the pattern: `https://<sprite-name>.sprites.app`
+- **`vite.config.ts` is pre-configured** with `port`, `host: true`, `allowedHosts: true`, and the Electric proxy — **DO NOT MODIFY it**. Changing it WILL break the preview.
+
+The `pnpm dev:start` script starts the Vite dev server in the background on the correct port. After finishing all code generation, always run migrations then `pnpm dev:start` so the user can preview.
+
 ## Scaffold Files (DO NOT MODIFY)
 
 - `src/db/index.ts` — Drizzle client setup
@@ -271,5 +283,6 @@ _Last updated: [ISO date]_
 - `src/components/ClientOnly.tsx` — SSR wrapper
 - `tests/helpers/schema-test-utils.ts` — generateValidRow/generateRowWithout
 - `vitest.config.ts` — test config
+- `vite.config.ts` — Vite dev server (port, host, allowedHosts, proxy — see Deployment section)
 - `docker-compose.yml` — Postgres + Electric
 - `drizzle.config.ts` — Drizzle config
