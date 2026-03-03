@@ -12,6 +12,8 @@ import {
 	setManualOauthToken as saveOauthToken,
 } from "../lib/credentials"
 
+type KeyType = "api-key" | "oauth"
+
 interface SettingsProps {
 	authSource: AuthSource
 	hasGhToken: boolean
@@ -27,37 +29,36 @@ export function Settings({
 	onClose,
 	onCopyLog,
 }: SettingsProps) {
-	const apiInputId = useId()
-	const oauthInputId = useId()
+	const credInputId = useId()
 	const ghInputId = useId()
-	const [apiKey, setApiKey] = useState("")
-	const [oauthToken, setOauthToken] = useState("")
+	const [keyType, setKeyType] = useState<KeyType>(
+		isManualOauth() || authSource === "oauth" ? "oauth" : "api-key",
+	)
+	const [credValue, setCredValue] = useState("")
 	const [ghPat, setGhPat] = useState("")
 	const [copied, setCopied] = useState(false)
 
-	const handleSaveApiKey = useCallback(() => {
-		if (!apiKey.trim()) return
-		saveApiKey(apiKey.trim())
-		setApiKey("")
-		onKeySaved()
-	}, [apiKey, onKeySaved])
+	const hasManualCredential = keyType === "api-key" ? authSource === "api-key" : isManualOauth()
 
-	const handleClearApiKey = useCallback(() => {
-		clearApiKey()
+	const handleSaveCredential = useCallback(() => {
+		if (!credValue.trim()) return
+		if (keyType === "api-key") {
+			saveApiKey(credValue.trim())
+		} else {
+			saveOauthToken(credValue.trim())
+		}
+		setCredValue("")
 		onKeySaved()
-	}, [onKeySaved])
+	}, [credValue, keyType, onKeySaved])
 
-	const handleSaveOauthToken = useCallback(() => {
-		if (!oauthToken.trim()) return
-		saveOauthToken(oauthToken.trim())
-		setOauthToken("")
+	const handleClearCredential = useCallback(() => {
+		if (keyType === "api-key") {
+			clearApiKey()
+		} else {
+			clearOauthToken()
+		}
 		onKeySaved()
-	}, [oauthToken, onKeySaved])
-
-	const handleClearOauthToken = useCallback(() => {
-		clearOauthToken()
-		onKeySaved()
-	}, [onKeySaved])
+	}, [keyType, onKeySaved])
 
 	const handleSaveGhPat = useCallback(() => {
 		if (!ghPat.trim()) return
@@ -71,24 +72,14 @@ export function Settings({
 		onKeySaved()
 	}, [onKeySaved])
 
-	const handleKeyDown = useCallback(
+	const handleCredKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {
 			if (e.key === "Enter") {
 				e.preventDefault()
-				handleSaveApiKey()
+				handleSaveCredential()
 			}
 		},
-		[handleSaveApiKey],
-	)
-
-	const handleOauthKeyDown = useCallback(
-		(e: React.KeyboardEvent) => {
-			if (e.key === "Enter") {
-				e.preventDefault()
-				handleSaveOauthToken()
-			}
-		},
-		[handleSaveOauthToken],
+		[handleSaveCredential],
 	)
 
 	const handleGhKeyDown = useCallback(
@@ -109,16 +100,25 @@ export function Settings({
 
 	useEscapeKey(onClose)
 
+	const placeholder =
+		keyType === "api-key"
+			? authSource === "api-key"
+				? "Enter new key to override..."
+				: "sk-ant-..."
+			: isManualOauth()
+				? "Enter new token to override..."
+				: "Paste OAuth token..."
+
 	return createPortal(
 		<div className="modal-overlay" onClick={onClose}>
 			<div className="modal-card" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-title">Settings</div>
 
-				{/* Anthropic API Key */}
+				{/* Claude Authentication */}
 				<div className="settings-field" style={{ marginTop: 12 }}>
 					<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-						<label htmlFor={apiInputId} style={{ margin: 0 }}>
-							Anthropic API Key
+						<label htmlFor={credInputId} style={{ margin: 0 }}>
+							Claude Authentication
 						</label>
 						<span className={`settings-status ${authSource ? "active" : "missing"}`}>
 							{authSource === "keychain"
@@ -130,62 +130,48 @@ export function Settings({
 										: "No credentials"}
 						</span>
 					</div>
-					<div className="settings-input-row">
+					{authSource === "keychain" && (
+						<div className="settings-note">
+							Credentials detected from the macOS Keychain. No manual key entry needed.
+						</div>
+					)}
+					{authSource !== "keychain" && (
+						<div className="settings-note">
+							On macOS, if you have Claude credentials in the Keychain they will be used
+							automatically — no need to enter a key manually.
+						</div>
+					)}
+					<div className="settings-input-row" style={{ marginTop: 8 }}>
+						<select
+							className="settings-select"
+							value={keyType}
+							onChange={(e) => {
+								setKeyType(e.target.value as KeyType)
+								setCredValue("")
+							}}
+						>
+							<option value="api-key">API Key</option>
+							<option value="oauth">OAuth Token</option>
+						</select>
 						<input
-							id={apiInputId}
+							id={credInputId}
 							type="password"
-							value={apiKey}
-							onChange={(e) => setApiKey(e.target.value)}
-							onKeyDown={handleKeyDown}
-							placeholder={authSource === "api-key" ? "Enter new key to override..." : "sk-ant-..."}
+							value={credValue}
+							onChange={(e) => setCredValue(e.target.value)}
+							onKeyDown={handleCredKeyDown}
+							placeholder={placeholder}
 						/>
-						{apiKey.trim() ? (
-							<button type="button" onClick={handleSaveApiKey} className="primary">
+						{credValue.trim() ? (
+							<button type="button" onClick={handleSaveCredential} className="primary">
 								Save
 							</button>
 						) : (
-							authSource === "api-key" && (
-								<button type="button" onClick={handleClearApiKey} className="btn btn-danger">
+							hasManualCredential && (
+								<button type="button" onClick={handleClearCredential} className="btn btn-danger">
 									Remove
 								</button>
 							)
 						)}
-					</div>
-				</div>
-
-				{/* OAuth Token Override */}
-				<div className="settings-field">
-					<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-						<label htmlFor={oauthInputId} style={{ margin: 0 }}>
-							OAuth Token
-						</label>
-						{isManualOauth() && <span className="settings-status active">Manual override</span>}
-					</div>
-					<div className="settings-input-row">
-						<input
-							id={oauthInputId}
-							type="password"
-							value={oauthToken}
-							onChange={(e) => setOauthToken(e.target.value)}
-							onKeyDown={handleOauthKeyDown}
-							placeholder={
-								isManualOauth() ? "Enter new token to override..." : "Paste OAuth token..."
-							}
-						/>
-						{oauthToken.trim() ? (
-							<button type="button" onClick={handleSaveOauthToken} className="primary">
-								Save
-							</button>
-						) : (
-							isManualOauth() && (
-								<button type="button" onClick={handleClearOauthToken} className="btn btn-danger">
-									Remove
-								</button>
-							)
-						)}
-					</div>
-					<div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
-						Override the OAuth token used for Claude authentication. Takes priority over keychain.
 					</div>
 				</div>
 
