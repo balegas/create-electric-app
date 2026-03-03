@@ -389,7 +389,11 @@
 		padding: 12px;
 	}
 
-	/* ---- Modals: full-width on mobile ---- */
+	/* ---- Modals: full-width on mobile, above sidebar ---- */
+	.modal-overlay {
+		z-index: 300;
+	}
+
 	.modal-card {
 		width: 95%;
 		max-width: none;

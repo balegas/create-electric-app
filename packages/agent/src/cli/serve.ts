@@ -9,7 +9,6 @@ import { DockerSandboxProvider } from "@electric-agent/studio/sandbox/docker"
 import { SpritesSandboxProvider } from "@electric-agent/studio/sandbox/sprites"
 import { startWebServer } from "@electric-agent/studio/server"
 import { getStreamConfig } from "@electric-agent/studio/streams"
-import { inferProjectName } from "../agents/clarifier.js"
 
 export async function serveCommand(opts: {
 	port?: number
@@ -79,24 +78,7 @@ export async function serveCommand(opts: {
 		console.log("[serve] Sandbox runtime: Docker (default)")
 	}
 
-	// Determine bridge mode:
-	//   BRIDGE_MODE=stdio       → always stdin/stdout (required for Daytona without internet)
-	//   BRIDGE_MODE=stream      → always hosted Durable Streams (default for Docker & Sprites)
-	//   BRIDGE_MODE=claude-code → Claude Code CLI in sandbox with stream-json I/O
-	//   (unset)                 → "stdio" for Daytona, "stream" for Docker/Sprites
-	const bridgeModeEnv = process.env.BRIDGE_MODE?.toLowerCase()
-	let bridgeMode: "stream" | "stdio" | "claude-code"
-	if (bridgeModeEnv === "claude-code") {
-		bridgeMode = "claude-code"
-	} else if (bridgeModeEnv === "stdio") {
-		bridgeMode = "stdio"
-	} else if (bridgeModeEnv === "stream") {
-		bridgeMode = "stream"
-	} else {
-		// Default: Daytona uses stdio (required — no internet), others use stream
-		bridgeMode = sandbox.runtime === "daytona" ? "stdio" : "stream"
-	}
-	console.log(`[serve] Bridge mode: ${bridgeMode}`)
+	console.log(`[serve] Bridge mode: claude-code`)
 
 	// Create room registry (hydrates from durable stream)
 	console.log("[serve] Hydrating room registry from durable stream...")
@@ -108,8 +90,7 @@ export async function serveCommand(opts: {
 		rooms,
 		sandbox,
 		streamConfig,
-		bridgeMode,
-		inferProjectName,
+		bridgeMode: "claude-code",
 	})
 
 	console.log(`\nWeb UI ready at http://127.0.0.1:${port}`)

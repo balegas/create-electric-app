@@ -11,7 +11,7 @@
  * `--resume <sessionId>` so it picks up the previous conversation context.
  */
 
-import { type ChildProcess, spawn } from "node:child_process"
+import { type ChildProcess, execFileSync, spawn } from "node:child_process"
 import * as readline from "node:readline"
 import { DurableStream } from "@durable-streams/client"
 import type { EngineEvent } from "@electric-agent/protocol"
@@ -31,6 +31,8 @@ export interface ClaudeCodeDockerConfig {
 	allowedTools?: string[]
 	/** Additional CLI flags */
 	extraFlags?: string[]
+	/** Studio server port — used to set up AskUserQuestion hooks inside the container */
+	studioPort?: number
 }
 
 const DEFAULT_ALLOWED_TOOLS = [
@@ -43,6 +45,7 @@ const DEFAULT_ALLOWED_TOOLS = [
 	"WebSearch",
 	"TodoWrite",
 	"AskUserQuestion",
+	"Skill",
 ]
 
 export class ClaudeCodeDockerBridge implements SessionBridge {
@@ -65,6 +68,8 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 	private running = false
 	/** Whether the parser already emitted a session_end (from a "result" message) */
 	private resultReceived = false
+	/** Whether hooks have been installed in the container */
+	private hooksInstalled = false
 
 	constructor(
 		sessionId: string,
@@ -177,6 +182,76 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 	// -----------------------------------------------------------------------
 
 	/**
+	 * Install Claude Code hooks inside the container so that AskUserQuestion
+	 * blocks until the user answers in the studio UI.
+	 * The hook script forwards the PreToolUse event to the studio server via HTTP,
+	 * which blocks the response until the gate is resolved.
+	 */
+	private installHooks(): void {
+		const port = this.config.studioPort
+		if (!port) return
+
+		const hookDir = `${this.config.cwd}/.claude/hooks`
+		const settingsFile = `${this.config.cwd}/.claude/settings.local.json`
+		// Studio server is on the host — use host.docker.internal to reach it
+		const studioUrl = `http://host.docker.internal:${port}`
+
+		const forwardScript = `#!/bin/bash
+# Forward AskUserQuestion hook events to Electric Agent studio.
+# Blocks until the user answers in the web UI.
+BODY="$(cat)"
+RESPONSE=$(curl -s -X POST "${studioUrl}/api/sessions/${this.sessionId}/hook-event" \\
+  -H "Content-Type: application/json" \\
+  -d "\${BODY}" \\
+  --max-time 360 \\
+  --connect-timeout 5 \\
+  2>/dev/null)
+if echo "\${RESPONSE}" | grep -q '"hookSpecificOutput"'; then
+  echo "\${RESPONSE}"
+fi
+exit 0`
+
+		// Configure hooks in settings.local.json.
+		// Tool permissions come from --allowedTools CLI flag instead.
+		// Hook format: each event has matcher groups, each with a `hooks` array.
+		const settings = JSON.stringify({
+			hooks: {
+				PreToolUse: [
+					{
+						matcher: "AskUserQuestion",
+						hooks: [
+							{
+								type: "command",
+								command: `${hookDir}/forward.sh`,
+							},
+						],
+					},
+				],
+			},
+		})
+
+		try {
+			// Use base64 encoding to avoid heredoc delimiter issues in docker exec
+			const forwardB64 = Buffer.from(forwardScript).toString("base64")
+			const settingsB64 = Buffer.from(settings).toString("base64")
+			const setupCmd = [
+				`mkdir -p '${hookDir}'`,
+				`echo '${forwardB64}' | base64 -d > '${hookDir}/forward.sh'`,
+				`chmod +x '${hookDir}/forward.sh'`,
+				`echo '${settingsB64}' | base64 -d > '${settingsFile}'`,
+			].join(" && ")
+
+			execFileSync("docker", ["exec", this.containerId, "bash", "-c", setupCmd], {
+				timeout: 10_000,
+				stdio: ["ignore", "pipe", "pipe"],
+			})
+			console.log(`[claude-code-docker] Installed AskUserQuestion hooks in container`)
+		} catch (err) {
+			console.error(`[claude-code-docker] Failed to install hooks:`, err)
+		}
+	}
+
+	/**
 	 * Spawn a new Claude Code process. Called for both the initial prompt
 	 * and follow-up iterate messages (with --resume).
 	 */
@@ -192,15 +267,25 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 			this.proc = null
 		}
 
+		// Install hooks on first spawn (they persist for resume spawns)
+		if (!this.hooksInstalled) {
+			this.installHooks()
+			this.hooksInstalled = true
+		}
+
 		// Reset parser state for the new process
 		this.parser = createStreamJsonParser()
 		this.resultReceived = false
 		this.running = true
 
-		const allowedTools = this.config.allowedTools ?? DEFAULT_ALLOWED_TOOLS
 		const model = this.config.model ?? "claude-sonnet-4-6"
 
-		// Build the claude CLI command
+		// Build the claude CLI command.
+		// Use --allowedTools to grant permissions (keeps hooks firing, unlike
+		// --dangerously-skip-permissions which bypasses hooks entirely).
+		// Use --settings to pass hook configuration directly (more reliable
+		// than settings.local.json which may not be loaded by all versions).
+		const allowedTools = this.config.allowedTools ?? DEFAULT_ALLOWED_TOOLS
 		const claudeArgs = [
 			"-p",
 			prompt,
@@ -209,9 +294,9 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 			"--verbose",
 			"--model",
 			model,
-			"--dangerously-skip-permissions",
-			"--allowedTools",
-			allowedTools.join(","),
+			...(this.hooksInstalled
+				? ["--allowedTools", allowedTools.join(",")]
+				: ["--dangerously-skip-permissions"]),
 			...(this.config.extraFlags ?? []),
 		]
 

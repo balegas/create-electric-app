@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
 import { ActionGroup, type ActionGroupEntry } from "./ActionGroup"
-import {
-	ConsoleLogEntry,
-	ConsoleTextEntry,
-	ConsoleThinkingEntry,
-	ConsoleUserMessage,
-} from "./ConsoleEntry"
+import { ConsoleLogEntry, ConsoleTextEntry, ConsoleUserMessage } from "./ConsoleEntry"
 import { GatePrompt } from "./GatePrompt"
 import { TodoWidget } from "./TodoWidget"
 import { ToolExecution } from "./ToolExecution"
@@ -22,14 +17,9 @@ interface ConsoleProps {
 /** Minimum action entries to trigger grouping. */
 const GROUP_THRESHOLD = 3
 
-/** Entries that are "actions" — tool calls and thinking between boundaries. */
+/** Entries that are "actions" — tool calls between boundaries. */
 function isActionEntry(entry: ConsoleEntry): boolean {
-	return entry.kind === "tool_use" || entry.kind === "assistant_thinking"
-}
-
-/** Boundary entries break action groups — user messages, assistant text, gates, logs, todos. */
-function isBoundaryEntry(entry: ConsoleEntry): boolean {
-	return !isActionEntry(entry)
+	return entry.kind === "tool_use"
 }
 
 /**
@@ -41,7 +31,7 @@ type RenderItem =
 
 /**
  * Walk the flat entries array and produce RenderItems, collapsing consecutive
- * action entries (tool_use + assistant_thinking) between boundary entries
+ * action entries (tool_use) between boundary entries
  * into a single collapsible group showing just the tail.
  */
 function buildRenderItems(entries: ConsoleEntry[], durations: (string | null)[]): RenderItem[] {
@@ -200,8 +190,6 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 						)
 					case "assistant_message":
 						return <ConsoleTextEntry key={`text-${i}`} entry={entry} duration={duration} />
-					case "assistant_thinking":
-						return <ConsoleThinkingEntry key={`thinking-${i}`} entry={entry} duration={duration} />
 					case "todo_widget":
 						return <TodoWidget key={`todo-${i}`} entry={entry} />
 					case "gate":

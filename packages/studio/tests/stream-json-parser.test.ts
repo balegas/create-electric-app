@@ -35,7 +35,7 @@ describe("stream-json-parser", () => {
 		assert.equal((events[0] as { text: string }).text, "Hello, I will help you.")
 	})
 
-	it("parses assistant thinking to assistant_thinking", () => {
+	it("silently ignores assistant thinking blocks", () => {
 		const { parse } = createStreamJsonParser()
 		const events = parse(
 			JSON.stringify({
@@ -46,9 +46,7 @@ describe("stream-json-parser", () => {
 				},
 			}),
 		)
-		assert.equal(events.length, 1)
-		assert.equal(events[0].type, "assistant_thinking")
-		assert.equal((events[0] as { text: string }).text, "Let me think about this...")
+		assert.equal(events.length, 0)
 	})
 
 	it("parses tool_use to pre_tool_use", () => {
@@ -255,7 +253,7 @@ describe("stream-json-parser", () => {
 		assert.equal(events.length, 0)
 	})
 
-	it("parses result to cost_update + session_end", () => {
+	it("parses result to session_end", () => {
 		const { parse } = createStreamJsonParser()
 		const events = parse(
 			JSON.stringify({
@@ -267,11 +265,9 @@ describe("stream-json-parser", () => {
 				duration_ms: 60000,
 			}),
 		)
-		assert.equal(events.length, 2)
-		assert.equal(events[0].type, "cost_update")
-		assert.equal((events[0] as { totalCostUsd: number }).totalCostUsd, 0.42)
-		assert.equal(events[1].type, "session_end")
-		assert.equal((events[1] as { success: boolean }).success, true)
+		assert.equal(events.length, 1)
+		assert.equal(events[0].type, "session_end")
+		assert.equal((events[0] as { success: boolean }).success, true)
 	})
 
 	it("parses non-success result as session_end with success=false", () => {
@@ -283,13 +279,12 @@ describe("stream-json-parser", () => {
 				cost_usd: 1.5,
 			}),
 		)
-		assert.equal(events.length, 2)
-		assert.equal(events[0].type, "cost_update")
-		assert.equal(events[1].type, "session_end")
-		assert.equal((events[1] as { success: boolean }).success, false)
+		assert.equal(events.length, 1)
+		assert.equal(events[0].type, "session_end")
+		assert.equal((events[0] as { success: boolean }).success, false)
 	})
 
-	it("handles multi-block assistant messages", () => {
+	it("handles multi-block assistant messages (thinking blocks ignored)", () => {
 		const { parse } = createStreamJsonParser()
 		const events = parse(
 			JSON.stringify({
@@ -309,10 +304,9 @@ describe("stream-json-parser", () => {
 				},
 			}),
 		)
-		assert.equal(events.length, 3)
-		assert.equal(events[0].type, "assistant_thinking")
-		assert.equal(events[1].type, "assistant_message")
-		assert.equal(events[2].type, "pre_tool_use")
+		assert.equal(events.length, 2)
+		assert.equal(events[0].type, "assistant_message")
+		assert.equal(events[1].type, "pre_tool_use")
 	})
 
 	it("ignores empty lines and non-JSON", () => {
@@ -346,11 +340,5 @@ describe("stream-json-parser", () => {
 		const { parse, state } = createStreamJsonParser()
 		parse(JSON.stringify({ type: "system", subtype: "init", session_id: "abc-123" }))
 		assert.equal(state.sessionId, "abc-123")
-	})
-
-	it("tracks total cost from result", () => {
-		const { parse, state } = createStreamJsonParser()
-		parse(JSON.stringify({ type: "result", subtype: "success", cost_usd: 2.5 }))
-		assert.equal(state.totalCost, 2.5)
 	})
 })

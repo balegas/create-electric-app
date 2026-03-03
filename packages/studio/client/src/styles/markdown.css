@@ -158,6 +158,20 @@
 	color: var(--text-muted);
 }
 
+/* Headings in inline context render as normal text for visual consistency */
+.markdown-inline h1,
+.markdown-inline h2,
+.markdown-inline h3,
+.markdown-inline h4,
+.markdown-inline h5,
+.markdown-inline h6 {
+	font-size: inherit;
+	font-weight: 600;
+	margin: 0;
+	line-height: inherit;
+	color: inherit;
+}
+
 .markdown-inline p {
 	margin-bottom: 0.3em;
 }

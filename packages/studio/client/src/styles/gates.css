@@ -366,3 +366,12 @@
 .gate-option-group-vert .gate-option {
 	flex: none;
 }
+
+.gate-option.gate-option-other {
+	border-style: dashed;
+	opacity: 0.7;
+}
+
+.gate-option.gate-option-other:hover {
+	opacity: 1;
+}

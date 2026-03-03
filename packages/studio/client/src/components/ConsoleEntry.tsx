@@ -48,28 +48,6 @@ export function ConsoleUserMessage({
 	)
 }
 
-export function ConsoleThinkingEntry({
-	entry,
-	duration,
-}: {
-	entry: Extract<ConsoleEntryType, { kind: "assistant_thinking" }>
-	duration: string | null
-}) {
-	const label = entry.agent || "agent"
-	return (
-		<details className="thinking-inline">
-			<summary>
-				<span className="thinking-label">[{label}] Thinking</span>
-				<span className="thinking-preview">{entry.text.slice(0, 100)}...</span>
-				<Duration value={duration} />
-			</summary>
-			<div className="thinking-body">
-				<Markdown inline>{entry.text}</Markdown>
-			</div>
-		</details>
-	)
-}
-
 const COLLAPSE_THRESHOLD = 300
 
 export function ConsoleTextEntry({

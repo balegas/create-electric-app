@@ -57,13 +57,6 @@ export interface CreateSandboxOpts {
 	ghToken?: string
 	projectName?: string
 	infra?: InfraConfig
-	/** Stream env vars to inject into the sandbox for --stream mode */
-	streamEnv?: Record<string, string>
-	/**
-	 * If true, the sandbox should NOT auto-start the headless agent.
-	 * The bridge will start it via stdin/stdout (session API or docker exec).
-	 */
-	deferAgentStart?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +73,6 @@ export interface SandboxProvider {
 	// Lifecycle
 	create(sessionId: string, opts?: CreateSandboxOpts): Promise<SandboxHandle>
 	destroy(handle: SandboxHandle): Promise<void>
-	restartAgent(handle: SandboxHandle): Promise<SandboxHandle>
 	get(sessionId: string): SandboxHandle | undefined
 	list(): SandboxHandle[]
 

@@ -3,7 +3,12 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { gitInit } from "../git/index.js"
-import type { ProgressReporter } from "../progress/reporter.js"
+
+/** Minimal progress reporter interface (formerly in progress/reporter.ts) */
+interface ProgressReporter {
+	log(level: string, message: string): void
+	verboseMode?: boolean
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const templateDir = path.resolve(__dirname, "../../template")

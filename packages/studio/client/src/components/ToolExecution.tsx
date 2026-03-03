@@ -1,6 +1,7 @@
 import { highlight } from "sugar-high"
 import type { ConsoleEntry } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
+import { Markdown } from "./Markdown"
 
 type ToolEntry = Extract<ConsoleEntry, { kind: "tool_use" }>
 
@@ -61,6 +62,13 @@ function HighlightedPre({ text, maxLen }: { text: string; maxLen: number }) {
 	return <pre dangerouslySetInnerHTML={{ __html: html }} />
 }
 
+/** Check if a Write targets a markdown file — show full content inline */
+function isMarkdownWrite(entry: ToolEntry): boolean {
+	if (entry.tool_name !== "Write") return false
+	const filePath = (entry.tool_input.file_path as string) || ""
+	return filePath.endsWith(".md")
+}
+
 export function ToolExecution({ entry, duration }: { entry: ToolEntry; duration: string | null }) {
 	const isLoading = entry.tool_response === null
 	const isBash = entry.tool_name === "Bash" || entry.tool_name === "bash"
@@ -78,6 +86,25 @@ export function ToolExecution({ entry, duration }: { entry: ToolEntry; duration:
 					{entry.tool_response !== null && (
 						<HighlightedPre text={entry.tool_response} maxLen={5000} />
 					)}
+				</div>
+			</details>
+		)
+	}
+
+	// Markdown file writes: show full content expanded with rendered markdown
+	if (isMarkdownWrite(entry)) {
+		const content = (entry.tool_input.content as string) || ""
+		const filePath = (entry.tool_input.file_path as string) || "unknown file"
+		return (
+			<details className="tool-inline" open>
+				<summary>
+					{entry.agent && <span className="tool-inline-agent">[{entry.agent}]</span>}
+					<span className="tool-inline-name">{entry.tool_name}</span>
+					<span className="tool-inline-summary">{filePath}</span>
+					{isLoading ? <span className="spinner-inline" /> : <Duration value={duration} />}
+				</summary>
+				<div className="tool-inline-body">
+					<Markdown>{content}</Markdown>
 				</div>
 			</details>
 		)

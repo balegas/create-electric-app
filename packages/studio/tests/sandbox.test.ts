@@ -28,7 +28,6 @@ describe("DockerSandboxProvider — interface", () => {
 		assert.equal(typeof provider.exec, "function")
 		assert.equal(typeof provider.gitStatus, "function")
 		assert.equal(typeof provider.createFromRepo, "function")
-		assert.equal(typeof provider.restartAgent, "function")
 	})
 
 	it("get() returns undefined for unknown session", () => {
@@ -113,7 +112,6 @@ describe("DaytonaSandboxProvider — interface", () => {
 		assert.equal(typeof provider.exec, "function")
 		assert.equal(typeof provider.gitStatus, "function")
 		assert.equal(typeof provider.createFromRepo, "function")
-		assert.equal(typeof provider.restartAgent, "function")
 	})
 
 	it("get() returns undefined for unknown session", () => {

@@ -43,6 +43,8 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 		sections.push("## Current Task")
 		sections.push(opts.description)
 		sections.push("")
+		sections.push(SKILL_AUTO_TRIGGER)
+		sections.push("")
 	}
 
 	sections.push(SCAFFOLD_STRUCTURE)
@@ -250,6 +252,23 @@ This is needed because useLiveQuery uses useSyncExternalStore without getServerS
 // ---------------------------------------------------------------------------
 // Claude Code–only sections
 // ---------------------------------------------------------------------------
+
+const SKILL_AUTO_TRIGGER = `## App Generation Pipeline (CRITICAL)
+When building a new app, you MUST use the /create-app skill. This skill is available at .claude/skills/create-app/SKILL.md and provides the structured phased pipeline for generating Electric SQL apps.
+
+Invoke it with: /create-app <description>
+
+The skill enforces the correct phase order:
+1. Clarification (if description is vague)
+2. Plan generation (PLAN.md with data model + tasks)
+3. Data model validation (schema + zod-schemas + tests — STOP if tests fail)
+4. Collections & API routes
+5. UI components
+6. Build & lint
+7. Final tests
+8. Architecture reference (ARCHITECTURE.md)
+
+Do NOT skip phases or code ad-hoc. Always follow the skill's structured pipeline.`
 
 const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
 Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.

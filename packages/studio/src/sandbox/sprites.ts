@@ -150,13 +150,6 @@ export class SpritesSandboxProvider implements SandboxProvider {
 			envVars.GH_TOKEN = opts.ghToken
 		}
 
-		// Pass stream env vars for hosted Durable Streams communication
-		if (opts?.streamEnv) {
-			for (const [key, value] of Object.entries(opts.streamEnv)) {
-				envVars[key] = value
-			}
-		}
-
 		// Write env vars to a profile file so all commands inherit them.
 		// NOTE: sprite.exec() splits the command string by whitespace, so shell
 		// features (pipes, redirects, heredocs) don't work. Use execFile with
@@ -206,35 +199,6 @@ export class SpritesSandboxProvider implements SandboxProvider {
 				// Sprite may already be deleted
 			}
 		}
-	}
-
-	async restartAgent(handle: SandboxHandle): Promise<SandboxHandle> {
-		const sprite = this.getSprite(handle)
-
-		// Kill any running agent process — the bridge will restart it
-		try {
-			await sprite.execFile("bash", ["-c", "pkill -f 'electric-agent headless' || true"])
-		} catch {
-			// Process may not be running
-		}
-
-		const newHandle: SandboxHandle = { ...handle }
-		this.handles.set(handle.sessionId, newHandle)
-		return newHandle
-	}
-
-	/**
-	 * Launch the headless agent process in the sprite without blocking.
-	 * Uses spawn() (event-based API) instead of execFile() which waits for exit.
-	 */
-	async startAgent(handle: SandboxHandle): Promise<void> {
-		const sprite = this.getSprite(handle)
-		const cmd = sprite.spawn("bash", [
-			"-c",
-			"source /etc/profile.d/npm-global.sh 2>/dev/null; source /etc/profile.d/electric-agent.sh && electric-agent headless > /tmp/agent-stdout.log 2> /tmp/agent-stderr.log",
-		])
-		await cmd.start()
-		// Don't await cmd.wait() — we want the agent to run in the background
 	}
 
 	/** Get the underlying Sprite SDK object for bridge communication */

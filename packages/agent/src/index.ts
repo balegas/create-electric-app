@@ -3,7 +3,6 @@
 import { createRequire } from "node:module"
 import { Command } from "commander"
 import dotenv from "dotenv"
-import { headlessCommand } from "./cli/headless.js"
 import { serveCommand } from "./cli/serve.js"
 import { findUp } from "./find-env.js"
 import { scaffold } from "./scaffold/index.js"
@@ -22,13 +21,6 @@ program
 	)
 	.version(version)
 	.option("--verbose", "Enable verbose logging")
-
-program
-	.command("headless")
-	.description("Run in headless mode communicating via hosted Durable Streams")
-	.action(async () => {
-		await headlessCommand()
-	})
 
 program
 	.command("serve")
