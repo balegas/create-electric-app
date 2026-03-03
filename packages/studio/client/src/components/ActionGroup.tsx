@@ -33,7 +33,7 @@ function aggregateDuration(items: ActionGroupEntry[]): string | null {
 	if (!any) return null
 	if (totalMs < 1000) return `${totalMs}ms`
 	const seconds = totalMs / 1000
-	if (seconds < 60) return `${seconds.toFixed(1)}s`
+	if (seconds < 60) return `${seconds.toFixed(0)}s`
 	const minutes = Math.floor(seconds / 60)
 	const remainingSeconds = seconds % 60
 	return `${minutes}m ${remainingSeconds.toFixed(0)}s`
