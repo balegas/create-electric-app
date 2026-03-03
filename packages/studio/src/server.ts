@@ -2126,7 +2126,39 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			return c.json({ error: "Failed to create event stream" }, 500)
 		}
 
-		try {
+		// Create the initial session bridge for emitting progress events
+		const bridge = getOrCreateBridge(config, sessionId)
+
+		// Record session as running (like normal session creation)
+		const sandboxProjectDir = `/home/agent/workspace/${repoName}`
+		const session: SessionInfo = {
+			id: sessionId,
+			projectName: repoName,
+			sandboxProjectDir,
+			description: `Resumed from ${body.repoUrl}`,
+			createdAt: new Date().toISOString(),
+			lastActiveAt: new Date().toISOString(),
+			status: "running",
+		}
+		config.sessions.add(session)
+
+		// Write user prompt to the stream so it shows in the UI
+		await bridge.emit({
+			type: "user_prompt",
+			message: `Resume from ${body.repoUrl}`,
+			ts: ts(),
+		})
+
+		// Launch async flow: clone repo → set up Claude Code → start exploring
+		const asyncFlow = async () => {
+			// 1. Clone the repo into a sandbox
+			await bridge.emit({
+				type: "log",
+				level: "build",
+				message: "Cloning repository...",
+				ts: ts(),
+			})
+
 			const handle = await config.sandbox.createFromRepo(sessionId, body.repoUrl, {
 				branch: body.branch,
 				apiKey: body.apiKey,
@@ -2134,18 +2166,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				ghToken: body.ghToken,
 			})
 
-			// Get git state from cloned repo inside the container
+			// Get git state from cloned repo
 			const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
 
-			const session: SessionInfo = {
-				id: sessionId,
-				projectName: repoName,
-				sandboxProjectDir: handle.projectDir,
-				description: `Resumed from ${body.repoUrl}`,
-				createdAt: new Date().toISOString(),
-				lastActiveAt: new Date().toISOString(),
-				status: "complete",
+			config.sessions.update(sessionId, {
 				appPort: handle.port,
+				sandboxProjectDir: handle.projectDir,
+				previewUrl: handle.previewUrl,
 				git: {
 					branch: gs.branch ?? body.branch ?? "main",
 					remoteUrl: body.repoUrl,
@@ -2154,24 +2181,143 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					lastCommitMessage: gs.lastCommitMessage ?? null,
 					lastCheckpointAt: null,
 				},
-			}
-			config.sessions.add(session)
+			})
 
-			// Write initial message to stream
-			const bridge = getOrCreateBridge(config, sessionId)
 			await bridge.emit({
 				type: "log",
 				level: "done",
-				message: `Resumed from ${body.repoUrl}`,
+				message: "Repository cloned",
 				ts: ts(),
 			})
 
-			const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
-			return c.json({ sessionId, session, sessionToken, appPort: handle.port }, 201)
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : "Failed to resume from repo"
-			return c.json({ error: msg }, 500)
+			// 2. Write CLAUDE.md to the sandbox workspace
+			const claudeMd = generateClaudeMd({
+				description: `Resumed from ${body.repoUrl}`,
+				projectName: repoName,
+				projectDir: handle.projectDir,
+				runtime: config.sandbox.runtime,
+			})
+			try {
+				await config.sandbox.exec(
+					handle,
+					`cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF`,
+				)
+			} catch (err) {
+				console.error(`[session:${sessionId}] Failed to write CLAUDE.md:`, err)
+			}
+
+			// Ensure the create-app skill is present in the project
+			if (createAppSkillContent) {
+				try {
+					const skillDir = `${handle.projectDir}/.claude/skills/create-app`
+					const skillB64 = Buffer.from(createAppSkillContent).toString("base64")
+					await config.sandbox.exec(
+						handle,
+						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+					)
+				} catch (err) {
+					console.error(`[session:${sessionId}] Failed to write create-app skill:`, err)
+				}
+			}
+
+			// 3. Create Claude Code bridge with a resume prompt
+			const resumePrompt =
+				"You are resuming work on an existing project. Explore the codebase to understand its structure, then wait for instructions from the user."
+
+			const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
+				config.sandbox.runtime === "sprites"
+					? {
+							prompt: resumePrompt,
+							cwd: handle.projectDir,
+							studioUrl: resolveStudioUrl(config.port),
+						}
+					: {
+							prompt: resumePrompt,
+							cwd: handle.projectDir,
+							studioPort: config.port,
+						}
+			const ccBridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
+
+			// 4. Register event listeners (reuse pattern from normal flow)
+			ccBridge.onAgentEvent((event) => {
+				if (event.type === "session_start") {
+					const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+					console.log(`[session:${sessionId}] Captured Claude Code session ID: ${ccSessionId}`)
+					if (ccSessionId) {
+						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
+					}
+				}
+			})
+
+			ccBridge.onComplete(async (success) => {
+				const updates: Partial<SessionInfo> = {
+					status: success ? "complete" : "error",
+				}
+				try {
+					const latestGs = await config.sandbox.gitStatus(handle, handle.projectDir)
+					if (latestGs.initialized) {
+						const existing = config.sessions.get(sessionId)
+						updates.git = {
+							branch: latestGs.branch ?? "main",
+							remoteUrl: existing?.git?.remoteUrl ?? null,
+							repoName: existing?.git?.repoName ?? null,
+							repoVisibility: existing?.git?.repoVisibility,
+							lastCommitHash: latestGs.lastCommitHash ?? null,
+							lastCommitMessage: latestGs.lastCommitMessage ?? null,
+							lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
+						}
+					}
+				} catch {
+					// Container may already be stopped
+				}
+				config.sessions.update(sessionId, updates)
+
+				// Check if the app is running after completion
+				if (success) {
+					try {
+						const appRunning = await config.sandbox.isAppRunning(handle)
+						if (appRunning) {
+							await ccBridge.emit({
+								type: "app_ready",
+								port: handle.port ?? session.appPort,
+								ts: ts(),
+							})
+						}
+					} catch {
+						// Container may already be stopped
+					}
+				}
+			})
+
+			// 5. Start the bridge and send command
+			await ccBridge.emit({
+				type: "log",
+				level: "build",
+				message: "Starting Claude Code...",
+				ts: ts(),
+			})
+
+			console.log(`[session:${sessionId}] Starting bridge listener...`)
+			await ccBridge.start()
+			console.log(`[session:${sessionId}] Bridge started, sending 'new' command...`)
+
+			const newCmd: Record<string, unknown> = {
+				command: "new",
+				description: resumePrompt,
+				projectName: repoName,
+				baseDir: "/home/agent/workspace",
+			}
+			await ccBridge.sendCommand(newCmd)
+			console.log(`[session:${sessionId}] Command sent, waiting for agent...`)
 		}
+
+		asyncFlow().catch(async (err) => {
+			console.error(`[session:${sessionId}] Resume flow failed:`, err)
+			config.sessions.update(sessionId, { status: "error" })
+		})
+
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+		return c.json({ sessionId, session, sessionToken }, 201)
 	})
 
 	// Serve static SPA files (if built)
