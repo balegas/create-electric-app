@@ -294,11 +294,12 @@ exit 0`
 		const escapedArgs = claudeArgs.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")
 		const fullCmd = `source /etc/profile.d/npm-global.sh 2>/dev/null; source /etc/profile.d/electric-agent.sh 2>/dev/null; cd '${this.config.cwd}' && claude ${escapedArgs}`
 
-		// Use SpriteCommand with tty:true (for streaming) but NOT detachable
-		// (detachable creates a tmux session which causes immediate exit)
-		this.cmd = new SpriteCommand(this.sprite, "bash", ["-c", fullCmd], {
-			tty: true,
-		})
+		// Use SpriteCommand with tty:false so stdout/stderr are cleanly
+		// separated via binary WebSocket stream IDs. tty:true merges them
+		// through a PTY which corrupts hook response JSON and prevents
+		// AskUserQuestion gates from blocking properly.
+		// Do NOT use detachable (creates a tmux session causing immediate exit).
+		this.cmd = new SpriteCommand(this.sprite, "bash", ["-c", fullCmd])
 		this.cmd.start()
 
 		console.log(
@@ -355,11 +356,10 @@ exit 0`
 	}
 
 	private handleLine(line: string): void {
-		// Strip ANSI escape sequences and terminal control chars added by tty mode
-		const cleaned = stripAnsi(line).trim()
-		if (!cleaned) return
+		const trimmed = line.trim()
+		if (!trimmed) return
 
-		const events = this.parser.parse(cleaned)
+		const events = this.parser.parse(trimmed)
 		for (const event of events) {
 			this.dispatchEvent(event)
 		}
@@ -419,15 +419,4 @@ exit 0`
 		})
 		this.cmd.stdin.write(`${msg}\n`)
 	}
-}
-
-/** Strip ANSI escape sequences and control characters from tty output */
-function stripAnsi(str: string): string {
-	const ESC = "\x1b"
-	const csi = new RegExp(`${ESC}\\[[0-9;]*[a-zA-Z]`, "g")
-	const osc1 = new RegExp(`${ESC}\\][^\\x07]*\\x07`, "g")
-	const osc2 = new RegExp(`${ESC}\\][^${ESC}]*${ESC}\\\\`, "g")
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: strip C0 control chars except \n \r
-	const ctrl = /[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/g
-	return str.replace(csi, "").replace(osc1, "").replace(osc2, "").replace(ctrl, "")
 }
