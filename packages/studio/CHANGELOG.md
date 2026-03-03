@@ -1,5 +1,11 @@
 # @electric-agent/studio
 
+## 1.3.3
+
+### Patch Changes
+
+- b9a9542: Add interrupt endpoint to stop Claude Code without destroying the session. The Stop button now kills the running process but keeps the sandbox alive, allowing follow-up messages via --resume.
+
 ## 1.3.2
 
 ### Patch Changes
