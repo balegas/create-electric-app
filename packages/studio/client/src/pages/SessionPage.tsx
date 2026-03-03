@@ -51,11 +51,6 @@ function serializeEntries(entries: ConsoleEntry[]): string {
 				break
 			}
 			case "gate":
-				if (entry.event.type === "plan_ready") {
-					lines.push(`## Plan\n\n${entry.event.plan}\n`)
-				} else if (entry.event.type === "clarification_needed") {
-					lines.push(`## Clarification Needed\n\n${entry.event.questions.join("\n")}\n`)
-				}
 				break
 		}
 	}
@@ -127,8 +122,7 @@ export function SessionPage() {
 	}, [id, location.state, navigate, refreshSessions])
 
 	const effectiveId = realSessionId
-	const { entries, isLive, isComplete, appReady, totalCost, markGateResolved } =
-		useSession(effectiveId)
+	const { entries, isLive, isComplete, appReady, markGateResolved } = useSession(effectiveId)
 
 	// Load session from localStorage
 	const [activeSession, setActiveSession] = useState<SessionInfo | null>(() =>
@@ -278,14 +272,6 @@ export function SessionPage() {
 					</span>
 				)}
 
-				<span className="session-header-cost">
-					{totalCost > 0 && (
-						<span style={{ color: "var(--text-subtle)", fontSize: 12, marginLeft: 4 }}>
-							${totalCost.toFixed(4)}
-						</span>
-					)}
-				</span>
-
 				<span className="session-header-actions-group">
 					{appPort && (appReady || appState === "running" || sessionDone) && (
 						<a
@@ -318,9 +304,6 @@ export function SessionPage() {
 				</button>
 				{overflowOpen && (
 					<div className="session-header-overflow-menu">
-						{totalCost > 0 && (
-							<div className="session-header-overflow-menu-item">Cost: ${totalCost.toFixed(4)}</div>
-						)}
 						{appPort && (appReady || appState === "running" || sessionDone) && (
 							<a
 								href={previewUrl ?? `http://localhost:${appPort}`}

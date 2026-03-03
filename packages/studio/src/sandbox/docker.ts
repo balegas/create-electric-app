@@ -56,8 +56,6 @@ function generateComposeFile(
 	port: number,
 	auth: [string, string] | null,
 	infra: InfraConfig = { mode: "local" },
-	streamEnv: Record<string, string> = {},
-	deferAgentStart = false,
 	ghToken?: string,
 ): string {
 	const isCloud = infra.mode === "cloud"
@@ -79,18 +77,10 @@ function generateComposeFile(
 		agentEnv.push(`GH_TOKEN=${ghToken}`)
 	}
 
-	// Add stream env vars for hosted Durable Streams communication
-	for (const [key, value] of Object.entries(streamEnv)) {
-		agentEnv.push(`${key}=${value}`)
-	}
-
 	const agentEnvYaml = agentEnv.map((e) => `      - ${e}`).join("\n")
 
-	// When deferAgentStart is true, keep the container alive without starting the agent.
-	// The bridge will start the agent via `docker exec -i`.
-	const agentCommand = deferAgentStart
-		? '["tail", "-f", "/dev/null"]'
-		: '["electric-agent", "headless"]'
+	// Keep the container alive — the Claude Code bridge starts the agent
+	const agentCommand = '["tail", "-f", "/dev/null"]'
 
 	if (isCloud) {
 		return `services:
@@ -98,6 +88,8 @@ function generateComposeFile(
     image: ${SANDBOX_IMAGE}
     ports:
       - "${port}:5173"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
 ${agentEnvYaml}
     volumes:
@@ -137,6 +129,8 @@ volumes:
     image: ${SANDBOX_IMAGE}
     ports:
       - "${port}:5173"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
 ${agentEnvYaml}
     volumes:
@@ -228,18 +222,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 		const composeDir = fs.mkdtempSync(path.join(os.tmpdir(), `${project}-`))
 		const composePath = path.join(composeDir, "docker-compose.yml")
 		const auth = resolveAuthEnv(opts)
-		fs.writeFileSync(
-			composePath,
-			generateComposeFile(
-				port,
-				auth,
-				infra,
-				opts?.streamEnv ?? {},
-				opts?.deferAgentStart,
-				opts?.ghToken,
-			),
-			"utf-8",
-		)
+		fs.writeFileSync(composePath, generateComposeFile(port, auth, infra, opts?.ghToken), "utf-8")
 		console.log(`[docker] Compose file written: ${composePath}`)
 
 		if (infra.mode === "local") {
@@ -297,41 +280,6 @@ export class DockerSandboxProvider implements SandboxProvider {
 		setTimeout(() => {
 			fs.rm(state.composeDir, { recursive: true, force: true }, () => {})
 		}, 5000)
-	}
-
-	async restartAgent(handle: SandboxHandle): Promise<SandboxHandle> {
-		const state = this.internalState.get(handle.sessionId)
-		if (!state) {
-			throw new Error("No active container for session")
-		}
-
-		const composePath = path.join(state.composeDir, "docker-compose.yml")
-
-		// Stop and restart the agent service
-		try {
-			execSync(`docker compose -p ${state.composeProject} -f ${composePath} stop agent`, {
-				stdio: "ignore",
-				timeout: 15_000,
-			})
-		} catch {
-			// May already be stopped
-		}
-
-		execSync(`docker compose -p ${state.composeProject} -f ${composePath} up -d agent`, {
-			stdio: "pipe",
-			timeout: 60_000,
-		})
-
-		const newHandle: SandboxHandle = {
-			sessionId: handle.sessionId,
-			runtime: "docker",
-			port: handle.port,
-			projectDir: handle.projectDir,
-		}
-
-		this.activeContainers.set(handle.sessionId, newHandle)
-
-		return newHandle
 	}
 
 	/** Get the Docker container ID for a session's agent service */

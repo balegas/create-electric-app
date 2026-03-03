@@ -34,6 +34,8 @@ export interface ClaudeCodeSpritesConfig {
 	allowedTools?: string[]
 	/** Additional CLI flags */
 	extraFlags?: string[]
+	/** Studio server URL — used to set up AskUserQuestion hooks inside the sprite */
+	studioUrl?: string
 }
 
 const DEFAULT_ALLOWED_TOOLS = [
@@ -46,6 +48,7 @@ const DEFAULT_ALLOWED_TOOLS = [
 	"WebSearch",
 	"TodoWrite",
 	"AskUserQuestion",
+	"Skill",
 ]
 
 export class ClaudeCodeSpritesBridge implements SessionBridge {
@@ -68,6 +71,8 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	private running = false
 	/** Whether the parser already emitted a session_end (from a "result" message) */
 	private resultReceived = false
+	/** Whether hooks have been installed in the sprite */
+	private hooksInstalled = false
 
 	constructor(
 		sessionId: string,
@@ -99,7 +104,7 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 
 		if (cmd.command === "iterate" && typeof cmd.request === "string") {
 			// Respawn Claude Code with --resume for follow-up messages
-			this.spawnClaude(cmd.request, this.claudeSessionId ?? undefined)
+			this.spawnClaudeAsync(cmd.request, this.claudeSessionId ?? undefined)
 			return
 		}
 
@@ -148,7 +153,7 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 
 	async start(): Promise<void> {
 		if (this.closed) return
-		this.spawnClaude(this.config.prompt)
+		await this.spawnClaudeAsync(this.config.prompt)
 	}
 
 	close(): void {
@@ -168,10 +173,72 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	// -----------------------------------------------------------------------
 
 	/**
+	 * Install Claude Code hooks inside the sprite so that AskUserQuestion
+	 * blocks until the user answers in the studio UI.
+	 */
+	private async installHooks(): Promise<void> {
+		const studioUrl = this.config.studioUrl
+		if (!studioUrl) return
+
+		const hookDir = `${this.config.cwd}/.claude/hooks`
+		const settingsFile = `${this.config.cwd}/.claude/settings.local.json`
+
+		const forwardScript = `#!/bin/bash
+BODY="$(cat)"
+RESPONSE=$(curl -s -X POST "${studioUrl}/api/sessions/${this.sessionId}/hook-event" \\
+  -H "Content-Type: application/json" \\
+  -d "\${BODY}" \\
+  --max-time 360 \\
+  --connect-timeout 5 \\
+  2>/dev/null)
+if echo "\${RESPONSE}" | grep -q '"hookSpecificOutput"'; then
+  echo "\${RESPONSE}"
+fi
+exit 0`
+
+		// Configure hooks in settings.local.json.
+		// Tool permissions come from --allowedTools CLI flag instead.
+		// Hook format: each event has matcher groups, each with a `hooks` array.
+		const settings = JSON.stringify({
+			hooks: {
+				PreToolUse: [
+					{
+						matcher: "AskUserQuestion",
+						hooks: [
+							{
+								type: "command",
+								command: `${hookDir}/forward.sh`,
+							},
+						],
+					},
+				],
+			},
+		})
+
+		try {
+			// Use base64 encoding to avoid heredoc delimiter issues
+			const forwardB64 = Buffer.from(forwardScript).toString("base64")
+			const settingsB64 = Buffer.from(settings).toString("base64")
+			await this.sprite.execFile("bash", [
+				"-c",
+				[
+					`mkdir -p '${hookDir}'`,
+					`echo '${forwardB64}' | base64 -d > '${hookDir}/forward.sh'`,
+					`chmod +x '${hookDir}/forward.sh'`,
+					`echo '${settingsB64}' | base64 -d > '${settingsFile}'`,
+				].join(" && "),
+			])
+			console.log(`[claude-code-sprites] Installed AskUserQuestion hooks in sprite`)
+		} catch (err) {
+			console.error(`[claude-code-sprites] Failed to install hooks:`, err)
+		}
+	}
+
+	/**
 	 * Spawn a new Claude Code process. Called for both the initial prompt
 	 * and follow-up iterate messages (with --resume).
 	 */
-	private spawnClaude(prompt: string, resumeSessionId?: string): void {
+	private async spawnClaudeAsync(prompt: string, resumeSessionId?: string): Promise<void> {
 		// Kill any existing process
 		if (this.cmd) {
 			try {
@@ -182,15 +249,28 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 			this.cmd = null
 		}
 
+		// Install hooks on first spawn (they persist for resume spawns)
+		// Must await to ensure hooks are in place before Claude starts.
+		if (!this.hooksInstalled) {
+			try {
+				await this.installHooks()
+				this.hooksInstalled = true
+			} catch (err) {
+				console.error(`[claude-code-sprites] Hook install error:`, err)
+			}
+		}
+
 		// Reset parser state for the new process
 		this.parser = createStreamJsonParser()
 		this.resultReceived = false
 		this.running = true
 
-		const allowedTools = this.config.allowedTools ?? DEFAULT_ALLOWED_TOOLS
 		const model = this.config.model ?? "claude-sonnet-4-6"
 
-		// Build the claude CLI command
+		// Build the claude CLI command.
+		// Use --allowedTools to grant permissions (keeps hooks firing, unlike
+		// --dangerously-skip-permissions which bypasses hooks entirely).
+		const allowedTools = this.config.allowedTools ?? DEFAULT_ALLOWED_TOOLS
 		const claudeArgs = [
 			"-p",
 			prompt,
@@ -199,9 +279,9 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 			"--verbose",
 			"--model",
 			model,
-			"--dangerously-skip-permissions",
-			"--allowedTools",
-			allowedTools.join(","),
+			...(this.hooksInstalled
+				? ["--allowedTools", allowedTools.join(",")]
+				: ["--dangerously-skip-permissions"]),
 			...(this.config.extraFlags ?? []),
 		]
 

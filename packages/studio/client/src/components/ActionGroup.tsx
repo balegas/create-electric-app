@@ -1,10 +1,9 @@
 import { useState } from "react"
 import type { ConsoleEntry } from "../lib/event-types"
-import { ConsoleThinkingEntry, Duration } from "./ConsoleEntry"
+import { Duration } from "./ConsoleEntry"
 import { ToolExecution } from "./ToolExecution"
 
 type ToolEntry = Extract<ConsoleEntry, { kind: "tool_use" }>
-type ThinkingEntry = Extract<ConsoleEntry, { kind: "assistant_thinking" }>
 
 export interface ActionGroupEntry {
 	entry: ConsoleEntry
@@ -57,7 +56,6 @@ export function ActionGroup({ items }: ActionGroupProps) {
 
 	const toolItems = items.filter((i) => i.entry.kind === "tool_use")
 	const allDone = toolItems.every((i) => (i.entry as ToolEntry).tool_response !== null)
-	// Show the last tool call as the tail (not a thinking entry)
 	const tail = toolItems.length > 0 ? toolItems[toolItems.length - 1] : items[items.length - 1]
 	const totalDuration = aggregateDuration(items)
 
@@ -82,11 +80,6 @@ export function ActionGroup({ items }: ActionGroupProps) {
 								/>
 							)
 						}
-						if (entry.kind === "assistant_thinking") {
-							return (
-								<ConsoleThinkingEntry key={`thinking-${i}`} entry={entry} duration={duration} />
-							)
-						}
 						return null
 					})}
 				</div>
@@ -96,8 +89,6 @@ export function ActionGroup({ items }: ActionGroupProps) {
 				<div className="tool-group-tail">
 					{tail.entry.kind === "tool_use" ? (
 						<ToolExecution entry={tail.entry as ToolEntry} duration={tail.duration} />
-					) : tail.entry.kind === "assistant_thinking" ? (
-						<ConsoleThinkingEntry entry={tail.entry as ThinkingEntry} duration={tail.duration} />
 					) : null}
 				</div>
 			)}

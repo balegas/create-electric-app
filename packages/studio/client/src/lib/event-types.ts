@@ -22,7 +22,6 @@ export type ConsoleEntry =
 			ts: string
 	  }
 	| { kind: "assistant_message"; text: string; agent?: string; ts: string }
-	| { kind: "assistant_thinking"; text: string; agent?: string; ts: string }
 	| {
 			kind: "todo_widget"
 			tool_use_id: string
@@ -31,17 +30,7 @@ export type ConsoleEntry =
 	  }
 	| {
 			kind: "gate"
-			event: Extract<
-				EngineEvent,
-				{
-					type:
-						| "clarification_needed"
-						| "plan_ready"
-						| "continue_needed"
-						| "infra_config_prompt"
-						| "ask_user_question"
-				}
-			>
+			event: Extract<EngineEvent, { type: "infra_config_prompt" | "ask_user_question" }>
 			resolved: boolean
 			/** Short summary of the decision, shown when collapsed */
 			resolvedSummary?: string

@@ -1,4 +1,4 @@
-import { getAgentMode, getApiKey, getGhToken, getOauthToken } from "./credentials"
+import { getApiKey, getGhToken, getOauthToken } from "./credentials"
 import { getOrCreateParticipant } from "./participant"
 import { getRoomToken, getSessionToken, setRoomToken, setSessionToken } from "./session-store"
 
@@ -147,7 +147,7 @@ export async function createSession(description: string, name?: string) {
 		"/sessions",
 		{
 			method: "POST",
-			body: { description, name, agentMode: getAgentMode(), ...credentialFields() },
+			body: { description, name, ...credentialFields() },
 		},
 	)
 	if (result.sessionToken) {

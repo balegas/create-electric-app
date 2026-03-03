@@ -1,9 +1,7 @@
-import { useCallback, useState } from "react"
-import { useEscapeKey, useKeyboardShortcut } from "../hooks/useKeyboardShortcut"
+import { useState } from "react"
 import { type ProvisionResult, provisionElectric, respondToGate } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
-import { Markdown } from "./Markdown"
 
 type GateEntry = Extract<ConsoleEntry, { kind: "gate" }>
 
@@ -12,217 +10,6 @@ interface GatePromptProps {
 	entry: GateEntry
 	entryIndex: number
 	onResolved: (index: number, summary?: string) => void
-}
-
-function ClarificationGate({
-	sessionId,
-	event,
-	onResolved,
-	resolved,
-}: {
-	sessionId: string
-	event: Extract<EngineEvent, { type: "clarification_needed" }>
-	onResolved: (summary: string) => void
-	resolved?: boolean
-}) {
-	const [answers, setAnswers] = useState<string[]>(event.questions.map(() => ""))
-	const [extra, setExtra] = useState("")
-	const [submitting, setSubmitting] = useState(false)
-	const disabled = submitting || !!resolved
-
-	async function handleSubmit() {
-		setSubmitting(true)
-		const filled = answers.filter((a) => a.trim())
-		const summary = filled.length > 0 ? filled.join("; ") : "Answers provided"
-		try {
-			await respondToGate(sessionId, "clarification", {
-				answers: [...answers, extra],
-				_summary: summary,
-			})
-			onResolved(summary)
-		} catch {
-			setSubmitting(false)
-		}
-	}
-
-	return (
-		<div className="gate-prompt">
-			<h3>Need more details (confidence: {event.confidence}%)</h3>
-			{event.summary && <p className="gate-summary">{event.summary}</p>}
-			{event.questions.map((q, i) => (
-				<div className="question" key={i}>
-					<label>
-						{i + 1}. {q}
-					</label>
-					<input
-						type="text"
-						value={answers[i]}
-						onChange={(e) => {
-							const next = [...answers]
-							next[i] = e.target.value
-							setAnswers(next)
-						}}
-						disabled={disabled}
-					/>
-				</div>
-			))}
-			{!resolved && (
-				<div className="question">
-					<label>Anything else you'd like to add?</label>
-					<textarea
-						value={extra}
-						onChange={(e) => setExtra(e.target.value)}
-						disabled={disabled}
-						rows={3}
-						placeholder="Optional: add any extra context, requirements, or preferences..."
-					/>
-				</div>
-			)}
-			{!resolved && (
-				<div className="gate-actions">
-					<button className="gate-btn gate-btn-primary" onClick={handleSubmit} disabled={disabled}>
-						{submitting ? "Submitting..." : "Submit Answers"}
-					</button>
-				</div>
-			)}
-		</div>
-	)
-}
-
-function PlanGate({
-	sessionId,
-	event,
-	onResolved,
-	resolved,
-}: {
-	sessionId: string
-	event: Extract<EngineEvent, { type: "plan_ready" }>
-	onResolved: (summary: string) => void
-	resolved?: boolean
-}) {
-	const [submitting, setSubmitting] = useState(false)
-
-	const handleDecision = useCallback(
-		async (decision: "approve" | "revise" | "cancel") => {
-			setSubmitting(true)
-			const labels = {
-				approve: "Plan approved",
-				revise: "Revision requested",
-				cancel: "Cancelled",
-			}
-			const summary = labels[decision]
-			try {
-				await respondToGate(sessionId, "approval", { decision, _summary: summary })
-				onResolved(summary)
-			} catch {
-				setSubmitting(false)
-			}
-		},
-		[sessionId, onResolved],
-	)
-
-	const approve = useCallback(() => handleDecision("approve"), [handleDecision])
-	const cancel = useCallback(() => handleDecision("cancel"), [handleDecision])
-
-	useKeyboardShortcut("Enter", approve, { disabled: submitting || !!resolved })
-	useEscapeKey(cancel, submitting || !!resolved)
-
-	return (
-		<div className="gate-plan">
-			<div className="gate-plan-body">
-				<Markdown>{event.plan}</Markdown>
-			</div>
-			{!resolved && (
-				<div className="gate-plan-actions">
-					<button
-						className="gate-btn gate-btn-primary"
-						onClick={() => handleDecision("approve")}
-						disabled={submitting}
-					>
-						Approve
-					</button>
-					<button
-						className="gate-btn"
-						onClick={() => handleDecision("revise")}
-						disabled={submitting}
-					>
-						Revise
-					</button>
-					<button
-						className="gate-btn gate-btn-danger"
-						onClick={() => handleDecision("cancel")}
-						disabled={submitting}
-					>
-						Cancel
-					</button>
-				</div>
-			)}
-		</div>
-	)
-}
-
-function ContinueGate({
-	sessionId,
-	reason,
-	onResolved,
-	resolved,
-	resolvedSummary,
-}: {
-	sessionId: string
-	reason: string
-	onResolved: (summary: string) => void
-	resolved?: boolean
-	resolvedSummary?: string
-}) {
-	const [submitting, setSubmitting] = useState(false)
-
-	const handleDecision = useCallback(
-		async (proceed: boolean) => {
-			setSubmitting(true)
-			const summary = proceed ? "Continued" : "Stopped"
-			try {
-				await respondToGate(sessionId, "continue", { proceed, _summary: summary })
-				onResolved(summary)
-			} catch {
-				setSubmitting(false)
-			}
-		},
-		[sessionId, onResolved],
-	)
-
-	const continueAction = useCallback(() => handleDecision(true), [handleDecision])
-	const stopAction = useCallback(() => handleDecision(false), [handleDecision])
-
-	useKeyboardShortcut("Enter", continueAction, { disabled: submitting || !!resolved })
-	useEscapeKey(stopAction, submitting || !!resolved)
-
-	const isBudget = reason === "max_budget"
-
-	return (
-		<div className="gate-continue">
-			<span className="gate-continue-text">
-				{isBudget
-					? "Budget limit reached. Continue with additional budget?"
-					: "Turn limit reached. Continue?"}
-			</span>
-			{resolved ? (
-				<span className="gate-continue-decision">{resolvedSummary || "Decided"}</span>
-			) : (
-				<>
-					<button
-						className="gate-btn gate-btn-primary"
-						onClick={() => handleDecision(true)}
-						disabled={submitting}
-					>
-						Continue
-					</button>
-					<button className="gate-btn" onClick={() => handleDecision(false)} disabled={submitting}>
-						Stop
-					</button>
-				</>
-			)}
-		</div>
-	)
 }
 
 function InfraConfigGate({
@@ -667,13 +454,16 @@ function AskUserQuestionGate({
 		}
 	}
 
+	const [showCustomInput, setShowCustomInput] = useState(false)
+	const hasOptions = event.options && event.options.length > 0
+
 	return (
 		<div className="gate-prompt">
 			<h3>Question</h3>
 			<p className="gate-summary">{event.question}</p>
-			{event.options && event.options.length > 0 ? (
+			{hasOptions && (
 				<div className="gate-option-group-vert">
-					{event.options.map((opt) => {
+					{event.options!.map((opt) => {
 						const isChosen = resolved && opt.label === chosenAnswer
 						return (
 							<button
@@ -688,10 +478,20 @@ function AskUserQuestionGate({
 							</button>
 						)
 					})}
+					{!resolved && !showCustomInput && (
+						<button
+							type="button"
+							className="gate-option gate-option-other"
+							onClick={() => setShowCustomInput(true)}
+							disabled={disabled}
+						>
+							<span className="gate-option-title">Other...</span>
+						</button>
+					)}
 				</div>
-			) : resolved ? (
-				<div className="gate-answer-summary">{chosenAnswer}</div>
-			) : (
+			)}
+			{resolved && !hasOptions && <div className="gate-answer-summary">{chosenAnswer}</div>}
+			{!resolved && (showCustomInput || !hasOptions) && (
 				<div className="question">
 					<textarea
 						value={answer}
@@ -702,7 +502,7 @@ function AskUserQuestionGate({
 					/>
 				</div>
 			)}
-			{!resolved && !event.options?.length && (
+			{!resolved && (showCustomInput || !hasOptions) && (
 				<div className="gate-actions">
 					<button
 						className="gate-btn gate-btn-primary"
@@ -719,14 +519,8 @@ function AskUserQuestionGate({
 
 function resolvedLabel(type: string): string {
 	switch (type) {
-		case "clarification_needed":
-			return "Clarification answered"
-		case "plan_ready":
-			return "Plan reviewed"
 		case "infra_config_prompt":
 			return "Project configured"
-		case "continue_needed":
-			return "Decision made"
 		case "ask_user_question":
 			return "Question answered"
 		default:
@@ -746,37 +540,6 @@ export function GatePrompt({
 
 	let content: React.ReactNode = null
 	switch (entry.event.type) {
-		case "clarification_needed":
-			content = (
-				<ClarificationGate
-					sessionId={sessionId}
-					event={entry.event}
-					onResolved={resolve}
-					resolved={resolved}
-				/>
-			)
-			break
-		case "plan_ready":
-			content = (
-				<PlanGate
-					sessionId={sessionId}
-					event={entry.event}
-					onResolved={resolve}
-					resolved={resolved}
-				/>
-			)
-			break
-		case "continue_needed":
-			content = (
-				<ContinueGate
-					sessionId={sessionId}
-					reason={entry.event.reason}
-					onResolved={resolve}
-					resolved={resolved}
-					resolvedSummary={resolvedSummary}
-				/>
-			)
-			break
 		case "infra_config_prompt":
 			content = (
 				<InfraConfigGate

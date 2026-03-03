@@ -8,7 +8,6 @@ export function useSession(sessionId: string | null) {
 	const [isLive, setIsLive] = useState(false)
 	const [isComplete, setIsComplete] = useState(false)
 	const [appReady, setAppReady] = useState(false)
-	const [totalCost, setTotalCost] = useState(0)
 	const toastShownRef = useRef(false)
 	const liveRef = useRef(false)
 
@@ -82,17 +81,6 @@ export function useSession(sessionId: string | null) {
 						},
 					]
 
-				case "assistant_thinking":
-					return [
-						...prev,
-						{
-							kind: "assistant_thinking" as const,
-							text: event.text,
-							agent: event.agent,
-							ts: event.ts,
-						},
-					]
-
 				case "todo_write": {
 					// Upsert: replace existing todo_widget if one exists, otherwise append
 					const existingIdx = prev.findIndex((e) => e.kind === "todo_widget")
@@ -111,9 +99,6 @@ export function useSession(sessionId: string | null) {
 				}
 
 				case "ask_user_question":
-				case "clarification_needed":
-				case "plan_ready":
-				case "continue_needed":
 				case "infra_config_prompt":
 					return [...prev, { kind: "gate" as const, event, resolved: false, ts: event.ts }]
 
@@ -149,10 +134,8 @@ export function useSession(sessionId: string | null) {
 					return updated
 				}
 
-				case "cost_update":
 				case "session_end":
 				case "session_start":
-				case "phase_complete":
 				case "app_ready":
 					return prev
 
@@ -161,9 +144,6 @@ export function useSession(sessionId: string | null) {
 			}
 		})
 
-		if (event.type === "cost_update") {
-			setTotalCost((prev) => prev + event.totalCostUsd)
-		}
 		if (event.type === "app_ready") {
 			setAppReady(true)
 		}
@@ -188,7 +168,6 @@ export function useSession(sessionId: string | null) {
 		setIsLive(false)
 		setIsComplete(false)
 		setAppReady(false)
-		setTotalCost(0)
 		toastShownRef.current = false
 		liveRef.current = false
 
@@ -264,5 +243,5 @@ export function useSession(sessionId: string | null) {
 		})
 	}, [])
 
-	return { entries, isLive, isComplete, appReady, totalCost, markGateResolved }
+	return { entries, isLive, isComplete, appReady, markGateResolved }
 }

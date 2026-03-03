@@ -77,8 +77,6 @@ type ContentBlock =
 export interface StreamJsonParserState {
 	/** Map tool_use_id → tool_name for correlating post_tool_use events */
 	toolNames: Map<string, string>
-	/** Accumulated cost from result messages */
-	totalCost: number
 	/** Claude Code session ID from init */
 	sessionId: string | null
 }
@@ -90,7 +88,6 @@ export interface StreamJsonParserState {
 export function createStreamJsonParser() {
 	const state: StreamJsonParserState = {
 		toolNames: new Map(),
-		totalCost: 0,
 		sessionId: null,
 	}
 
@@ -156,16 +153,6 @@ function handleAssistant(msg: StreamJsonAssistant, state: StreamJsonParserState)
 					events.push({
 						type: "assistant_message",
 						text: block.text,
-						ts: ts(),
-					})
-				}
-				break
-
-			case "thinking":
-				if (block.thinking) {
-					events.push({
-						type: "assistant_thinking",
-						text: block.thinking,
 						ts: ts(),
 					})
 				}
@@ -265,15 +252,6 @@ function handleUser(msg: StreamJsonUser, state: StreamJsonParserState): EngineEv
 
 function handleResult(msg: StreamJsonResult, state: StreamJsonParserState): EngineEvent[] {
 	const events: EngineEvent[] = []
-
-	if (msg.cost_usd != null) {
-		state.totalCost = msg.cost_usd
-		events.push({
-			type: "cost_update",
-			totalCostUsd: msg.cost_usd,
-			ts: ts(),
-		})
-	}
 
 	const success = msg.subtype === "success"
 	events.push({

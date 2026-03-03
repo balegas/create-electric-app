@@ -38,18 +38,6 @@ export type EngineEvent =
 			ts: string
 	  }
 	| { type: "assistant_message"; text: string; agent?: string; ts: string }
-	| { type: "assistant_thinking"; text: string; agent?: string; ts: string }
-	| {
-			type: "clarification_needed"
-			questions: string[]
-			confidence: number
-			summary: string
-			ts: string
-	  }
-	| { type: "plan_ready"; plan: string; ts: string }
-	| { type: "continue_needed"; reason: "max_turns" | "max_budget"; ts: string }
-	| { type: "cost_update"; totalCostUsd: number; ts: string }
-	| { type: "phase_complete"; phase: string; success: boolean; errors: string[]; ts: string }
 	| { type: "session_end"; success: boolean; ts: string }
 	| {
 			type: "session_start"
