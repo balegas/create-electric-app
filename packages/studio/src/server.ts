@@ -15,7 +15,7 @@ import {
 	ClaudeCodeSpritesBridge,
 	type ClaudeCodeSpritesConfig,
 } from "./bridge/claude-code-sprites.js"
-import { generateClaudeMd } from "./bridge/claude-md-generator.js"
+import { createAppSkillContent, generateClaudeMd } from "./bridge/claude-md-generator.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
@@ -1048,6 +1048,22 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					)
 				} catch (err) {
 					console.error(`[session:${sessionId}] Failed to write CLAUDE.md:`, err)
+				}
+
+				// Ensure the create-app skill is present in the project.
+				// The npm-installed electric-agent may be an older version that
+				// doesn't include .claude/skills/ in its template directory.
+				if (createAppSkillContent) {
+					try {
+						const skillDir = `${handle.projectDir}/.claude/skills/create-app`
+						const skillB64 = Buffer.from(createAppSkillContent).toString("base64")
+						await config.sandbox.exec(
+							handle,
+							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+						)
+					} catch (err) {
+						console.error(`[session:${sessionId}] Failed to write create-app skill:`, err)
+					}
 				}
 
 				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =

@@ -393,6 +393,13 @@ You have git and gh CLI available via Bash. Use them when needed:
 - \`gh pr create --title "..." --body "..."\` — create PR
 Commit types: feat, fix, refactor, style, chore, docs, test`
 
+// ---------------------------------------------------------------------------
+// Create-app skill content — exported so the server can write it to sandboxes
+// where the npm-installed electric-agent may not include it yet.
+// ---------------------------------------------------------------------------
+
+export { createAppSkillContent } from "./create-app-skill.js"
+
 const ERROR_HANDLING = `## Error Handling
 Before fixing any error, check _agent/errors.md for previous attempts at the same fix.
 If you see the same error has failed before, try a different approach.
