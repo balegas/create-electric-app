@@ -12,3 +12,4 @@ Support full AskUserQuestion capabilities: multiSelect, multiple questions, and 
 - Extract duplicated `sendGateResponse()` logic from Docker and Sprites bridges into shared `formatGateMessage()` helper
 - Switch gate resolution from single `answer` string to `answers: Record<string, string>` with backwards compat
 - Update SKILL.md Phase 0 to be less prescriptive about clarification format
+- Add Phase 7 (Deploy & Preview) to PLAN.md template in SKILL.md
