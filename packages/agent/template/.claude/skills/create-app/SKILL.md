@@ -81,6 +81,10 @@ export const entityName = pgTable("entity_name", {
 ### Phase 6: Architecture Reference
 - [ ] Write ARCHITECTURE.md
 
+### Phase 7: Deploy & Preview
+- [ ] Run migrations (drizzle-kit generate && drizzle-kit migrate)
+- [ ] pnpm dev:start
+
 ## Design Conventions
 - UUID primary keys with defaultRandom()
 - timestamp({ withTimezone: true }) for all dates
