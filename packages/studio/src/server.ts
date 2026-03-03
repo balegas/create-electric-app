@@ -1145,6 +1145,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}
 			})
 
+			// Show the command being sent to Claude Code
+			await bridge.emit({
+				type: "log",
+				level: "build",
+				message: `Running: claude "/create-app ${body.description}"`,
+				ts: ts(),
+			})
+
 			console.log(`[session:${sessionId}] Starting bridge listener...`)
 			await bridge.start()
 			console.log(`[session:${sessionId}] Bridge started, sending 'new' command...`)
