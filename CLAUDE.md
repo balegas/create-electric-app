@@ -308,7 +308,6 @@ The following secrets are configured on the GitHub repository (set via `gh secre
 | `DS_URL` | Durable Streams (Electric) API URL |
 | `DS_SERVICE_ID` | Durable Streams service ID |
 | `DS_SECRET` | Durable Streams JWT secret |
-| `GH_TOKEN` | GitHub PAT (used by agents for git operations) |
 | `FLY_API_TOKEN` | Fly.io deploy token + Sprites sandbox API |
 
 ## Common Gotchas
@@ -326,5 +325,5 @@ The following secrets are configured on the GitHub repository (set via `gh secre
 - **Sprites PATH**: npm global binaries (like `electric-agent`) are not in PATH by default. Always source `/etc/profile.d/npm-global.sh` before running them.
 - **Session token auth & Hono middleware**: The auth middleware on `/api/sessions/:id/*` also matches creation routes like `/api/sessions/local` (Hono treats `local` as `:id`). The middleware explicitly skips `authExemptIds` (`local`, `auto`, `resume`). If you add a new creation route under `/api/sessions/<name>`, add the name to `authExemptIds` in `server.ts`.
 - **Session tokens use DS_SECRET**: Tokens are derived from `DS_SECRET` (Durable Streams secret) — no additional secret needed. Changing `DS_SECRET` invalidates all existing session tokens.
-- **GitHub token flow**: API keys and GH tokens are stored in the browser's localStorage, sent to the server via POST body (`ghToken` field) or `X-GH-Token` header (GET requests), and passed explicitly to `gh` CLI functions. Do not rely on ambient `GH_TOKEN` env vars on the server.
+- **GitHub token flow**: GitHub tokens are client-side only (like the Claude API key). Stored in localStorage, sent to the server via POST body (`ghToken` field) or `X-GH-Token` header (GET requests), and passed to the sandbox as `GH_TOKEN` env var. The server never uses ambient `GH_TOKEN` — all server-side git.ts functions require an explicit token parameter.
 - **Studio subpath exports**: Studio exposes `./server`, `./streams`, `./sessions`, `./sandbox`, `./sandbox/*`, `./bridge`. Import from specific subpaths, not the barrel `@electric-agent/studio`.
