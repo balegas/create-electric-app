@@ -1,5 +1,11 @@
 # @electric-agent/studio
 
+## 1.3.2
+
+### Patch Changes
+
+- 8d67675: fix: restore TTY mode for Claude Code in sprites (non-TTY produces zero stdout)
+
 ## 1.3.1
 
 ### Patch Changes
