@@ -2137,7 +2137,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const sandboxProjectDir = `/home/agent/workspace/${repoName}`
 		const session: SessionInfo = {
 			id: sessionId,
-			projectName: repoName,
+			projectName: body.branch ? `${repoName}/${body.branch}` : repoName,
 			sandboxProjectDir,
 			description: `Resumed from ${body.repoUrl}`,
 			createdAt: new Date().toISOString(),
