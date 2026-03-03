@@ -47,9 +47,10 @@ function execGh(args: string[], opts?: { cwd?: string; env?: Record<string, stri
 
 /**
  * List the authenticated user's personal account + organizations.
+ * Requires a client-provided token — never falls back to ambient env.
  */
-export function ghListAccounts(token?: string): GhAccount[] {
-	const ghOpts = token ? { env: { GH_TOKEN: token } } : undefined
+export function ghListAccounts(token: string): GhAccount[] {
+	const ghOpts = { env: { GH_TOKEN: token } }
 	const accounts: GhAccount[] = []
 	try {
 		const username = execGh(["api", "/user", "--jq", ".login"], ghOpts)
@@ -73,9 +74,10 @@ export function ghListAccounts(token?: string): GhAccount[] {
 
 /**
  * List the authenticated user's GitHub repos.
+ * Requires a client-provided token — never falls back to ambient env.
  */
-export function ghListRepos(limit = 50, token?: string): GhRepo[] {
-	const ghOpts = token ? { env: { GH_TOKEN: token } } : undefined
+export function ghListRepos(limit = 50, token: string): GhRepo[] {
+	const ghOpts = { env: { GH_TOKEN: token } }
 	try {
 		const output = execGh(
 			[
@@ -111,9 +113,10 @@ export function ghListRepos(limit = 50, token?: string): GhRepo[] {
 
 /**
  * List branches for a GitHub repo.
+ * Requires a client-provided token — never falls back to ambient env.
  */
-export function ghListBranches(repoFullName: string, token?: string): GhBranch[] {
-	const ghOpts = token ? { env: { GH_TOKEN: token } } : undefined
+export function ghListBranches(repoFullName: string, token: string): GhBranch[] {
+	const ghOpts = { env: { GH_TOKEN: token } }
 	try {
 		const defaultBranch = execGh(
 			["api", `/repos/${repoFullName}`, "--jq", ".default_branch"],
@@ -134,11 +137,11 @@ export function ghListBranches(repoFullName: string, token?: string): GhBranch[]
 }
 
 /**
- * Check if gh CLI is available and authenticated.
+ * Check if a client-provided GitHub token is valid.
  */
-export function isGhAuthenticated(token?: string): boolean {
+export function isGhAuthenticated(token: string): boolean {
 	try {
-		execGh(["auth", "status"], token ? { env: { GH_TOKEN: token } } : undefined)
+		execGh(["auth", "status"], { env: { GH_TOKEN: token } })
 		return true
 	} catch {
 		return false

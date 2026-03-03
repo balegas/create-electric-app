@@ -882,8 +882,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		await bridge.emit({ type: "user_prompt", message: body.description, ts: ts() })
 
 		// Gather GitHub accounts for the merged setup gate
+		// Only check if the client provided a token — never fall back to server-side GH_TOKEN
 		let ghAccounts: { login: string; type: "user" | "org" }[] = []
-		if (isGhAuthenticated(body.ghToken)) {
+		if (body.ghToken && isGhAuthenticated(body.ghToken)) {
 			try {
 				ghAccounts = ghListAccounts(body.ghToken)
 			} catch {
@@ -2034,9 +2035,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ content })
 	})
 
-	// List GitHub accounts (personal + orgs)
+	// List GitHub accounts (personal + orgs) — requires client-provided token
 	app.get("/api/github/accounts", (c) => {
-		const token = c.req.header("X-GH-Token") || undefined
+		const token = c.req.header("X-GH-Token")
+		if (!token) return c.json({ accounts: [] })
 		try {
 			const accounts = ghListAccounts(token)
 			return c.json({ accounts })
@@ -2045,9 +2047,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 	})
 
-	// List GitHub repos for the authenticated user
+	// List GitHub repos for the authenticated user — requires client-provided token
 	app.get("/api/github/repos", (c) => {
-		const token = c.req.header("X-GH-Token") || undefined
+		const token = c.req.header("X-GH-Token")
+		if (!token) return c.json({ repos: [] })
 		try {
 			const repos = ghListRepos(50, token)
 			return c.json({ repos })
@@ -2059,7 +2062,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	app.get("/api/github/repos/:owner/:repo/branches", (c) => {
 		const owner = c.req.param("owner")
 		const repo = c.req.param("repo")
-		const token = c.req.header("X-GH-Token") || undefined
+		const token = c.req.header("X-GH-Token")
+		if (!token) return c.json({ branches: [] })
 		try {
 			const branches = ghListBranches(`${owner}/${repo}`, token)
 			return c.json({ branches })
