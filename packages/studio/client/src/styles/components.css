@@ -216,6 +216,30 @@
 	gap: 6px;
 }
 
+.settings-key-type-select {
+	padding: 8px 10px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	color: var(--text);
+	font-family: var(--font-mono);
+	font-size: 12px;
+	cursor: pointer;
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s;
+}
+
+.settings-key-type-select:hover {
+	border-color: var(--text-subtle);
+}
+
+.settings-key-type-select:focus {
+	outline: none;
+	border-color: var(--brand-2);
+	box-shadow: 0 0 0 3px rgba(153, 143, 231, 0.15);
+}
+
 .settings-input-row input {
 	flex: 1;
 	padding: 8px 12px;

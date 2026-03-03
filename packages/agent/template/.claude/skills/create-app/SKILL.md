@@ -240,6 +240,18 @@ _Last updated: [ISO date]_
 ## State & Context
 ```
 
+## Phase 8: Deploy & Preview
+
+Start the dev server so the user can preview the app:
+
+```bash
+pnpm dev:start
+```
+
+**IMPORTANT**: Always use `pnpm dev:start` from the project directory. Do NOT use `sprite-env services create` or launch Vite manually — the project's `vite.config.ts` contains required settings (`allowedHosts`, `port`, `proxy`) that will not be applied if Vite is started from a different directory.
+
+After starting, the app is accessible at the preview URL (shown in the UI).
+
 ## Critical Rules (from electric-app-guardrails)
 
 - `z` from `"zod/v4"` — NEVER from `"zod"`
@@ -273,7 +285,9 @@ When the app runs inside a cloud sandbox (Fly.io Sprite), the following constrai
 - **The preview URL** follows the pattern: `https://<sprite-name>.sprites.app`
 - **`vite.config.ts` is pre-configured** with `port`, `host: true`, `allowedHosts: true`, and the Electric proxy — **DO NOT MODIFY it**. Changing it WILL break the preview.
 
-The `pnpm dev:start` script starts the Vite dev server in the background on the correct port. After finishing all code generation, always run migrations then `pnpm dev:start` so the user can preview.
+**ALWAYS use `pnpm dev:start`** to start the dev server. This script runs Vite from the project directory where `vite.config.ts` is located. **DO NOT use `sprite-env services create`** or launch Vite manually — doing so will start Vite from the wrong directory, causing it to miss the config and reject Sprite hostnames with `allowedHosts` errors.
+
+After finishing all code generation, always run migrations then `pnpm dev:start` so the user can preview.
 
 ## Scaffold Files (DO NOT MODIFY)
 

@@ -205,10 +205,12 @@ You are running inside a cloud micro-VM (Fly.io Sprite). This is NOT a local mac
 function devServerInstructions(runtime?: string): string {
 	if (runtime === "sprites" || runtime === "daytona") {
 		return `## Dev Server & Migrations
-### Dev Server
+### Dev Server (CRITICAL — use pnpm scripts ONLY)
 - \`pnpm dev:start\` — start the Vite dev server in the background
 - \`pnpm dev:stop\` — stop the dev server
 - \`pnpm dev:restart\` — stop then start
+
+**IMPORTANT**: Always use \`pnpm dev:start\` from the project directory. Do NOT use \`sprite-env services create\` or launch Vite manually — the project's vite.config.ts contains required settings (allowedHosts, port, proxy) that will not be applied if Vite is started from a different directory or with different arguments.
 
 The app listens on port 8080 (set via VITE_PORT) — this is the only port the Sprite proxy exposes.
 The database and Electric sync service are remote (cloud-hosted) — there is no local Postgres or Docker.

@@ -240,6 +240,18 @@ _Last updated: [ISO date]_
 ## State & Context
 ```
 
+## Phase 8: Deploy & Preview
+
+Start the dev server so the user can preview the app:
+
+```bash
+pnpm dev:start
+```
+
+**IMPORTANT**: Always use `pnpm dev:start` from the project directory. Do NOT use `sprite-env services create` or launch Vite manually — the project's `vite.config.ts` contains required settings (`allowedHosts`, `port`, `proxy`) that will not be applied if Vite is started from a different directory.
+
+After starting, the app is accessible at the preview URL (shown in the UI).
+
 ## Critical Rules (from electric-app-guardrails)
 
 - `z` from `"zod/v4"` — NEVER from `"zod"`

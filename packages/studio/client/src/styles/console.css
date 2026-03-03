@@ -79,7 +79,6 @@
 	font-family: var(--font-mono);
 	font-size: 13px;
 	color: var(--text-subtle);
-	user-select: none;
 	list-style: none;
 	line-height: 1.6;
 }
@@ -187,7 +186,6 @@
 	font-family: var(--font-mono);
 	font-size: 13px;
 	color: var(--text-subtle);
-	user-select: none;
 	list-style: none;
 	line-height: 1.6;
 }
@@ -274,7 +272,6 @@
 	font-family: var(--font-mono);
 	font-size: 13px;
 	color: var(--text-muted);
-	user-select: none;
 	line-height: 1.6;
 }
 
