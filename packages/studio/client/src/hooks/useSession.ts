@@ -10,6 +10,7 @@ export function useSession(sessionId: string | null) {
 	const [appReady, setAppReady] = useState(false)
 	const toastShownRef = useRef(false)
 	const liveRef = useRef(false)
+	const lastEventIdRef = useRef("-1")
 
 	const processEvent = useCallback((event: EngineEvent) => {
 		setEntries((prev) => {
@@ -170,6 +171,7 @@ export function useSession(sessionId: string | null) {
 		setAppReady(false)
 		toastShownRef.current = false
 		liveRef.current = false
+		lastEventIdRef.current = "-1"
 
 		let cancelled = false
 		let eventSource: EventSource | null = null
@@ -185,9 +187,15 @@ export function useSession(sessionId: string | null) {
 			}
 
 			const token = getSessionToken(sessionId)
-			const sseUrl = token
-				? `/api/sessions/${sessionId}/events?token=${encodeURIComponent(token)}`
-				: `/api/sessions/${sessionId}/events`
+			const params = new URLSearchParams()
+			if (token) params.set("token", token)
+			// On reconnect, pass the last received offset so the server resumes
+			// from where we left off instead of replaying from the beginning.
+			if (lastEventIdRef.current !== "-1") {
+				params.set("offset", lastEventIdRef.current)
+			}
+			const qs = params.toString()
+			const sseUrl = `/api/sessions/${sessionId}/events${qs ? `?${qs}` : ""}`
 			eventSource = new EventSource(sseUrl)
 
 			eventSource.onopen = () => {
@@ -203,6 +211,10 @@ export function useSession(sessionId: string | null) {
 
 			eventSource.onmessage = (e) => {
 				if (cancelled) return
+				// Track the last received event ID so reconnects resume from here
+				if (e.lastEventId) {
+					lastEventIdRef.current = e.lastEventId
+				}
 				try {
 					const event = JSON.parse(e.data) as EngineEvent
 					processEvent(event)
