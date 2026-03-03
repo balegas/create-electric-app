@@ -1747,7 +1747,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		if (!entry) return c.json({ error: "Shared session not found" }, 404)
 
 		const connection = sharedSessionStream(config, id)
-		const lastEventId = c.req.header("Last-Event-ID") || "-1"
+		const lastEventId = c.req.header("Last-Event-ID") || c.req.query("offset") || "-1"
 
 		const reader = new DurableStream({
 			url: connection.url,
@@ -1824,8 +1824,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// the DS stream may exist from a previous server lifetime)
 		const connection = sessionStream(config, sessionId)
 
-		// Last-Event-ID allows reconnection from where the client left off
-		const lastEventId = c.req.header("Last-Event-ID") || "-1"
+		// Last-Event-ID allows reconnection from where the client left off.
+		// Also check for an explicit ?offset= query param — when the client
+		// manually reconnects (e.g. after a tab switch), the new EventSource
+		// won't carry the Last-Event-ID from the previous connection, so the
+		// client passes it explicitly.
+		const lastEventId = c.req.header("Last-Event-ID") || c.req.query("offset") || "-1"
 		console.log(`[sse] Reading stream from offset=${lastEventId} url=${connection.url}`)
 
 		const reader = new DurableStream({

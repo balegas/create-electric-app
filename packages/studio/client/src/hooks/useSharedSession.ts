@@ -74,6 +74,7 @@ export function useSharedSession(sharedSessionId: string | null) {
 	const [state, setState] = useState<SharedSessionState>(initialState)
 	const [isLive, setIsLive] = useState(false)
 	const stateRef = useRef(initialState)
+	const lastEventIdRef = useRef("-1")
 
 	const processEvent = useCallback((event: SharedSessionEvent) => {
 		const next = reduceEvent(stateRef.current, event)
@@ -87,6 +88,7 @@ export function useSharedSession(sharedSessionId: string | null) {
 		setState(initialState)
 		stateRef.current = initialState
 		setIsLive(false)
+		lastEventIdRef.current = "-1"
 
 		let cancelled = false
 		let eventSource: EventSource | null = null
@@ -101,9 +103,13 @@ export function useSharedSession(sharedSessionId: string | null) {
 			}
 
 			const roomTokenValue = getRoomToken(sharedSessionId)
-			const sseUrl = roomTokenValue
-				? `/api/shared-sessions/${sharedSessionId}/events?token=${encodeURIComponent(roomTokenValue)}`
-				: `/api/shared-sessions/${sharedSessionId}/events`
+			const params = new URLSearchParams()
+			if (roomTokenValue) params.set("token", roomTokenValue)
+			if (lastEventIdRef.current !== "-1") {
+				params.set("offset", lastEventIdRef.current)
+			}
+			const qs = params.toString()
+			const sseUrl = `/api/shared-sessions/${sharedSessionId}/events${qs ? `?${qs}` : ""}`
 			eventSource = new EventSource(sseUrl)
 
 			eventSource.onopen = () => {
@@ -115,6 +121,9 @@ export function useSharedSession(sharedSessionId: string | null) {
 
 			eventSource.onmessage = (e) => {
 				if (cancelled) return
+				if (e.lastEventId) {
+					lastEventIdRef.current = e.lastEventId
+				}
 				try {
 					const event = JSON.parse(e.data) as SharedSessionEvent
 					processEvent(event)
