@@ -39,7 +39,10 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 		sections.push("")
 	}
 
-	if (!opts.isIteration) {
+	if (opts.isIteration) {
+		sections.push(ITERATE_SKILL_TRIGGER)
+		sections.push("")
+	} else {
 		sections.push("## Current Task")
 		sections.push(opts.description)
 		sections.push("")
@@ -47,7 +50,7 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 		sections.push("")
 	}
 
-	sections.push(SCAFFOLD_STRUCTURE)
+	sections.push(opts.isIteration ? SCAFFOLD_STRUCTURE_ITERATION : SCAFFOLD_STRUCTURE)
 	sections.push("")
 	sections.push(DRIZZLE_WORKFLOW)
 	sections.push("")
@@ -269,6 +272,32 @@ The skill enforces the correct phase order:
 8. Architecture reference (ARCHITECTURE.md)
 
 Do NOT skip phases or code ad-hoc. Always follow the skill's structured pipeline.`
+
+const ITERATE_SKILL_TRIGGER = `## Iteration Mode
+This is an existing project being iterated on. When the user provides a change request, you MUST use the /iterate-app skill. This skill is available at .claude/skills/iterate-app/SKILL.md and provides the structured pipeline for iterating on Electric SQL apps.
+
+Invoke it with: /iterate-app <the user's change request>
+
+The skill enforces the correct phase order:
+1. Understand the existing project (read ARCHITECTURE.md and schema)
+2. Plan changes (update PLAN.md)
+3. Execute changes following the Drizzle Workflow and guardrails
+4. Build & test verification
+5. Update ARCHITECTURE.md
+6. Start dev server
+
+Do NOT skip phases or make changes ad-hoc. Always follow the skill's structured pipeline.`
+
+const SCAFFOLD_STRUCTURE_ITERATION = `## Scaffold Structure
+The project was scaffolded from a known template. These files were part of the original scaffold and should not be modified:
+- src/db/index.ts — Drizzle client setup (do not modify)
+- src/db/utils.ts — parseDates + generateTxId helpers (do not modify)
+- src/lib/electric-proxy.ts — Electric shape proxy helper (do not modify)
+- src/components/ClientOnly.tsx — SSR wrapper (do not modify, just import when needed)
+- src/routes/__root.tsx — root layout with SSR (do not add ssr:false here)
+- tests/helpers/schema-test-utils.ts — generateValidRow/generateRowWithout (do not modify)
+
+Read ARCHITECTURE.md to understand the project structure before making changes.`
 
 const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
 Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.

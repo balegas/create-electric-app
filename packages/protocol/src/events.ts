@@ -71,6 +71,13 @@ export type EngineEvent =
 			ts: string
 	  }
 	| {
+			type: "infra_credentials_prompt"
+			projectName: string
+			/** Sandbox runtime — "docker" supports local mode, cloud runtimes hide it */
+			runtime: "docker" | "sprites" | "daytona"
+			ts: string
+	  }
+	| {
 			type: "gate_resolved"
 			gate: string
 			summary?: string

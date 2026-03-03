@@ -30,7 +30,10 @@ export type ConsoleEntry =
 	  }
 	| {
 			kind: "gate"
-			event: Extract<EngineEvent, { type: "infra_config_prompt" | "ask_user_question" }>
+			event: Extract<
+				EngineEvent,
+				{ type: "infra_config_prompt" | "infra_credentials_prompt" | "ask_user_question" }
+			>
 			resolved: boolean
 			/** Short summary of the decision, shown when collapsed */
 			resolvedSummary?: string

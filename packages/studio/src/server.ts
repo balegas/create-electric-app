@@ -21,6 +21,11 @@ import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
+import {
+	detectProject,
+	ensureIterateSkill,
+	writeCredentialsToSandbox,
+} from "./project-detection.js"
 import { resolveProjectDir } from "./project-utils.js"
 import type { RoomRegistry } from "./room-registry.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
@@ -1264,10 +1269,18 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		config.sessions.update(sessionId, { status: "running" })
 
+		// On first iterate for a resumed session, prefix with /iterate-app
+		// so the skill is invoked. Subsequent iterates use --resume which
+		// keeps the skill context in conversation history.
+		const isFirstIterate = !session.lastCoderSessionId
+		const isResumedSession = session.description?.startsWith("Resumed from")
+		const effectiveRequest =
+			isFirstIterate && isResumedSession ? `/iterate-app ${body.request}` : body.request
+
 		await bridge.sendCommand({
 			command: "iterate",
 			projectDir: session.sandboxProjectDir || handle.projectDir,
-			request: body.request,
+			request: effectiveRequest,
 			resumeSessionId: session.lastCoderSessionId,
 		})
 
@@ -2114,7 +2127,39 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			return c.json({ error: "Failed to create event stream" }, 500)
 		}
 
-		try {
+		const session: SessionInfo = {
+			id: sessionId,
+			projectName: repoName,
+			sandboxProjectDir: "",
+			description: `Resumed from ${body.repoUrl}`,
+			createdAt: new Date().toISOString(),
+			lastActiveAt: new Date().toISOString(),
+			status: "running",
+			git: {
+				branch: body.branch ?? "main",
+				remoteUrl: body.repoUrl,
+				repoName: parseRepoNameFromUrl(body.repoUrl),
+				lastCommitHash: null,
+				lastCommitMessage: null,
+				lastCheckpointAt: null,
+			},
+		}
+		config.sessions.add(session)
+
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+
+		// Async flow: clone → detect → gate → CLAUDE.md → bridge → ready
+		const asyncFlow = async () => {
+			let bridge = getOrCreateBridge(config, sessionId)
+
+			await bridge.emit({
+				type: "log",
+				level: "build",
+				message: `Cloning ${body.repoUrl}...`,
+				ts: ts(),
+			})
+
+			// 1. Clone repo into sandbox
 			const handle = await config.sandbox.createFromRepo(sessionId, body.repoUrl, {
 				branch: body.branch,
 				apiKey: body.apiKey,
@@ -2122,18 +2167,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				ghToken: body.ghToken,
 			})
 
-			// Get git state from cloned repo inside the container
 			const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
-
-			const session: SessionInfo = {
-				id: sessionId,
-				projectName: repoName,
+			config.sessions.update(sessionId, {
 				sandboxProjectDir: handle.projectDir,
-				description: `Resumed from ${body.repoUrl}`,
-				createdAt: new Date().toISOString(),
-				lastActiveAt: new Date().toISOString(),
-				status: "complete",
 				appPort: handle.port,
+				previewUrl: handle.previewUrl,
 				git: {
 					branch: gs.branch ?? body.branch ?? "main",
 					remoteUrl: body.repoUrl,
@@ -2142,24 +2180,216 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					lastCommitMessage: gs.lastCommitMessage ?? null,
 					lastCheckpointAt: null,
 				},
-			}
-			config.sessions.add(session)
+			})
 
-			// Write initial message to stream
-			const bridge = getOrCreateBridge(config, sessionId)
 			await bridge.emit({
 				type: "log",
 				level: "done",
-				message: `Resumed from ${body.repoUrl}`,
+				message: `Repository cloned (${config.sandbox.runtime})`,
 				ts: ts(),
 			})
 
-			const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
-			return c.json({ sessionId, session, sessionToken, appPort: handle.port }, 201)
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : "Failed to resume from repo"
-			return c.json({ error: msg }, 500)
+			// 2. Detect project type
+			await bridge.emit({
+				type: "log",
+				level: "build",
+				message: "Detecting project type...",
+				ts: ts(),
+			})
+
+			const detection = await detectProject(config.sandbox, handle, handle.projectDir)
+			console.log(`[session:${sessionId}] Project detection: ${JSON.stringify(detection)}`)
+
+			if (!detection.isElectricAgentProject) {
+				await bridge.emit({
+					type: "log",
+					level: "error",
+					message:
+						"This doesn't appear to be an Electric SQL project (missing @tanstack/db, @electric-sql/client, or drizzle-orm dependencies).",
+					ts: ts(),
+				})
+				config.sessions.update(sessionId, { status: "error" })
+				return
+			}
+
+			await bridge.emit({
+				type: "log",
+				level: "done",
+				message: `Electric SQL project detected: ${detection.projectName || repoName}`,
+				ts: ts(),
+			})
+
+			// 3. Conditional credentials gate
+			let infra: InfraConfig = { mode: "local" }
+			let claimId: string | undefined
+
+			if (!detection.hasEnvCredentials) {
+				await bridge.emit({
+					type: "infra_credentials_prompt",
+					projectName: detection.projectName || repoName,
+					runtime: config.sandbox.runtime,
+					ts: ts(),
+				})
+
+				console.log(`[session:${sessionId}] Waiting for infra_config gate (resume)...`)
+				try {
+					const gateValue = await createGate<InfraConfig & { claimId?: string }>(
+						sessionId,
+						"infra_config",
+					)
+
+					console.log(`[session:${sessionId}] Infra gate resolved: mode=${gateValue.mode}`)
+
+					if (gateValue.mode === "cloud" || gateValue.mode === "claim") {
+						infra = {
+							mode: "cloud",
+							databaseUrl: gateValue.databaseUrl,
+							electricUrl: gateValue.electricUrl,
+							sourceId: gateValue.sourceId,
+							secret: gateValue.secret,
+						}
+						if (gateValue.mode === "claim") {
+							claimId = gateValue.claimId
+						}
+					}
+
+					// Write credentials to sandbox .env
+					await writeCredentialsToSandbox(config.sandbox, handle, handle.projectDir, infra)
+
+					if (claimId) {
+						config.sessions.update(sessionId, { claimId })
+					}
+				} catch (err) {
+					console.log(`[session:${sessionId}] Infra gate error (resume):`, err)
+				}
+			} else {
+				await bridge.emit({
+					type: "log",
+					level: "done",
+					message: "Existing credentials found in .env",
+					ts: ts(),
+				})
+			}
+
+			// 4. Write CLAUDE.md
+			const claudeMd = generateClaudeMd({
+				description: `Resumed from ${body.repoUrl}`,
+				projectName: detection.projectName || repoName,
+				projectDir: handle.projectDir,
+				isIteration: true,
+				runtime: config.sandbox.runtime,
+			})
+			try {
+				await config.sandbox.exec(
+					handle,
+					`cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF`,
+				)
+			} catch (err) {
+				console.error(`[session:${sessionId}] Failed to write CLAUDE.md:`, err)
+			}
+
+			// 5. Ensure iterate-app skill exists
+			try {
+				await ensureIterateSkill(config.sandbox, handle, handle.projectDir)
+			} catch (err) {
+				console.error(`[session:${sessionId}] Failed to write iterate-app skill:`, err)
+			}
+
+			// 6. Create Claude Code bridge (ready for iterate commands)
+			{
+				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
+					config.sandbox.runtime === "sprites"
+						? {
+								prompt: "",
+								cwd: handle.projectDir,
+								studioUrl: resolveStudioUrl(config.port),
+							}
+						: {
+								prompt: "",
+								cwd: handle.projectDir,
+								studioPort: config.port,
+							}
+				bridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
+			}
+
+			// Track Claude Code session ID for --resume on iterate
+			bridge.onAgentEvent((event) => {
+				if (event.type === "session_start") {
+					const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+					console.log(`[session:${sessionId}] Captured Claude Code session ID: ${ccSessionId}`)
+					if (ccSessionId) {
+						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
+					}
+				}
+			})
+
+			bridge.onComplete(async (success) => {
+				const updates: Partial<SessionInfo> = {
+					status: success ? "complete" : "error",
+				}
+				try {
+					const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
+					if (gs.initialized) {
+						const existing = config.sessions.get(sessionId)
+						updates.git = {
+							branch: gs.branch ?? "main",
+							remoteUrl: existing?.git?.remoteUrl ?? body.repoUrl,
+							repoName: existing?.git?.repoName ?? parseRepoNameFromUrl(body.repoUrl),
+							repoVisibility: existing?.git?.repoVisibility,
+							lastCommitHash: gs.lastCommitHash ?? null,
+							lastCommitMessage: gs.lastCommitMessage ?? null,
+							lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
+						}
+					}
+				} catch {
+					// Container may already be stopped
+				}
+				config.sessions.update(sessionId, updates)
+
+				if (success) {
+					try {
+						const appRunning = await config.sandbox.isAppRunning(handle)
+						if (appRunning) {
+							await bridge.emit({
+								type: "app_ready",
+								port: handle.port ?? session.appPort,
+								ts: ts(),
+							})
+						}
+					} catch {
+						// Container may already be stopped
+					}
+				}
+			})
+
+			// 7. Mark session as ready for user input
+			config.sessions.update(sessionId, { status: "complete" })
+
+			await bridge.emit({
+				type: "log",
+				level: "done",
+				message: "Ready for iteration requests",
+				ts: ts(),
+			})
 		}
+
+		asyncFlow().catch(async (err) => {
+			console.error(`[session:${sessionId}] Resume flow failed:`, err)
+			try {
+				const bridge = getOrCreateBridge(config, sessionId)
+				await bridge.emit({
+					type: "log",
+					level: "error",
+					message: `Resume failed: ${err instanceof Error ? err.message : "unknown error"}`,
+					ts: ts(),
+				})
+			} catch {
+				// Non-critical
+			}
+			config.sessions.update(sessionId, { status: "error" })
+		})
+
+		return c.json({ sessionId, session, sessionToken, appPort: session.appPort }, 201)
 	})
 
 	// Serve static SPA files (if built)

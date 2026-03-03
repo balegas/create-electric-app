@@ -381,7 +381,13 @@ export function SessionPage() {
 				)}
 				<PromptInput
 					onSubmit={handleIterate}
-					placeholder={isRunning ? "Message..." : "Ask anything..."}
+					placeholder={
+						isRunning
+							? "Message..."
+							: activeSession?.description?.startsWith("Resumed from")
+								? "What do you want to change or add?"
+								: "Ask anything..."
+					}
 					disabled={initializing}
 					isRunning={isRunning}
 					onCancel={handleCancel}

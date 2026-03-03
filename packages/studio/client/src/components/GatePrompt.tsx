@@ -401,6 +401,299 @@ function InfraConfigGate({
 	)
 }
 
+function InfraCredentialsGate({
+	sessionId,
+	event,
+	onResolved,
+	resolved,
+	resolvedDetails,
+}: {
+	sessionId: string
+	event: Extract<EngineEvent, { type: "infra_credentials_prompt" }>
+	onResolved: (summary: string) => void
+	resolved?: boolean
+	resolvedDetails?: Record<string, string>
+}) {
+	const isLocal = event.runtime === "docker"
+	const [mode, setMode] = useState<"local" | "cloud" | "claim">(isLocal ? "local" : "claim")
+	const [databaseUrl, setDatabaseUrl] = useState("")
+	const [electricUrl, setElectricUrl] = useState("https://api.electric-sql.cloud")
+	const [sourceId, setSourceId] = useState("")
+	const [secret, setSecret] = useState("")
+	const [claimId, setClaimId] = useState("")
+	const [claimUrl, setClaimUrl] = useState("")
+	const [submitting, setSubmitting] = useState(false)
+
+	const [provisioning, setProvisioning] = useState(false)
+	const [provisioned, setProvisioned] = useState(false)
+	const [provisionError, setProvisionError] = useState<string | null>(null)
+
+	async function handleProvision() {
+		setProvisioning(true)
+		setProvisionError(null)
+		try {
+			const result: ProvisionResult = await provisionElectric()
+			setDatabaseUrl(result.databaseUrl)
+			setElectricUrl(result.electricUrl)
+			setSourceId(result.sourceId)
+			setSecret(result.secret)
+			setClaimId(result.claimId)
+			setClaimUrl(result.claimUrl)
+			setProvisioned(true)
+		} catch (err) {
+			setProvisionError(err instanceof Error ? err.message : "Provisioning failed")
+		} finally {
+			setProvisioning(false)
+		}
+	}
+
+	async function handleSubmit() {
+		setSubmitting(true)
+		const parts: string[] = []
+		try {
+			const payload: Record<string, unknown> = {}
+
+			if (mode === "claim") {
+				payload.mode = "claim"
+				payload.databaseUrl = databaseUrl
+				payload.electricUrl = electricUrl
+				payload.sourceId = sourceId
+				payload.secret = secret
+				payload.claimId = claimId
+				parts.push(`Database: ${databaseUrl}`)
+				parts.push(`Source ID: ${sourceId}`)
+				if (claimUrl) parts.push(`Claim: ${claimUrl}`)
+			} else if (mode === "cloud") {
+				payload.mode = "cloud"
+				payload.databaseUrl = databaseUrl
+				payload.electricUrl = electricUrl
+				payload.sourceId = sourceId
+				payload.secret = secret
+				parts.push(`Database: ${databaseUrl}`)
+				parts.push(`Source ID: ${sourceId}`)
+			} else {
+				payload.mode = "local"
+				parts.push("Local Docker")
+			}
+
+			payload._summary = parts.join("\n")
+			await respondToGate(sessionId, "infra_config", payload)
+			onResolved(parts.join("\n"))
+		} catch {
+			setSubmitting(false)
+		}
+	}
+
+	const disabled = submitting || !!resolved
+	const cloudValid = databaseUrl.trim() && sourceId.trim() && secret.trim()
+	const claimValid = provisioned && databaseUrl.trim() && sourceId.trim() && secret.trim()
+
+	const modeLabels = {
+		claim: "Provisioned (Cloud)",
+		local: "Local (Docker)",
+		cloud: "Electric Cloud (BYO)",
+	}
+
+	if (resolved) {
+		const details: Record<string, string> = resolvedDetails ?? {}
+		if (!resolvedDetails) {
+			details.Infrastructure = modeLabels[mode]
+			if (mode === "cloud" || mode === "claim") {
+				if (databaseUrl) details["Connection string"] = databaseUrl
+				if (sourceId) details["Source ID"] = sourceId
+			}
+			if (mode === "claim" && claimUrl) {
+				details["Claim link"] = claimUrl
+			}
+		}
+		return (
+			<div className="gate-prompt">
+				<div className="gate-config-summary">
+					{Object.entries(details).map(([key, value]) => (
+						<div key={key}>
+							<strong>{key}:</strong>{" "}
+							{value.startsWith("http") ? (
+								<a href={value} target="_blank" rel="noopener noreferrer">
+									{value}
+								</a>
+							) : (
+								value
+							)}
+						</div>
+					))}
+				</div>
+			</div>
+		)
+	}
+
+	return (
+		<div className="gate-prompt">
+			<h3>Configure Credentials for {event.projectName}</h3>
+
+			<p className="gate-summary">Infrastructure</p>
+			<div className="gate-option-group">
+				<button
+					type="button"
+					className={`gate-option ${mode === "claim" ? "active" : ""}`}
+					onClick={() => setMode("claim")}
+					disabled={submitting}
+				>
+					<span className="gate-option-title">Provision</span>
+					<span className="gate-option-desc">
+						Auto-provision database &amp; Electric Cloud (72h)
+					</span>
+				</button>
+				{isLocal && (
+					<button
+						type="button"
+						className={`gate-option ${mode === "local" ? "active" : ""}`}
+						onClick={() => setMode("local")}
+						disabled={submitting}
+					>
+						<span className="gate-option-title">Local</span>
+						<span className="gate-option-desc">Run with Docker Compose on your machine</span>
+					</button>
+				)}
+				<button
+					type="button"
+					className={`gate-option ${mode === "cloud" ? "active" : ""}`}
+					onClick={() => setMode("cloud")}
+					disabled={submitting}
+				>
+					<span className="gate-option-title">Bring your own</span>
+					<span className="gate-option-desc">Provide your own database &amp; Electric details</span>
+				</button>
+			</div>
+			{mode === "claim" && (
+				<div className="question">
+					{!provisioned ? (
+						<>
+							<p style={{ fontSize: "0.85em", opacity: 0.7, margin: "0 0 8px" }}>
+								Automatically provision a Neon Postgres database and Electric Cloud source.
+								Resources are available for 72 hours.
+							</p>
+							<button
+								className="gate-btn gate-btn-primary"
+								onClick={handleProvision}
+								disabled={provisioning || disabled}
+								style={{ marginBottom: 8 }}
+							>
+								{provisioning ? "Provisioning..." : "Provision Resources"}
+							</button>
+							{provisioning && (
+								<p style={{ fontSize: "0.85em", opacity: 0.7 }}>This may take 30-60 seconds...</p>
+							)}
+							{provisionError && (
+								<p style={{ color: "var(--color-error, #e55)", fontSize: "0.85em" }}>
+									{provisionError}
+								</p>
+							)}
+						</>
+					) : (
+						<div style={{ fontSize: "0.85em" }}>
+							<p style={{ color: "var(--color-done, #4c4)", margin: "0 0 6px" }}>
+								Resources provisioned successfully (72h TTL).
+							</p>
+							<div
+								style={{
+									background: "rgba(255,255,255,0.04)",
+									border: "1px solid rgba(255,255,255,0.1)",
+									borderRadius: 6,
+									padding: "8px 10px",
+									margin: "6px 0",
+									fontFamily: "monospace",
+									fontSize: "0.9em",
+									lineHeight: 1.6,
+									wordBreak: "break-all",
+								}}
+							>
+								<div>
+									<strong>Database URL:</strong> {databaseUrl}
+								</div>
+								<div>
+									<strong>Source ID:</strong> {sourceId}
+								</div>
+								<div>
+									<strong>Electric URL:</strong> {electricUrl}
+								</div>
+							</div>
+							{claimUrl && (
+								<p style={{ margin: "8px 0 0" }}>
+									Claim into your account:{" "}
+									<a
+										href={claimUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										style={{ wordBreak: "break-all" }}
+									>
+										{claimUrl}
+									</a>
+								</p>
+							)}
+						</div>
+					)}
+				</div>
+			)}
+			{mode === "cloud" && (
+				<>
+					<div className="question">
+						<label>Database URL</label>
+						<input
+							type="text"
+							value={databaseUrl}
+							onChange={(e) => setDatabaseUrl(e.target.value)}
+							disabled={disabled}
+							placeholder="postgresql://user:pass@host:5432/dbname"
+						/>
+					</div>
+					<div className="question">
+						<label>Electric URL</label>
+						<input
+							type="text"
+							value={electricUrl}
+							onChange={(e) => setElectricUrl(e.target.value)}
+							disabled={disabled}
+							placeholder="https://api.electric-sql.cloud"
+						/>
+					</div>
+					<div className="question">
+						<label>Source ID</label>
+						<input
+							type="text"
+							value={sourceId}
+							onChange={(e) => setSourceId(e.target.value)}
+							disabled={disabled}
+							placeholder="Your Electric Cloud source ID"
+						/>
+					</div>
+					<div className="question">
+						<label>Secret</label>
+						<input
+							type="password"
+							value={secret}
+							onChange={(e) => setSecret(e.target.value)}
+							disabled={disabled}
+							placeholder="Your Electric Cloud secret"
+						/>
+					</div>
+				</>
+			)}
+
+			<div className="gate-actions">
+				<button
+					className="gate-btn gate-btn-primary"
+					onClick={handleSubmit}
+					disabled={
+						disabled || (mode === "cloud" && !cloudValid) || (mode === "claim" && !claimValid)
+					}
+				>
+					{submitting ? "Configuring..." : "Start"}
+				</button>
+			</div>
+		</div>
+	)
+}
+
 function AskUserQuestionGate({
 	sessionId,
 	event,
@@ -521,6 +814,8 @@ function resolvedLabel(type: string): string {
 	switch (type) {
 		case "infra_config_prompt":
 			return "Project configured"
+		case "infra_credentials_prompt":
+			return "Credentials configured"
 		case "ask_user_question":
 			return "Question answered"
 		default:
@@ -543,6 +838,17 @@ export function GatePrompt({
 		case "infra_config_prompt":
 			content = (
 				<InfraConfigGate
+					sessionId={sessionId}
+					event={entry.event}
+					onResolved={resolve}
+					resolved={resolved}
+					resolvedDetails={entry.resolvedDetails}
+				/>
+			)
+			break
+		case "infra_credentials_prompt":
+			content = (
+				<InfraCredentialsGate
 					sessionId={sessionId}
 					event={entry.event}
 					onResolved={resolve}

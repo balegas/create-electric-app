@@ -101,6 +101,7 @@ export function useSession(sessionId: string | null) {
 
 				case "ask_user_question":
 				case "infra_config_prompt":
+				case "infra_credentials_prompt":
 					return [...prev, { kind: "gate" as const, event, resolved: false, ts: event.ts }]
 
 				case "gate_resolved": {
