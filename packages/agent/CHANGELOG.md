@@ -1,5 +1,13 @@
 # @electric-agent/agent
 
+## 1.1.4
+
+### Patch Changes
+
+- c9d046b: Settings UI: replace two API key fields with single input + key type dropdown, add keychain detection notes. Make collapsible chat messages selectable for copy-paste. Add deploy phase to SKILL.md execution instructions and strengthen dev server instructions to prevent sprite-env services misuse.
+- Updated dependencies [c9d046b]
+  - @electric-agent/studio@1.3.4
+
 ## 1.1.3
 
 ### Patch Changes
