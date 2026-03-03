@@ -7,9 +7,9 @@ import { Skeleton } from "../components/Skeleton"
 import { useSession } from "../hooks/useSession"
 import { useAppContext } from "../layouts/AppShell"
 import {
-	cancelSession,
 	createSession,
 	getAppStatus,
+	interruptSession,
 	type SessionInfo,
 	sendIterate,
 } from "../lib/api"
@@ -200,12 +200,12 @@ export function SessionPage() {
 	const handleCancel = useCallback(async () => {
 		if (!effectiveId) return
 		try {
-			await cancelSession(effectiveId)
-			updateSession(effectiveId, { status: "cancelled" })
-			setActiveSession((prev) => (prev ? { ...prev, status: "cancelled" } : null))
+			await interruptSession(effectiveId)
+			updateSession(effectiveId, { status: "complete" })
+			setActiveSession((prev) => (prev ? { ...prev, status: "complete" } : null))
 			refreshSessions()
 		} catch (err) {
-			console.error("Failed to cancel:", err)
+			console.error("Failed to interrupt:", err)
 		}
 	}, [effectiveId, refreshSessions])
 

@@ -66,6 +66,13 @@ export interface SessionBridge {
 	start(): Promise<void>
 
 	/**
+	 * Interrupt the running process without closing the bridge.
+	 * Kills the current Claude Code process but keeps the bridge alive
+	 * so that follow-up messages (iterate with --resume) can still be sent.
+	 */
+	interrupt(): void
+
+	/**
 	 * Close the bridge and release resources.
 	 * Cancels any active subscriptions.
 	 */
