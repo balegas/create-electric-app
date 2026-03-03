@@ -68,6 +68,8 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 	private running = false
 	/** Whether the parser already emitted a session_end (from a "result" message) */
 	private resultReceived = false
+	/** Whether the process was intentionally interrupted (suppress exit handler session_end) */
+	private interrupted = false
 	/** Whether hooks have been installed in the container */
 	private hooksInstalled = false
 
@@ -162,6 +164,20 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 	async start(): Promise<void> {
 		if (this.closed) return
 		this.spawnClaude(this.config.prompt)
+	}
+
+	interrupt(): void {
+		this.interrupted = true
+		if (this.proc) {
+			try {
+				this.proc.stdin?.end()
+				this.proc.kill("SIGTERM")
+			} catch {
+				// Process may already be dead
+			}
+			this.proc = null
+		}
+		this.running = false
 	}
 
 	close(): void {
@@ -276,6 +292,7 @@ exit 0`
 		// Reset parser state for the new process
 		this.parser = createStreamJsonParser()
 		this.resultReceived = false
+		this.interrupted = false
 		this.running = true
 
 		const model = this.config.model ?? "claude-sonnet-4-6"
@@ -361,8 +378,9 @@ exit 0`
 				this.running = false
 
 				// Only emit session_end from exit handler if the parser didn't already
-				// emit one (via a "result" message). This prevents double session_end.
-				if (!this.closed && !this.resultReceived) {
+				// emit one (via a "result" message) and the process wasn't intentionally
+				// interrupted. This prevents double session_end.
+				if (!this.closed && !this.resultReceived && !this.interrupted) {
 					const endEvent: EngineEvent = {
 						type: "session_end",
 						success: code === 0,

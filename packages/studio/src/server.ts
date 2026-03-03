@@ -1145,6 +1145,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}
 			})
 
+			// Show the command being sent to Claude Code
+			await bridge.emit({
+				type: "log",
+				level: "build",
+				message: `Running: claude "/create-app ${body.description}"`,
+				ts: ts(),
+			})
+
 			console.log(`[session:${sessionId}] Starting bridge listener...`)
 			await bridge.start()
 			console.log(`[session:${sessionId}] Bridge started, sending 'new' command...`)
@@ -1453,6 +1461,28 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			await config.sandbox.stopApp(handle)
 		}
 		return c.json({ success: true })
+	})
+
+	// Interrupt the running Claude Code process without destroying the session.
+	// The sandbox stays alive and the bridge remains open for follow-up messages.
+	app.post("/api/sessions/:id/interrupt", async (c) => {
+		const sessionId = c.req.param("id")
+
+		const bridge = bridges.get(sessionId)
+		if (bridge) {
+			bridge.interrupt()
+
+			// Emit session_end so the UI knows the process stopped
+			await bridge.emit({
+				type: "session_end",
+				success: false,
+				ts: ts(),
+			})
+		}
+
+		rejectAllGates(sessionId)
+		config.sessions.update(sessionId, { status: "complete" })
+		return c.json({ ok: true })
 	})
 
 	// Cancel a running session

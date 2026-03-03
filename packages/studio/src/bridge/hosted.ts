@@ -116,6 +116,11 @@ export class HostedStreamBridge implements SessionBridge {
 		})
 	}
 
+	interrupt(): void {
+		// HostedStreamBridge has no process to kill — this is a no-op.
+		// The bridge remains open for future commands.
+	}
+
 	close(): void {
 		this.closed = true
 		if (this.cancelSubscription) {

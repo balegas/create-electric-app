@@ -170,6 +170,12 @@ export function respondToGate(sessionId: string, gate: string, data: Record<stri
 	})
 }
 
+export function interruptSession(sessionId: string) {
+	return request<{ ok: boolean }>(`/sessions/${sessionId}/interrupt`, {
+		method: "POST",
+	})
+}
+
 export function cancelSession(sessionId: string) {
 	return request<{ ok: boolean }>(`/sessions/${sessionId}/cancel`, {
 		method: "POST",
