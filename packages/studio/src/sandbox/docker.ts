@@ -525,6 +525,7 @@ export class DockerSandboxProvider implements SandboxProvider {
 		const state = this.getState(handle)
 
 		const targetDir = `/home/agent/workspace/${repoName}`
+		execInContainer(state, `rm -rf "${targetDir}"`)
 		execInContainer(
 			state,
 			`gh repo clone "${repoUrl}" "${targetDir}" 2>/dev/null || git clone "${repoUrl}" "${targetDir}"`,
