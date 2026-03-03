@@ -5,6 +5,7 @@ import { RepoPickerModal } from "../components/RepoPickerModal"
 import { Settings } from "../components/Settings"
 import { useAppContext } from "../layouts/AppShell"
 import { resumeFromGithub } from "../lib/api"
+import { addSession } from "../lib/session-store"
 
 interface OutletCtx {
 	openMobileDrawer: () => void
@@ -32,8 +33,9 @@ export function HomePage() {
 			setShowRepoPicker(false)
 			setResuming(true)
 			try {
-				const { sessionId } = await resumeFromGithub(repoUrl, branch)
-				await refreshSessions()
+				const { sessionId, session } = await resumeFromGithub(repoUrl, branch)
+				addSession(session)
+				refreshSessions()
 				navigate(`/session/${sessionId}`)
 			} catch (err) {
 				console.error("Failed to resume from GitHub:", err)
