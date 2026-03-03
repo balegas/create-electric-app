@@ -1,5 +1,17 @@
 # @electric-agent/studio
 
+## 1.3.1
+
+### Patch Changes
+
+- f28371e: fix: write create-app skill to sandbox after scaffold
+
+  The npm-published @electric-agent/agent package may not include the .claude/skills/create-app/ directory, causing Claude Code to fail with "Unknown skill: create-app" when started in sprites. The server now writes the skill file from the local template after scaffold setup.
+
+- c4bf020: fix: disable TTY mode in sprites bridge so AskUserQuestion gates block properly
+
+  Switching SpriteCommand from `tty: true` to no-TTY mode prevents PTY from merging stdout/stderr and corrupting hook response JSON. This matches the Docker bridge behavior where pipes cleanly separate streams.
+
 ## 1.3.0
 
 ### Minor Changes
