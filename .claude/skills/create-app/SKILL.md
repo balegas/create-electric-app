@@ -20,13 +20,9 @@ Evaluate the description provided in `$ARGUMENTS`.
 - 50-79: Recognizable app type but light on specifics
 - 0-49: Too vague to proceed
 
-**If the description scores below 70**, use AskUserQuestion to ask 1-3 targeted questions:
-- What are the key features or interactions? (e.g., drag-and-drop, categories, search, due dates)
-- What are the main entities/data objects and their relationships?
-- Should it support multi-user collaboration with real-time sync?
-- Should it work offline and sync when reconnected?
+**If the description scores below 70**, use AskUserQuestion to gather missing details. You can use any combination of formats — single or multiple questions, multiSelect for picking features, headers to group topics, or free-text for open-ended input. Choose whatever format best fits the gaps in the description. Keep questions specific to the described app type.
 
-Keep questions specific to the described app type. After getting answers, enrich the description mentally and proceed.
+After getting answers, enrich the description mentally and proceed.
 
 **If the description scores 70+**, proceed immediately without questions.
 

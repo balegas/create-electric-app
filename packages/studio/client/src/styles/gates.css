@@ -375,3 +375,56 @@
 .gate-option.gate-option-other:hover {
 	opacity: 1;
 }
+
+/* Question sections (multiple questions) */
+.gate-question-section {
+	margin-bottom: 12px;
+	padding-bottom: 12px;
+}
+
+.gate-question-section:last-child {
+	margin-bottom: 0;
+	padding-bottom: 0;
+}
+
+.gate-question-section + .gate-question-section {
+	border-top: 1px solid var(--border);
+	padding-top: 12px;
+}
+
+/* Header chip */
+.gate-question-header {
+	display: inline-block;
+	font-family: var(--font-sans);
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--brand-1);
+	background: rgba(153, 143, 231, 0.1);
+	border: 1px solid rgba(153, 143, 231, 0.2);
+	border-radius: 4px;
+	padding: 2px 8px;
+	margin-bottom: 6px;
+}
+
+/* Checkbox variant for multiSelect */
+.gate-option.gate-option-checkbox {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+
+.gate-option.gate-option-checkbox.checked {
+	border-color: var(--brand-2);
+	background: var(--bg-hover);
+}
+
+.gate-checkbox-indicator {
+	font-size: 16px;
+	line-height: 1;
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+.gate-option.gate-option-checkbox.checked .gate-checkbox-indicator {
+	color: var(--brand-1);
+}

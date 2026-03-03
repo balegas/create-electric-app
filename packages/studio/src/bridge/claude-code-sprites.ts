@@ -18,6 +18,7 @@ import { ts } from "@electric-agent/protocol"
 import type { Sprite } from "@fly/sprites"
 import { SpriteCommand } from "@fly/sprites"
 import type { StreamConnectionInfo } from "../streams.js"
+import { formatGateMessage } from "./gate-response.js"
 import { createStreamJsonParser } from "./stream-json-parser.js"
 import type { SessionBridge, StreamMessage } from "./types.js"
 
@@ -116,33 +117,10 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	async sendGateResponse(gate: string, value: Record<string, unknown>): Promise<void> {
 		if (this.closed || !this.cmd) return
 
-		if (gate === "ask_user_question" || gate.startsWith("ask_user_question:")) {
-			const answer = (value.answer as string) || ""
-			this.writeUserMessage(answer)
-			return
+		const message = formatGateMessage(gate, value)
+		if (message != null) {
+			this.writeUserMessage(message)
 		}
-
-		if (gate === "clarification") {
-			const answers = value.answers as string[] | undefined
-			if (answers?.length) {
-				this.writeUserMessage(answers.join("\n"))
-			}
-			return
-		}
-
-		if (gate === "approval") {
-			const decision = (value.decision as string) || "approve"
-			this.writeUserMessage(decision)
-			return
-		}
-
-		if (gate === "continue") {
-			const proceed = value.proceed as boolean
-			this.writeUserMessage(proceed ? "continue" : "stop")
-			return
-		}
-
-		this.writeUserMessage(JSON.stringify(value))
 	}
 
 	onAgentEvent(cb: (event: EngineEvent) => void): void {
