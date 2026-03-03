@@ -58,6 +58,8 @@ export type EngineEvent =
 			tool_use_id: string
 			question: string
 			options?: Array<{ label: string; description?: string }>
+			/** Full questions array from Claude Code's AskUserQuestion tool */
+			questions?: AskUserQuestionItem[]
 			ts: string
 	  }
 	| { type: "git_checkpoint"; commitHash: string; message: string; ts: string }
@@ -80,6 +82,13 @@ export type EngineEvent =
 			resolvedBy?: Participant
 			ts: string
 	  }
+
+export interface AskUserQuestionItem {
+	question: string
+	header?: string
+	options?: Array<{ label: string; description?: string }>
+	multiSelect?: boolean
+}
 
 export interface Participant {
 	id: string

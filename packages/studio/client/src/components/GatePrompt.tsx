@@ -401,6 +401,13 @@ function InfraConfigGate({
 	)
 }
 
+interface NormalizedQuestion {
+	question: string
+	header?: string
+	options?: Array<{ label: string; description?: string }>
+	multiSelect?: boolean
+}
+
 function AskUserQuestionGate({
 	sessionId,
 	event,
@@ -414,38 +421,77 @@ function AskUserQuestionGate({
 	resolved?: boolean
 	resolvedSummary?: string
 }) {
-	const [answer, setAnswer] = useState("")
-	const [selectedOption, setSelectedOption] = useState<string | null>(null)
+	// Normalize: use full questions array if present, else build single-item array
+	const questions: NormalizedQuestion[] = event.questions?.length
+		? event.questions
+		: [{ question: event.question, options: event.options }]
+
+	const hasMultipleQuestions = questions.length > 1
+	const hasAnyMultiSelect = questions.some((q) => q.multiSelect)
+	const needsSubmitButton = hasMultipleQuestions || hasAnyMultiSelect
+
+	// State for answers: { [question]: "selected option or typed text" }
+	const [answers, setAnswers] = useState<Record<string, string>>({})
+	// State for multiSelect: { [question]: Set<string> }
+	const [multiSelections, setMultiSelections] = useState<Record<string, Set<string>>>({})
+	// Track which questions have custom input shown
+	const [customInputs, setCustomInputs] = useState<Record<string, boolean>>({})
+	// Custom text values per question
+	const [customTexts, setCustomTexts] = useState<Record<string, string>>({})
 	const [submitting, setSubmitting] = useState(false)
 	const disabled = submitting || !!resolved
 
-	// For resolved state, use either local selection or the summary from replay
-	const chosenAnswer = selectedOption || resolvedSummary || ""
+	function buildAnswersPayload(): Record<string, string> {
+		const result: Record<string, string> = {}
+		for (const q of questions) {
+			if (q.multiSelect) {
+				const selected = multiSelections[q.question]
+				const custom = customTexts[q.question]?.trim()
+				const parts = selected ? [...selected] : []
+				if (custom) parts.push(custom)
+				result[q.question] = parts.join(", ")
+			} else {
+				result[q.question] = answers[q.question] || customTexts[q.question]?.trim() || ""
+			}
+		}
+		return result
+	}
 
-	async function handleOptionClick(label: string) {
-		setSelectedOption(label)
+	function buildSummary(answersPayload: Record<string, string>): string {
+		const entries = Object.entries(answersPayload).filter(([, v]) => v)
+		if (entries.length === 1) return entries[0][1].slice(0, 80)
+		return entries
+			.map(([, a]) => a.slice(0, 40))
+			.join("; ")
+			.slice(0, 120)
+	}
+
+	// For single-question + single-select: instant submit on click
+	async function handleInstantSubmit(question: string, label: string) {
+		setAnswers((prev) => ({ ...prev, [question]: label }))
 		setSubmitting(true)
+		const answersPayload = { [question]: label }
 		try {
 			await respondToGate(sessionId, "ask_user_question", {
 				toolUseId: event.tool_use_id,
-				answer: label,
+				answers: answersPayload,
 				_summary: label,
 			})
 			onResolved(label)
 		} catch {
-			setSelectedOption(null)
+			setAnswers((prev) => ({ ...prev, [question]: "" }))
 			setSubmitting(false)
 		}
 	}
 
 	async function handleSubmit() {
-		if (!answer.trim()) return
+		const answersPayload = buildAnswersPayload()
+		const summary = buildSummary(answersPayload)
 		setSubmitting(true)
-		const summary = answer.trim().slice(0, 80)
 		try {
 			await respondToGate(sessionId, "ask_user_question", {
 				toolUseId: event.tool_use_id,
-				answer: answer.trim(),
+				answers: answersPayload,
 				_summary: summary,
 			})
 			onResolved(summary)
@@ -454,60 +500,177 @@ function AskUserQuestionGate({
 		}
 	}
 
-	const [showCustomInput, setShowCustomInput] = useState(false)
-	const hasOptions = event.options && event.options.length > 0
+	function toggleMultiSelect(question: string, label: string) {
+		setMultiSelections((prev) => {
+			const set = new Set(prev[question] ?? [])
+			if (set.has(label)) set.delete(label)
+			else set.add(label)
+			return { ...prev, [question]: set }
+		})
+	}
+
+	// Resolved state
+	if (resolved) {
+		const displaySummary = resolvedSummary || ""
+		return (
+			<div className="gate-prompt">
+				<h3>Question</h3>
+				{questions.map((q) => (
+					<div key={q.question} className="gate-question-section">
+						{q.header && <span className="gate-question-header">{q.header}</span>}
+						<p className="gate-summary">{q.question}</p>
+					</div>
+				))}
+				<div className="gate-answer-summary">{displaySummary}</div>
+			</div>
+		)
+	}
 
 	return (
 		<div className="gate-prompt">
 			<h3>Question</h3>
-			<p className="gate-summary">{event.question}</p>
-			{hasOptions && (
-				<div className="gate-option-group-vert">
-					{event.options!.map((opt) => {
-						const isChosen = resolved && opt.label === chosenAnswer
-						return (
-							<button
-								key={opt.label}
-								type="button"
-								className={`gate-option ${isChosen ? "selected" : ""}`}
-								onClick={() => handleOptionClick(opt.label)}
-								disabled={disabled}
-							>
-								<span className="gate-option-title">{opt.label}</span>
-								{opt.description && <span className="gate-option-desc">{opt.description}</span>}
-							</button>
-						)
-					})}
-					{!resolved && !showCustomInput && (
-						<button
-							type="button"
-							className="gate-option gate-option-other"
-							onClick={() => setShowCustomInput(true)}
-							disabled={disabled}
-						>
-							<span className="gate-option-title">Other...</span>
-						</button>
-					)}
+			{questions.map((q) => {
+				const hasOptions = q.options && q.options.length > 0
+				const showCustom = customInputs[q.question]
+
+				return (
+					<div key={q.question} className="gate-question-section">
+						{q.header && <span className="gate-question-header">{q.header}</span>}
+						<p className="gate-summary">{q.question}</p>
+
+						{hasOptions && q.multiSelect && (
+							<div className="gate-option-group-vert">
+								{q.options?.map((opt) => {
+									const isChecked = multiSelections[q.question]?.has(opt.label) ?? false
+									return (
+										<button
+											key={opt.label}
+											type="button"
+											className={`gate-option gate-option-checkbox ${isChecked ? "checked" : ""}`}
+											onClick={() => toggleMultiSelect(q.question, opt.label)}
+											disabled={disabled}
+										>
+											<span className="gate-checkbox-indicator">
+												{isChecked ? "\u2611" : "\u2610"}
+											</span>
+											<span className="gate-option-title">{opt.label}</span>
+											{opt.description && (
+												<span className="gate-option-desc">{opt.description}</span>
+											)}
+										</button>
+									)
+								})}
+								{!showCustom && (
+									<button
+										type="button"
+										className="gate-option gate-option-other"
+										onClick={() => setCustomInputs((prev) => ({ ...prev, [q.question]: true }))}
+										disabled={disabled}
+									>
+										<span className="gate-option-title">Other...</span>
+									</button>
+								)}
+								{showCustom && (
+									<div className="question">
+										<input
+											type="text"
+											value={customTexts[q.question] || ""}
+											onChange={(e) =>
+												setCustomTexts((prev) => ({
+													...prev,
+													[q.question]: e.target.value,
+												}))
+											}
+											disabled={disabled}
+											placeholder="Type your answer..."
+										/>
+									</div>
+								)}
+							</div>
+						)}
+
+						{hasOptions && !q.multiSelect && (
+							<div className="gate-option-group-vert">
+								{q.options?.map((opt) => {
+									const isSelected = answers[q.question] === opt.label
+									return (
+										<button
+											key={opt.label}
+											type="button"
+											className={`gate-option ${isSelected ? "selected" : ""}`}
+											onClick={() =>
+												needsSubmitButton
+													? setAnswers((prev) => ({ ...prev, [q.question]: opt.label }))
+													: handleInstantSubmit(q.question, opt.label)
+											}
+											disabled={disabled}
+										>
+											<span className="gate-option-title">{opt.label}</span>
+											{opt.description && (
+												<span className="gate-option-desc">{opt.description}</span>
+											)}
+										</button>
+									)
+								})}
+								{!showCustom && (
+									<button
+										type="button"
+										className="gate-option gate-option-other"
+										onClick={() => setCustomInputs((prev) => ({ ...prev, [q.question]: true }))}
+										disabled={disabled}
+									>
+										<span className="gate-option-title">Other...</span>
+									</button>
+								)}
+								{showCustom && (
+									<div className="question">
+										<input
+											type="text"
+											value={customTexts[q.question] || ""}
+											onChange={(e) => {
+												const val = e.target.value
+												setCustomTexts((prev) => ({ ...prev, [q.question]: val }))
+												// Clear option selection when typing custom
+												setAnswers((prev) => ({ ...prev, [q.question]: "" }))
+											}}
+											disabled={disabled}
+											placeholder="Type your answer..."
+										/>
+									</div>
+								)}
+							</div>
+						)}
+
+						{!hasOptions && (
+							<div className="question">
+								<textarea
+									value={customTexts[q.question] || ""}
+									onChange={(e) =>
+										setCustomTexts((prev) => ({ ...prev, [q.question]: e.target.value }))
+									}
+									disabled={disabled}
+									rows={3}
+									placeholder="Type your answer..."
+								/>
+							</div>
+						)}
+					</div>
+				)
+			})}
+
+			{needsSubmitButton && (
+				<div className="gate-actions">
+					<button className="gate-btn gate-btn-primary" onClick={handleSubmit} disabled={disabled}>
+						{submitting ? "Submitting..." : "Submit"}
+					</button>
 				</div>
 			)}
-			{resolved && !hasOptions && <div className="gate-answer-summary">{chosenAnswer}</div>}
-			{!resolved && (showCustomInput || !hasOptions) && (
-				<div className="question">
-					<textarea
-						value={answer}
-						onChange={(e) => setAnswer(e.target.value)}
-						disabled={disabled}
-						rows={3}
-						placeholder="Type your answer..."
-					/>
-				</div>
-			)}
-			{!resolved && (showCustomInput || !hasOptions) && (
+			{!needsSubmitButton && !questions[0]?.options?.length && (
 				<div className="gate-actions">
 					<button
 						className="gate-btn gate-btn-primary"
 						onClick={handleSubmit}
-						disabled={disabled || !answer.trim()}
+						disabled={disabled || !customTexts[questions[0]?.question]?.trim()}
 					>
 						{submitting ? "Submitting..." : "Submit"}
 					</button>

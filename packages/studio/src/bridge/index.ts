@@ -1,5 +1,6 @@
 export { ClaudeCodeDockerBridge, type ClaudeCodeDockerConfig } from "./claude-code-docker.js"
 export { ClaudeCodeSpritesBridge, type ClaudeCodeSpritesConfig } from "./claude-code-sprites.js"
+export { formatGateMessage } from "./gate-response.js"
 export { HostedStreamBridge } from "./hosted.js"
 export { createStreamJsonParser } from "./stream-json-parser.js"
 export type {

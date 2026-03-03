@@ -183,7 +183,9 @@ function handleAssistant(msg: StreamJsonAssistant, state: StreamJsonParserState)
 					const questions = block.input.questions as
 						| Array<{
 								question: string
+								header?: string
 								options?: Array<{ label: string; description?: string }>
+								multiSelect?: boolean
 						  }>
 						| undefined
 					const firstQuestion = questions?.[0]
@@ -192,6 +194,7 @@ function handleAssistant(msg: StreamJsonAssistant, state: StreamJsonParserState)
 						tool_use_id: block.id,
 						question: firstQuestion?.question ?? (block.input.question as string) ?? "",
 						options: firstQuestion?.options,
+						questions: questions ?? undefined,
 						ts: ts(),
 					})
 					break

@@ -229,7 +229,9 @@ function mapHookToEngineEvent(body: Record<string, unknown>): EngineEvent | null
 				const questions = toolInput.questions as
 					| Array<{
 							question: string
+							header?: string
 							options?: Array<{ label: string; description?: string }>
+							multiSelect?: boolean
 					  }>
 					| undefined
 				const firstQuestion = questions?.[0]
@@ -240,6 +242,7 @@ function mapHookToEngineEvent(body: Record<string, unknown>): EngineEvent | null
 					options: firstQuestion?.options as
 						| Array<{ label: string; description?: string }>
 						| undefined,
+					questions: questions ?? undefined,
 					ts: now,
 				}
 			}
@@ -550,8 +553,11 @@ export function createApp(config: ServerConfig) {
 			console.log(`[hook-event] Blocking for ask_user_question gate: ${toolUseId}`)
 			try {
 				const gateTimeout = 5 * 60 * 1000 // 5 minutes
-				const answer = await Promise.race([
-					createGate<{ answer: string }>(sessionId, `ask_user_question:${toolUseId}`),
+				const result = await Promise.race([
+					createGate<{ answers: Record<string, string> }>(
+						sessionId,
+						`ask_user_question:${toolUseId}`,
+					),
 					new Promise<never>((_, reject) =>
 						setTimeout(() => reject(new Error("AskUserQuestion gate timed out")), gateTimeout),
 					),
@@ -563,7 +569,7 @@ export function createApp(config: ServerConfig) {
 						permissionDecision: "allow",
 						updatedInput: {
 							questions: (body.tool_input as Record<string, unknown>)?.questions,
-							answers: { [hookEvent.question]: answer.answer },
+							answers: result.answers,
 						},
 					},
 				})
@@ -698,8 +704,11 @@ export function createApp(config: ServerConfig) {
 			console.log(`[hook] Blocking for ask_user_question gate: ${toolUseId}`)
 			try {
 				const gateTimeout = 5 * 60 * 1000
-				const answer = await Promise.race([
-					createGate<{ answer: string }>(sessionId, `ask_user_question:${toolUseId}`),
+				const result = await Promise.race([
+					createGate<{ answers: Record<string, string> }>(
+						sessionId,
+						`ask_user_question:${toolUseId}`,
+					),
 					new Promise<never>((_, reject) =>
 						setTimeout(() => reject(new Error("AskUserQuestion gate timed out")), gateTimeout),
 					),
@@ -712,7 +721,7 @@ export function createApp(config: ServerConfig) {
 						permissionDecision: "allow",
 						updatedInput: {
 							questions: (body.tool_input as Record<string, unknown>)?.questions,
-							answers: { [hookEvent.question]: answer.answer },
+							answers: result.answers,
 						},
 					},
 				})
@@ -1305,8 +1314,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			if (!toolUseId) {
 				return c.json({ error: "toolUseId is required for ask_user_question" }, 400)
 			}
-			const answer = (body.answer as string) || ""
-			const resolved = resolveGate(sessionId, `ask_user_question:${toolUseId}`, { answer })
+			// Accept either answers (Record<string, string>) or legacy answer (string)
+			const answers: Record<string, string> =
+				(body.answers as Record<string, string>) ??
+				(body.answer ? { [(body.question as string) || "answer"]: body.answer as string } : {})
+			const resolved = resolveGate(sessionId, `ask_user_question:${toolUseId}`, { answers })
 			if (resolved) {
 				// Hook session — gate was blocking, now resolved
 				try {
