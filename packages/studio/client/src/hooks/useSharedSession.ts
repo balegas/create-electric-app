@@ -1,5 +1,6 @@
 import type { Participant, SharedSessionEvent } from "@electric-agent/protocol"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { getRoomPresence, pingRoom } from "../lib/api"
 import { getRoomToken } from "../lib/session-store"
 
 export interface SharedSessionState {
@@ -26,18 +27,10 @@ function reduceEvent(state: SharedSessionState, event: SharedSessionEvent): Shar
 		case "shared_session_created":
 			return { ...state, name: event.name, code: event.code }
 
-		case "participant_joined": {
-			// Deduplicate by participant id
-			const exists = state.participants.some((p) => p.id === event.participant.id)
-			if (exists) return state
-			return { ...state, participants: [...state.participants, event.participant] }
-		}
-
+		case "participant_joined":
 		case "participant_left":
-			return {
-				...state,
-				participants: state.participants.filter((p) => p.id !== event.participantId),
-			}
+			// Presence is now managed via ping/polling, ignore stream join/leave events
+			return state
 
 		case "session_linked": {
 			if (state.sessionIds.includes(event.sessionId)) return state
@@ -70,6 +63,9 @@ function reduceEvent(state: SharedSessionState, event: SharedSessionEvent): Shar
 	}
 }
 
+const PING_INTERVAL_MS = 30_000
+const PRESENCE_POLL_MS = 30_000
+
 export function useSharedSession(sharedSessionId: string | null) {
 	const [state, setState] = useState<SharedSessionState>(initialState)
 	const [isLive, setIsLive] = useState(false)
@@ -82,6 +78,7 @@ export function useSharedSession(sharedSessionId: string | null) {
 		setState(next)
 	}, [])
 
+	// SSE connection for room events (session links, revocations, etc.)
 	useEffect(() => {
 		if (!sharedSessionId) return
 
@@ -151,6 +148,36 @@ export function useSharedSession(sharedSessionId: string | null) {
 			}
 		}
 	}, [sharedSessionId, processEvent])
+
+	// Ping heartbeat + presence polling
+	useEffect(() => {
+		if (!sharedSessionId) return
+
+		let cancelled = false
+
+		async function tick() {
+			if (cancelled) return
+			try {
+				await pingRoom(sharedSessionId as string)
+				const { participants } = await getRoomPresence(sharedSessionId as string)
+				if (!cancelled) {
+					setState((prev) => ({ ...prev, participants }))
+					stateRef.current = { ...stateRef.current, participants }
+				}
+			} catch {
+				// Best effort
+			}
+		}
+
+		// Initial ping + presence fetch
+		tick()
+		const interval = setInterval(tick, Math.min(PING_INTERVAL_MS, PRESENCE_POLL_MS))
+
+		return () => {
+			cancelled = true
+			clearInterval(interval)
+		}
+	}, [sharedSessionId])
 
 	return { ...state, isLive }
 }

@@ -295,6 +295,20 @@ export function leaveSharedSession(sharedSessionId: string) {
 	})
 }
 
+export function pingRoom(sharedSessionId: string) {
+	const participant = getOrCreateParticipant()
+	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/ping`, {
+		method: "POST",
+		body: { participantId: participant.id, displayName: participant.displayName },
+	})
+}
+
+export function getRoomPresence(sharedSessionId: string) {
+	return request<{ participants: { id: string; displayName: string }[] }>(
+		`/shared-sessions/${sharedSessionId}/presence`,
+	)
+}
+
 export function linkSession(
 	sharedSessionId: string,
 	sessionId: string,
@@ -317,6 +331,10 @@ export function unlinkSession(sharedSessionId: string, sessionId: string) {
 	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/sessions/${sessionId}`, {
 		method: "DELETE",
 	})
+}
+
+export function getLinkedSessionToken(roomId: string, sessionId: string) {
+	return request<{ sessionToken: string }>(`/shared-sessions/${roomId}/sessions/${sessionId}/token`)
 }
 
 export function revokeSharedSession(sharedSessionId: string) {
