@@ -313,6 +313,11 @@
 	padding-top: 16px;
 }
 
+/* No overlaid topbar inside shared session panels */
+.shared-session-panel-body .console {
+	padding-top: 16px;
+}
+
 .jump-to-bottom {
 	position: sticky;
 	bottom: 8px;
