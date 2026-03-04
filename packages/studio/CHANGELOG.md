@@ -1,5 +1,19 @@
 # @electric-agent/studio
 
+## 1.6.0
+
+### Minor Changes
+
+- e25eb4b: Replace `app_ready` event with `app_status` event carrying status, port, and previewUrl. Remove 10-second polling loop for app status in the UI — preview button now driven entirely by SSE events.
+
+### Patch Changes
+
+- d259e9d: Fix Docker sandbox clone failing when resuming the same repo twice by clearing stale target directory before cloning.
+- 6bbb48a: Make GitHub token client-side only — server-side git functions now require an explicit token parameter and never fall back to ambient GH_TOKEN environment variable.
+- e21e8a7: Fix excessive top padding in shared room session panels by overriding the topbar-height offset that only applies on the main session page.
+- Updated dependencies [e25eb4b]
+  - @electric-agent/protocol@1.4.0
+
 ## 1.5.0
 
 ### Minor Changes
