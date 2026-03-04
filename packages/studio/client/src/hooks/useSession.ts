@@ -3,6 +3,12 @@ import toast from "react-hot-toast"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { getSessionToken } from "../lib/session-store"
 
+export interface SessionCost {
+	totalCostUsd: number
+	totalTurns: number
+	totalDurationMs: number
+}
+
 export function useSession(sessionId: string | null) {
 	const [entries, setEntries] = useState<ConsoleEntry[]>([])
 	const [isLive, setIsLive] = useState(false)
@@ -12,6 +18,11 @@ export function useSession(sessionId: string | null) {
 		port?: number
 		previewUrl?: string
 	} | null>(null)
+	const [cost, setCost] = useState<SessionCost>({
+		totalCostUsd: 0,
+		totalTurns: 0,
+		totalDurationMs: 0,
+	})
 	const toastShownRef = useRef(false)
 	const liveRef = useRef(false)
 	const lastEventIdRef = useRef("-1")
@@ -158,6 +169,14 @@ export function useSession(sessionId: string | null) {
 		}
 		if (event.type === "session_end") {
 			setIsComplete(true)
+			// Accumulate cost from each run
+			if (event.cost_usd != null || event.num_turns != null || event.duration_ms != null) {
+				setCost((prev) => ({
+					totalCostUsd: prev.totalCostUsd + (event.cost_usd ?? 0),
+					totalTurns: prev.totalTurns + (event.num_turns ?? 0),
+					totalDurationMs: prev.totalDurationMs + (event.duration_ms ?? 0),
+				}))
+			}
 			// Only toast for live events (not replayed catch-up), and only once per session
 			if (liveRef.current && !toastShownRef.current) {
 				toastShownRef.current = true
@@ -177,6 +196,7 @@ export function useSession(sessionId: string | null) {
 		setIsLive(false)
 		setIsComplete(false)
 		setAppStatus(null)
+		setCost({ totalCostUsd: 0, totalTurns: 0, totalDurationMs: 0 })
 		toastShownRef.current = false
 		liveRef.current = false
 		lastEventIdRef.current = "-1"
@@ -263,5 +283,5 @@ export function useSession(sessionId: string | null) {
 		})
 	}, [])
 
-	return { entries, isLive, isComplete, appStatus, markGateResolved }
+	return { entries, isLive, isComplete, appStatus, cost, markGateResolved }
 }

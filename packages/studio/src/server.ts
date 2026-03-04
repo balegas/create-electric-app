@@ -104,6 +104,32 @@ function resolveStudioUrl(port: number): string {
 }
 
 /**
+ * Accumulate cost and turn metrics from a session_end event into the session's totals.
+ * Called each time a Claude Code run finishes (initial + iterate runs).
+ */
+function accumulateSessionCost(config: ServerConfig, sessionId: string, event: EngineEvent): void {
+	if (event.type !== "session_end") return
+	const { cost_usd, num_turns, duration_ms } = event
+	if (cost_usd == null && num_turns == null && duration_ms == null) return
+
+	const existing = config.sessions.get(sessionId)
+	const updates: Partial<SessionInfo> = {}
+	if (cost_usd != null) {
+		updates.totalCostUsd = (existing?.totalCostUsd ?? 0) + cost_usd
+	}
+	if (num_turns != null) {
+		updates.totalTurns = (existing?.totalTurns ?? 0) + num_turns
+	}
+	if (duration_ms != null) {
+		updates.totalDurationMs = (existing?.totalDurationMs ?? 0) + duration_ms
+	}
+	config.sessions.update(sessionId, updates)
+	console.log(
+		`[session:${sessionId}] Cost: $${updates.totalCostUsd?.toFixed(4) ?? "?"} (${updates.totalTurns ?? "?"} turns)`,
+	)
+}
+
+/**
  * Create a Claude Code bridge for a session.
  * Spawns `claude` CLI with stream-json I/O inside the sandbox.
  */
@@ -284,12 +310,23 @@ function mapHookToEngineEvent(body: Record<string, unknown>): EngineEvent | null
 				ts: now,
 			}
 
-		case "SessionEnd":
-			return {
+		case "SessionEnd": {
+			const endEvent: EngineEvent = {
 				type: "session_end",
 				success: true,
 				ts: now,
 			}
+			// Claude Code SessionEnd hook may include session stats
+			const session = body.session as Record<string, unknown> | undefined
+			if (session) {
+				if (typeof session.cost_usd === "number") endEvent.cost_usd = session.cost_usd
+				if (typeof session.num_turns === "number") endEvent.num_turns = session.num_turns
+				if (typeof session.duration_ms === "number") endEvent.duration_ms = session.duration_ms
+				if (typeof session.duration_api_ms === "number")
+					endEvent.duration_api_ms = session.duration_api_ms
+			}
+			return endEvent
+		}
 
 		case "UserPromptSubmit":
 			return {
@@ -543,6 +580,7 @@ export function createApp(config: ServerConfig) {
 
 		// SessionEnd: mark session complete and close the bridge
 		if (hookEvent.type === "session_end") {
+			accumulateSessionCost(config, sessionId, hookEvent)
 			if (!isClaudeCodeBridge) {
 				config.sessions.update(sessionId, { status: "complete" })
 				closeBridge(sessionId)
@@ -696,6 +734,7 @@ export function createApp(config: ServerConfig) {
 
 		// SessionEnd: mark complete and close bridge (keep mapping for potential re-open)
 		if (hookEvent.type === "session_end") {
+			accumulateSessionCost(config, sessionId, hookEvent)
 			config.sessions.update(sessionId, { status: "complete" })
 			closeBridge(sessionId)
 			return c.json({ ok: true, sessionId })
@@ -1115,7 +1154,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			// 5. Start listening for agent events via the bridge
 
-			// Track Claude Code session ID for --resume on iterate
+			// Track Claude Code session ID and cost from agent events
 			bridge.onAgentEvent((event) => {
 				if (event.type === "session_start") {
 					const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
@@ -1123,6 +1162,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					if (ccSessionId) {
 						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
 					}
+				}
+				if (event.type === "session_end") {
+					accumulateSessionCost(config, sessionId, event)
 				}
 			})
 
@@ -2319,6 +2361,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					if (ccSessionId) {
 						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
 					}
+				}
+				if (event.type === "session_end") {
+					accumulateSessionCost(config, sessionId, event)
 				}
 			})
 

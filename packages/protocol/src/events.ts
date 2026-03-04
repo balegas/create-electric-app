@@ -38,7 +38,19 @@ export type EngineEvent =
 			ts: string
 	  }
 	| { type: "assistant_message"; text: string; agent?: string; ts: string }
-	| { type: "session_end"; success: boolean; ts: string }
+	| {
+			type: "session_end"
+			success: boolean
+			/** Total cost of the session in USD (from Claude Code result) */
+			cost_usd?: number
+			/** Number of agentic turns in the session */
+			num_turns?: number
+			/** Wall-clock duration in milliseconds */
+			duration_ms?: number
+			/** API-only duration in milliseconds */
+			duration_api_ms?: number
+			ts: string
+	  }
 	| {
 			type: "session_start"
 			session_id: string

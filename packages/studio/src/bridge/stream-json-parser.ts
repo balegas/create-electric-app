@@ -253,17 +253,20 @@ function handleUser(msg: StreamJsonUser, state: StreamJsonParserState): EngineEv
 	return events
 }
 
-function handleResult(msg: StreamJsonResult, state: StreamJsonParserState): EngineEvent[] {
-	const events: EngineEvent[] = []
-
+function handleResult(msg: StreamJsonResult, _state: StreamJsonParserState): EngineEvent[] {
 	const success = msg.subtype === "success"
-	events.push({
+	const event: EngineEvent = {
 		type: "session_end",
 		success,
 		ts: ts(),
-	})
+	}
 
-	return events
+	if (msg.cost_usd != null) event.cost_usd = msg.cost_usd
+	if (msg.num_turns != null) event.num_turns = msg.num_turns
+	if (msg.duration_ms != null) event.duration_ms = msg.duration_ms
+	if (msg.duration_api_ms != null) event.duration_api_ms = msg.duration_api_ms
+
+	return [event]
 }
 
 // ---------------------------------------------------------------------------
