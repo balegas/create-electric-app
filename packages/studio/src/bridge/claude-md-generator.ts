@@ -324,4 +324,3 @@ Commit types: feat, fix, refactor, style, chore, docs, test`
 // ---------------------------------------------------------------------------
 
 export { createAppSkillContent } from "./create-app-skill.js"
-
