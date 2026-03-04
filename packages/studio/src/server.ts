@@ -1138,14 +1138,16 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				config.sessions.update(sessionId, updates)
 
 				// Check if the app is running after completion
-				// and emit app_ready so the UI shows the preview link
+				// and emit app_status so the UI shows the preview link
 				if (success) {
 					try {
 						const appRunning = await config.sandbox.isAppRunning(handle)
 						if (appRunning) {
 							await bridge.emit({
-								type: "app_ready",
+								type: "app_status",
+								status: "running",
 								port: handle.port ?? session.appPort,
+								previewUrl: handle.previewUrl ?? session.previewUrl,
 								ts: ts(),
 							})
 						}
@@ -1234,7 +1236,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						message: "App started",
 						ts: ts(),
 					})
-					await bridge.emit({ type: "app_ready", port: session.appPort, ts: ts() })
+					await bridge.emit({
+						type: "app_status",
+						status: "running",
+						port: session.appPort,
+						previewUrl: session.previewUrl,
+						ts: ts(),
+					})
 				}
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : "Operation failed"
@@ -2282,8 +2290,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						const appRunning = await config.sandbox.isAppRunning(handle)
 						if (appRunning) {
 							await ccBridge.emit({
-								type: "app_ready",
+								type: "app_status",
+								status: "running",
 								port: handle.port ?? session.appPort,
+								previewUrl: handle.previewUrl ?? session.previewUrl,
 								ts: ts(),
 							})
 						}

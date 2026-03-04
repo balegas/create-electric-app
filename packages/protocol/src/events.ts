@@ -46,7 +46,13 @@ export type EngineEvent =
 			agent?: string
 			ts: string
 	  }
-	| { type: "app_ready"; port?: number; ts: string }
+	| {
+			type: "app_status"
+			status: "running" | "stopped"
+			port?: number
+			previewUrl?: string
+			ts: string
+	  }
 	| {
 			type: "todo_write"
 			tool_use_id: string
