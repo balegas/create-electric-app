@@ -7,12 +7,14 @@ import { useSession } from "../hooks/useSession"
 import { useSharedSession } from "../hooks/useSharedSession"
 import { useAppContext } from "../layouts/AppShell"
 import {
+	getLinkedSessionToken,
 	joinAsParticipant,
 	joinSharedSession,
 	leaveSharedSession,
 	linkSession,
 	unlinkSession,
 } from "../lib/api"
+import { getSessionToken, setSessionToken } from "../lib/session-store"
 import { addJoinedSharedSession, removeJoinedSharedSession } from "../lib/shared-session-store"
 
 export function SharedSessionPage() {
@@ -199,6 +201,7 @@ export function SharedSessionPage() {
 						{sharedSession.sessionIds.map((sid) => (
 							<LinkedSessionPanel
 								key={sid}
+								roomId={sharedSessionId}
 								sessionId={sid}
 								sessionName={sharedSession.sessionNames.get(sid)}
 								expanded={expandedPanels.has(sid)}
@@ -264,33 +267,66 @@ function ChevronIcon() {
 }
 
 function LinkedSessionPanel({
+	roomId,
 	sessionId,
 	sessionName,
 	expanded,
 	onToggle,
 	onUnlink,
 }: {
+	roomId: string
 	sessionId: string
 	sessionName?: string
 	expanded: boolean
 	onToggle: () => void
 	onUnlink: (sessionId: string) => void
 }) {
-	const { entries, isLive, isComplete, markGateResolved } = useSession(sessionId)
+	const [tokenReady, setTokenReady] = useState(false)
+	const [sessionStatus, setSessionStatus] = useState<{
+		isLive: boolean
+		isComplete: boolean
+	}>({ isLive: false, isComplete: false })
+
+	useEffect(() => {
+		if (getSessionToken(sessionId)) {
+			setTokenReady(true)
+			return
+		}
+		let cancelled = false
+		getLinkedSessionToken(roomId, sessionId)
+			.then(({ sessionToken }) => {
+				if (cancelled) return
+				setSessionToken(sessionId, sessionToken)
+				setTokenReady(true)
+			})
+			.catch((err) => {
+				if (!cancelled) console.error("Failed to fetch linked session token:", err)
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [roomId, sessionId])
 
 	return (
 		<div className={`shared-session-panel ${expanded ? "expanded" : "collapsed"}`}>
 			<div className="shared-session-panel-header" onClick={onToggle}>
 				<ChevronIcon />
 				<span className="shared-session-panel-id">{sessionName || sessionId.slice(0, 8)}</span>
-				{isComplete ? (
+				{!tokenReady ? (
+					<span
+						className="session-header-status"
+						style={{ color: "var(--text-subtle)", fontSize: 11 }}
+					>
+						Connecting...
+					</span>
+				) : sessionStatus.isComplete ? (
 					<span
 						className="session-header-status"
 						style={{ color: "var(--text-subtle)", fontSize: 11 }}
 					>
 						Offline
 					</span>
-				) : isLive ? (
+				) : sessionStatus.isLive ? (
 					<span className="session-header-status" style={{ color: "var(--green)", fontSize: 11 }}>
 						Live
 					</span>
@@ -308,14 +344,36 @@ function LinkedSessionPanel({
 				</button>
 			</div>
 			<div className="shared-session-panel-body">
-				<Console
-					sessionId={sessionId}
-					entries={entries}
-					isLive={isLive}
-					isComplete={isComplete}
-					onGateResolved={markGateResolved}
-				/>
+				{tokenReady ? (
+					<LinkedSessionContent sessionId={sessionId} onStatusChange={setSessionStatus} />
+				) : (
+					<Skeleton variant="block" />
+				)}
 			</div>
 		</div>
+	)
+}
+
+function LinkedSessionContent({
+	sessionId,
+	onStatusChange,
+}: {
+	sessionId: string
+	onStatusChange: (status: { isLive: boolean; isComplete: boolean }) => void
+}) {
+	const { entries, isLive, isComplete, markGateResolved } = useSession(sessionId)
+
+	useEffect(() => {
+		onStatusChange({ isLive, isComplete })
+	}, [isLive, isComplete, onStatusChange])
+
+	return (
+		<Console
+			sessionId={sessionId}
+			entries={entries}
+			isLive={isLive}
+			isComplete={isComplete}
+			onGateResolved={markGateResolved}
+		/>
 	)
 }

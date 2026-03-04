@@ -18,10 +18,14 @@ export function getJoinedSharedSessions(): JoinedSharedSession[] {
 
 export function addJoinedSharedSession(entry: JoinedSharedSession): void {
 	const sessions = getJoinedSharedSessions()
-	// Deduplicate by code
-	const filtered = sessions.filter((s) => s.code !== entry.code)
-	filtered.push(entry)
-	localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered))
+	const existingIndex = sessions.findIndex((s) => s.code === entry.code)
+	if (existingIndex >= 0) {
+		// Update in place to preserve order
+		sessions[existingIndex] = entry
+	} else {
+		sessions.push(entry)
+	}
+	localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
 }
 
 export function removeJoinedSharedSession(code: string): void {

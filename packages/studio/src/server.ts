@@ -55,6 +55,9 @@ interface ServerConfig {
 /** Active session bridges — one per running session */
 const bridges = new Map<string, SessionBridge>()
 
+/** In-memory room presence: roomId → participantId → { displayName, lastPing } */
+const roomPresence = new Map<string, Map<string, { displayName: string; lastPing: number }>>()
+
 /** Inflight hook session creations — prevents duplicate sessions from concurrent hooks */
 const inflightHookCreations = new Map<string, Promise<string>>()
 
@@ -1764,6 +1767,48 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ ok: true })
 	})
 
+	// Heartbeat ping for room presence (in-memory, not persisted to stream)
+	app.post("/api/shared-sessions/:id/ping", async (c) => {
+		const id = c.req.param("id")
+		const body = (await c.req.json()) as { participantId: string; displayName: string }
+		if (!body.participantId) {
+			return c.json({ error: "participantId is required" }, 400)
+		}
+
+		let room = roomPresence.get(id)
+		if (!room) {
+			room = new Map()
+			roomPresence.set(id, room)
+		}
+		room.set(body.participantId, {
+			displayName: body.displayName || body.participantId.slice(0, 8),
+			lastPing: Date.now(),
+		})
+
+		return c.json({ ok: true })
+	})
+
+	// Get active participants (pinged within last 90 seconds)
+	app.get("/api/shared-sessions/:id/presence", (c) => {
+		const id = c.req.param("id")
+		const room = roomPresence.get(id)
+		const STALE_MS = 90_000
+		const now = Date.now()
+		const active: Participant[] = []
+
+		if (room) {
+			for (const [pid, info] of room) {
+				if (now - info.lastPing < STALE_MS) {
+					active.push({ id: pid, displayName: info.displayName })
+				} else {
+					room.delete(pid)
+				}
+			}
+		}
+
+		return c.json({ participants: active })
+	})
+
 	// Link a session to a shared session (room)
 	// The client sends session metadata since sessions are private (localStorage).
 	app.post("/api/shared-sessions/:id/sessions", async (c) => {
@@ -1795,6 +1840,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		await stream.append(JSON.stringify(event))
 
 		return c.json({ ok: true })
+	})
+
+	// Get a session token for a linked session (allows room participants to read session streams)
+	app.get("/api/shared-sessions/:id/sessions/:sessionId/token", (c) => {
+		const sessionId = c.req.param("sessionId")
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+		return c.json({ sessionToken })
 	})
 
 	// Unlink a session from a shared session
