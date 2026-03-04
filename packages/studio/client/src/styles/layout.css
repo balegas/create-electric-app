@@ -217,6 +217,16 @@
 	flex-shrink: 0;
 }
 
+.session-header-cost {
+	font-size: 11px;
+	font-family: var(--font-mono);
+	color: var(--text-muted);
+	flex-shrink: 0;
+	padding: 2px 6px;
+	border-radius: 4px;
+	background: var(--bg-hover);
+}
+
 .session-header-action {
 	font-size: 12px;
 	font-family: var(--font-mono);

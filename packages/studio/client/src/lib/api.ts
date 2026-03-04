@@ -101,6 +101,9 @@ export interface SessionInfo {
 	status: "running" | "complete" | "error" | "cancelled"
 	appPort?: number
 	previewUrl?: string
+	totalCostUsd?: number
+	totalTurns?: number
+	totalDurationMs?: number
 	git?: SessionGitState
 }
 

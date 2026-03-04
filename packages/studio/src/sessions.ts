@@ -20,6 +20,12 @@ export interface SessionInfo {
 	claimId?: string
 	/** Claude Code's own session ID — maps Claude sessions to EA sessions */
 	claudeSessionId?: string
+	/** Cumulative cost of the session in USD */
+	totalCostUsd?: number
+	/** Total number of agentic turns across all runs */
+	totalTurns?: number
+	/** Total wall-clock duration across all runs in milliseconds */
+	totalDurationMs?: number
 	/** Git state — populated after scaffold or publish */
 	git?: {
 		branch: string
