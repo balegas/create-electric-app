@@ -7,7 +7,11 @@ export function useSession(sessionId: string | null) {
 	const [entries, setEntries] = useState<ConsoleEntry[]>([])
 	const [isLive, setIsLive] = useState(false)
 	const [isComplete, setIsComplete] = useState(false)
-	const [appReady, setAppReady] = useState(false)
+	const [appStatus, setAppStatus] = useState<{
+		status: "running" | "stopped"
+		port?: number
+		previewUrl?: string
+	} | null>(null)
 	const toastShownRef = useRef(false)
 	const liveRef = useRef(false)
 	const lastEventIdRef = useRef("-1")
@@ -137,7 +141,7 @@ export function useSession(sessionId: string | null) {
 
 				case "session_end":
 				case "session_start":
-				case "app_ready":
+				case "app_status":
 					return prev
 
 				default:
@@ -145,8 +149,12 @@ export function useSession(sessionId: string | null) {
 			}
 		})
 
-		if (event.type === "app_ready") {
-			setAppReady(true)
+		if (event.type === "app_status") {
+			setAppStatus({
+				status: event.status,
+				port: event.port,
+				previewUrl: event.previewUrl,
+			})
 		}
 		if (event.type === "session_end") {
 			setIsComplete(true)
@@ -168,7 +176,7 @@ export function useSession(sessionId: string | null) {
 		setEntries([])
 		setIsLive(false)
 		setIsComplete(false)
-		setAppReady(false)
+		setAppStatus(null)
 		toastShownRef.current = false
 		liveRef.current = false
 		lastEventIdRef.current = "-1"
@@ -255,5 +263,5 @@ export function useSession(sessionId: string | null) {
 		})
 	}, [])
 
-	return { entries, isLive, isComplete, appReady, markGateResolved }
+	return { entries, isLive, isComplete, appStatus, markGateResolved }
 }

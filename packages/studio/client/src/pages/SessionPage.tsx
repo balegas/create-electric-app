@@ -6,21 +6,13 @@ import { Settings } from "../components/Settings"
 import { Skeleton } from "../components/Skeleton"
 import { useSession } from "../hooks/useSession"
 import { useAppContext } from "../layouts/AppShell"
-import {
-	createSession,
-	getAppStatus,
-	interruptSession,
-	type SessionInfo,
-	sendIterate,
-} from "../lib/api"
+import { createSession, interruptSession, type SessionInfo, sendIterate } from "../lib/api"
 import type { ConsoleEntry } from "../lib/event-types"
 import { addSession, getSessionById, updateSession } from "../lib/session-store"
 
 interface OutletCtx {
 	openMobileDrawer: () => void
 }
-
-type AppState = "hidden" | "starting" | "stopping" | "running" | "stopped"
 
 function serializeEntries(entries: ConsoleEntry[]): string {
 	const lines: string[] = []
@@ -122,22 +114,17 @@ export function SessionPage() {
 	}, [id, location.state, navigate, refreshSessions])
 
 	const effectiveId = realSessionId
-	const { entries, isLive, isComplete, appReady, markGateResolved } = useSession(effectiveId)
+	const { entries, isLive, isComplete, appStatus, markGateResolved } = useSession(effectiveId)
 
 	// Load session from localStorage
 	const [activeSession, setActiveSession] = useState<SessionInfo | null>(() =>
 		effectiveId ? (getSessionById(effectiveId) ?? null) : null,
 	)
-	const [appState, setAppState] = useState<AppState>("hidden")
-	const [appPort, setAppPort] = useState<number | undefined>(() => activeSession?.appPort)
-	const [previewUrl, setPreviewUrl] = useState<string | undefined>(() => activeSession?.previewUrl)
 
 	useEffect(() => {
 		if (effectiveId) {
 			const session = getSessionById(effectiveId)
 			setActiveSession(session ?? null)
-			if (session?.appPort) setAppPort(session.appPort)
-			if (session?.previewUrl) setPreviewUrl(session.previewUrl)
 		}
 	}, [effectiveId])
 
@@ -149,41 +136,9 @@ export function SessionPage() {
 		}
 	}, [effectiveId, isComplete, refreshSessions])
 
-	// Poll app status when session is complete/error or when Vite reports ready
-	const sessionDone =
-		isComplete ||
-		appReady ||
-		activeSession?.status === "complete" ||
-		activeSession?.status === "error"
-
-	const appResolved = appState === "running" && !!previewUrl
-	useEffect(() => {
-		if (!effectiveId || !sessionDone || appResolved) {
-			if (!sessionDone) setAppState("hidden")
-			return
-		}
-
-		const checkStatus = async () => {
-			try {
-				const status = await getAppStatus(effectiveId)
-				setAppState(status.running ? "running" : "stopped")
-				if (status.port) setAppPort(status.port)
-				if (status.previewUrl) setPreviewUrl(status.previewUrl)
-				// Update localStorage with port/preview info
-				if (status.port || status.previewUrl) {
-					updateSession(effectiveId, {
-						...(status.port ? { appPort: status.port } : {}),
-						...(status.previewUrl ? { previewUrl: status.previewUrl } : {}),
-					})
-				}
-			} catch {
-				setAppState("stopped")
-			}
-		}
-		checkStatus()
-		const interval = setInterval(checkStatus, 10_000)
-		return () => clearInterval(interval)
-	}, [effectiveId, sessionDone, appResolved])
+	// Derive preview URL and port from app_status event
+	const appPort = appStatus?.port
+	const previewUrl = appStatus?.previewUrl
 
 	const handleIterate = useCallback(
 		async (request: string) => {
@@ -274,12 +229,12 @@ export function SessionPage() {
 				)}
 
 				<span className="session-header-actions-group">
-					{appPort && (appReady || appState === "running" || sessionDone) && (
+					{appStatus && (
 						<a
-							href={previewUrl ?? `http://localhost:${appPort}`}
+							href={previewUrl ?? (appPort ? `http://localhost:${appPort}` : "#")}
 							target="_blank"
 							rel="noopener noreferrer"
-							className="session-header-action primary"
+							className={`session-header-action ${appStatus.status === "running" ? "primary" : ""}`}
 						>
 							Preview
 						</a>
@@ -305,9 +260,9 @@ export function SessionPage() {
 				</button>
 				{overflowOpen && (
 					<div className="session-header-overflow-menu">
-						{appPort && (appReady || appState === "running" || sessionDone) && (
+						{appStatus && (
 							<a
-								href={previewUrl ?? `http://localhost:${appPort}`}
+								href={previewUrl ?? (appPort ? `http://localhost:${appPort}` : "#")}
 								target="_blank"
 								rel="noopener noreferrer"
 								className="session-header-overflow-menu-item"
@@ -331,8 +286,8 @@ export function SessionPage() {
 			</div>
 
 			<div className="session-content">
-				{/* Mobile-only preview bar — visible when session is done */}
-				{(previewUrl || appPort) && sessionDone && (
+				{/* Mobile-only preview bar — visible when app_status received */}
+				{appStatus && (previewUrl || appPort) && (
 					<div className="mobile-preview-bar">
 						<a
 							href={previewUrl ?? `http://localhost:${appPort}`}

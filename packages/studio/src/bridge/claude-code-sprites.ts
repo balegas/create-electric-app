@@ -370,16 +370,20 @@ exit 0`
 			this.resultReceived = true
 		}
 
-		// Detect dev:start in Bash tool_use → emit app_ready for the UI preview
+		// Detect dev:start in Bash tool_use → emit app_status for the UI preview
 		if (event.type === "pre_tool_use" && event.tool_name === "Bash") {
 			const cmd = (event.tool_input as Record<string, unknown>)?.command
 			if (typeof cmd === "string" && /\bdev:start\b/.test(cmd)) {
-				const appReady: EngineEvent = { type: "app_ready", ts: ts() }
-				const appReadyMsg: StreamMessage = { source: "agent", ...appReady }
-				this.writer.append(JSON.stringify(appReadyMsg)).catch(() => {})
+				const appStatus: EngineEvent = {
+					type: "app_status",
+					status: "running",
+					ts: ts(),
+				}
+				const appStatusMsg: StreamMessage = { source: "agent", ...appStatus }
+				this.writer.append(JSON.stringify(appStatusMsg)).catch(() => {})
 				for (const cb of this.agentEventCallbacks) {
 					try {
-						cb(appReady)
+						cb(appStatus)
 					} catch {
 						// Swallow
 					}
