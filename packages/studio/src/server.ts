@@ -1053,6 +1053,15 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					projectName,
 					projectDir: handle.projectDir,
 					runtime: config.sandbox.runtime,
+					...(repoConfig
+						? {
+								git: {
+									mode: "create" as const,
+									repoName: `${repoConfig.account}/${repoConfig.repoName}`,
+									visibility: repoConfig.visibility,
+								},
+							}
+						: {}),
 				})
 				try {
 					await config.sandbox.exec(
@@ -1173,17 +1182,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			console.log(`[session:${sessionId}] Bridge started, sending 'new' command...`)
 
 			// 5. Send the new command via the bridge
-			const newCmd: Record<string, unknown> = {
+			await bridge.sendCommand({
 				command: "new",
 				description: body.description,
 				projectName,
 				baseDir: "/home/agent/workspace",
-			}
-			if (repoConfig) {
-				newCmd.gitRepoName = `${repoConfig.account}/${repoConfig.repoName}`
-				newCmd.gitRepoVisibility = repoConfig.visibility
-			}
-			await bridge.sendCommand(newCmd)
+			})
 			console.log(`[session:${sessionId}] Command sent, waiting for agent...`)
 		}
 
@@ -2260,6 +2264,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				projectName: repoName,
 				projectDir: handle.projectDir,
 				runtime: config.sandbox.runtime,
+				git: {
+					mode: "existing",
+					repoName: parseRepoNameFromUrl(body.repoUrl) ?? repoName,
+					branch: gs.branch ?? body.branch ?? "main",
+				},
 			})
 			try {
 				await config.sandbox.exec(
