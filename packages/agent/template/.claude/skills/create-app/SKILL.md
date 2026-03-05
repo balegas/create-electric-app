@@ -192,10 +192,20 @@ export const Route = createFileRoute("/api/<entity>")({
 
 ## Phase 4: UI Components
 
+**Before writing any UI code**, read the ui-design skill:
+- `.claude/skills/ui-design/SKILL.md` — design thinking + Radix UI Themes component patterns
+
+Design approach:
+- Commit to a coherent aesthetic direction that fits the app's purpose
+- Every component should use Radix UI Themes — never raw HTML elements
+- Follow the spacing scale and typography hierarchy from the skill
+
+Implementation:
 - Create page routes with `useLiveQuery` — add `ssr: false` to leaf routes (NOT `__root.tsx`)
 - Wrap `useLiveQuery` components in `ClientOnly` when used from `__root.tsx`
+- Use the component patterns from ui-design skill: page layout, data tables, card lists, dialog forms, empty states, delete confirmations
 - Use `lucide-react` for icons (NOT `@radix-ui/react-icons`)
-- Style with Radix UI Themes components
+- All UI components from `@radix-ui/themes` — never raw HTML for buttons, inputs, tables
 
 ## Phase 5: Build & Verify
 
@@ -251,6 +261,14 @@ pnpm dev:start
 **IMPORTANT**: Always use `pnpm dev:start` from the project directory. Do NOT use `sprite-env services create` or launch Vite manually — the project's `vite.config.ts` contains required settings (`allowedHosts`, `port`, `proxy`) that will not be applied if Vite is started from a different directory.
 
 After starting, the app is accessible at the preview URL (shown in the UI).
+
+Once the app is running, invoke the UI design skill to iterate on the UI with the user:
+
+```
+/ui-design
+```
+
+This loads the design system and component patterns into context, audits the current UI against best practices, and enters an interactive loop where the user can request specific improvements.
 
 ## Critical Rules (from electric-app-guardrails)
 

@@ -100,6 +100,10 @@ export async function scaffold(
 	reporter?.log("verbose", "Patching public CSS imports...")
 	patchPublicCssImports(projectDir)
 
+	// Step 6c: Set Electric brand theme colors in __root.tsx
+	reporter?.log("verbose", "Patching theme colors...")
+	patchThemeColors(projectDir)
+
 	// Step 7: Copy .env.example -> .env and ensure VITE_PORT is set
 	const envExample = path.join(projectDir, ".env.example")
 	const envFile = path.join(projectDir, ".env")
@@ -350,6 +354,62 @@ function patchPublicCssImports(projectDir: string): void {
 		// Replace the variable reference with a string literal
 		content = content.replace(/href:\s*typographyCss/g, 'href: "/typography.css"')
 		fs.writeFileSync(rootPath, content, "utf-8")
+	}
+}
+
+function patchThemeColors(projectDir: string): void {
+	const rootPath = path.join(projectDir, "src/routes/__root.tsx")
+	if (!fs.existsSync(rootPath)) return
+
+	let content = fs.readFileSync(rootPath, "utf-8")
+
+	// Replace KPB default accentColor="blue" (or any other) with Electric brand violet
+	// Also add grayColor, radius, and panelBackground if not present
+	const themeRegex = /<Theme\b([^>]*)>/
+	const match = content.match(themeRegex)
+	if (match) {
+		let attrs = match[1]
+
+		// Replace or add accentColor
+		if (attrs.includes("accentColor")) {
+			attrs = attrs.replace(/accentColor="[^"]*"/, 'accentColor="violet"')
+		} else {
+			attrs += ' accentColor="violet"'
+		}
+
+		// Replace or add grayColor
+		if (attrs.includes("grayColor")) {
+			attrs = attrs.replace(/grayColor="[^"]*"/, 'grayColor="mauve"')
+		} else {
+			attrs += ' grayColor="mauve"'
+		}
+
+		// Replace or add radius
+		if (attrs.includes("radius=")) {
+			attrs = attrs.replace(/radius="[^"]*"/, 'radius="medium"')
+		} else {
+			attrs += ' radius="medium"'
+		}
+
+		// Replace or add panelBackground
+		if (attrs.includes("panelBackground")) {
+			attrs = attrs.replace(/panelBackground="[^"]*"/, 'panelBackground="translucent"')
+		} else {
+			attrs += ' panelBackground="translucent"'
+		}
+
+		content = content.replace(themeRegex, `<Theme${attrs}>`)
+		fs.writeFileSync(rootPath, content, "utf-8")
+	}
+
+	// Add Electric brand CSS custom properties to styles.css if present
+	const stylesPath = path.join(projectDir, "src/styles.css")
+	if (fs.existsSync(stylesPath)) {
+		let styles = fs.readFileSync(stylesPath, "utf-8")
+		if (!styles.includes("--electric-brand")) {
+			styles += `\n:root {\n  --electric-brand: #d0bcff;\n  --electric-teal: #00d2a0;\n}\n`
+			fs.writeFileSync(stylesPath, styles, "utf-8")
+		}
 	}
 }
 
