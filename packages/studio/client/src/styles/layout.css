@@ -213,7 +213,6 @@
 
 .session-header-status {
 	font-size: 11px;
-	margin-left: auto;
 	flex-shrink: 0;
 }
 
@@ -225,6 +224,11 @@
 	padding: 2px 6px;
 	border-radius: 4px;
 	background: var(--bg-hover);
+}
+
+.session-header-actions-group {
+	margin-left: auto;
+	flex-shrink: 0;
 }
 
 .session-header-action {
