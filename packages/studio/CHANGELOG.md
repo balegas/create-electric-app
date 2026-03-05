@@ -1,5 +1,18 @@
 # @electric-agent/studio
 
+## 1.8.0
+
+### Minor Changes
+
+- a34184d: Inject git instructions into CLAUDE.md so the agent creates GitHub repos and pushes code when configured. Previously, repo config was collected from the user but never acted upon. Also removes the deprecated `generateElectricAgentClaudeMd` function.
+- a6309e6: Track session costs (tokens, turns, duration) from Claude Code and display them in the session header UI. Cost data is extracted from Claude Code's stream-json result messages and accumulated across multiple runs (initial + iterate) per session.
+
+### Patch Changes
+
+- 7163eee: Instruct the agent to commit and push the final generated app code as the last step, not just the initial scaffold.
+- Updated dependencies [a6309e6]
+  - @electric-agent/protocol@1.5.0
+
 ## 1.7.0
 
 ### Minor Changes

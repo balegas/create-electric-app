@@ -1,5 +1,19 @@
 # @electric-agent/agent
 
+## 1.2.0
+
+### Minor Changes
+
+- 07c78c1: Add ui-design skill for interactive UI iteration with Radix UI Themes patterns, Electric brand theme patching in scaffold, and enhanced Phase 4 guidance in create-app pipeline.
+
+### Patch Changes
+
+- Updated dependencies [a34184d]
+- Updated dependencies [7163eee]
+- Updated dependencies [a6309e6]
+  - @electric-agent/studio@1.8.0
+  - @electric-agent/protocol@1.5.0
+
 ## 1.1.9
 
 ### Patch Changes
