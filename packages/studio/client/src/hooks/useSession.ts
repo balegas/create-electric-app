@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import toast from "react-hot-toast"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { getSessionToken } from "../lib/session-store"
 
@@ -23,8 +22,6 @@ export function useSession(sessionId: string | null) {
 		totalTurns: 0,
 		totalDurationMs: 0,
 	})
-	const toastShownRef = useRef(false)
-	const liveRef = useRef(false)
 	const lastEventIdRef = useRef("-1")
 
 	const processEvent = useCallback((event: EngineEvent) => {
@@ -177,15 +174,6 @@ export function useSession(sessionId: string | null) {
 					totalDurationMs: prev.totalDurationMs + (event.duration_ms ?? 0),
 				}))
 			}
-			// Only toast for live events (not replayed catch-up), and only once per session
-			if (liveRef.current && !toastShownRef.current) {
-				toastShownRef.current = true
-				if (event.success) {
-					toast.success("Session completed successfully")
-				} else {
-					toast.error("Session completed with errors")
-				}
-			}
 		}
 	}, [])
 
@@ -197,8 +185,6 @@ export function useSession(sessionId: string | null) {
 		setIsComplete(false)
 		setAppStatus(null)
 		setCost({ totalCostUsd: 0, totalTurns: 0, totalDurationMs: 0 })
-		toastShownRef.current = false
-		liveRef.current = false
 		lastEventIdRef.current = "-1"
 
 		let cancelled = false
@@ -230,10 +216,6 @@ export function useSession(sessionId: string | null) {
 				if (!cancelled) {
 					retryCount = 0 // Reset on successful connection
 					setIsLive(true)
-					// Mark live after connection — first batch of events is catch-up
-					setTimeout(() => {
-						liveRef.current = true
-					}, 500)
 				}
 			}
 
