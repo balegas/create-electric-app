@@ -217,11 +217,6 @@ export function SessionPage() {
 						Live
 					</span>
 				)}
-				{isComplete && (
-					<span className="session-header-status" style={{ color: "var(--text-subtle)" }}>
-						Complete
-					</span>
-				)}
 				{!initializing && !isLive && !isComplete && (
 					<span className="session-header-status" style={{ color: "var(--yellow)" }}>
 						Connecting...
