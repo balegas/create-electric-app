@@ -217,11 +217,6 @@ export function SessionPage() {
 						Live
 					</span>
 				)}
-				{isComplete && (
-					<span className="session-header-status" style={{ color: "var(--text-subtle)" }}>
-						Complete
-					</span>
-				)}
 				{!initializing && !isLive && !isComplete && (
 					<span className="session-header-status" style={{ color: "var(--yellow)" }}>
 						Connecting...
@@ -242,7 +237,7 @@ export function SessionPage() {
 							rel="noopener noreferrer"
 							className={`session-header-action ${appStatus.status === "running" ? "primary" : ""}`}
 						>
-							Preview
+							Open App
 						</a>
 					)}
 				</span>
@@ -274,7 +269,7 @@ export function SessionPage() {
 								className="session-header-overflow-menu-item"
 								onClick={() => setOverflowOpen(false)}
 							>
-								Preview App
+								Open App
 							</a>
 						)}
 						{cost.totalCostUsd > 0 && (
@@ -316,12 +311,12 @@ export function SessionPage() {
 								strokeLinecap="round"
 								strokeLinejoin="round"
 							>
-								<title>Open preview</title>
+								<title>Open App</title>
 								<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
 								<polyline points="15 3 21 3 21 9" />
 								<line x1="10" y1="14" x2="21" y2="3" />
 							</svg>
-							Open Preview
+							Open App
 						</a>
 					</div>
 				)}
