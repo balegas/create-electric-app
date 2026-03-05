@@ -84,14 +84,14 @@ export function HomePage() {
 
 			<div className="hero">
 				<img src="/img/brand/logo.svg" alt="Electric" className="hero-logo" />
-				<p className="hero-subtitle">What do you want to build?</p>
+				<p className="hero-subtitle">Build Reactive apps on Sync</p>
 				<div className="hero-prompt">
 					<PromptInput
 						onSubmit={handleNewProject}
 						placeholder={
 							!authSource
 								? "Set an API key in Settings to get started..."
-								: "Describe the app you want to build..."
+								: "What do you want to build?"
 						}
 						disabled={loading || !authSource}
 					/>
