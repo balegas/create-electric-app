@@ -84,10 +84,11 @@
 		background: var(--bg-hover);
 	}
 
-	/* ---- Session header: compact + overflow ---- */
+	/* ---- Session header: compact, taller on mobile ---- */
 	.session-header {
 		padding: 0 8px;
 		gap: 6px;
+		height: 56px;
 	}
 
 	.session-header-name {
@@ -100,6 +101,35 @@
 	.session-header .session-header-cost,
 	.session-header .session-header-actions-group {
 		display: none;
+	}
+
+	/* Mobile icon-only Open App button in header bar */
+	.mobile-open-app-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border-radius: 6px;
+		color: var(--text-muted);
+		text-decoration: none;
+		flex-shrink: 0;
+		-webkit-tap-highlight-color: transparent;
+		transition: color 0.15s, background 0.15s;
+	}
+
+	.mobile-open-app-icon:hover {
+		color: var(--text);
+		background: var(--bg-hover);
+	}
+
+	.mobile-open-app-icon.primary {
+		color: var(--brand-1);
+	}
+
+	.mobile-open-app-icon.primary:hover {
+		background: var(--brand-2);
+		color: #fff;
 	}
 
 	/* Overflow menu button */
@@ -126,7 +156,7 @@
 	/* Overflow dropdown */
 	.session-header-overflow-menu {
 		position: absolute;
-		top: calc(var(--topbar-height) - 4px);
+		top: 52px;
 		right: 8px;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
@@ -159,55 +189,18 @@
 		color: var(--text);
 	}
 
-	/* ---- Mobile preview bar: shown below session header when session is done ---- */
-	.mobile-preview-bar {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 8px 12px;
-		padding-top: calc(var(--topbar-height) + 8px);
-		background: var(--bg-surface);
-		border-bottom: 1px solid var(--border);
-		flex-shrink: 0;
-	}
-
-	.mobile-preview-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 10px 20px;
-		font-size: 14px;
-		font-family: var(--font-mono);
-		color: var(--brand-1);
-		background: transparent;
-		border: 1px solid var(--brand-3);
-		border-radius: 8px;
-		text-decoration: none;
-		-webkit-tap-highlight-color: transparent;
-		transition:
-			color 0.15s,
-			background 0.15s,
-			border-color 0.15s;
-	}
-
-	.mobile-preview-link:hover {
-		background: var(--brand-2);
-		border-color: var(--brand-2);
-		color: #fff;
-	}
-
-	/* ---- Console: reduce padding, account for overlaid header ---- */
+	/* ---- Console: account for taller overlaid header on mobile ---- */
 	.console {
-		padding: calc(var(--topbar-height) + 8px) 8px 8px;
+		padding: 64px 8px 8px;
 		overflow-x: hidden;
 	}
 
-	/* Reduce console top padding when mobile preview bar is shown above */
-	.mobile-preview-bar ~ .console {
-		padding-top: 8px;
+	/* ---- Prevent horizontal drag/scroll on conversation content ---- */
+	.main-content {
+		overflow-x: hidden;
+		touch-action: pan-y pinch-zoom;
 	}
 
-	/* ---- Prevent horizontal drag/scroll on conversation content ---- */
 	.session-content {
 		overflow-x: hidden;
 		touch-action: pan-y pinch-zoom;
@@ -215,7 +208,7 @@
 
 	/* ---- Session loading skeleton: mobile ---- */
 	.session-loading {
-		padding: calc(var(--topbar-height) + 8px) 8px 8px;
+		padding: 64px 8px 8px;
 	}
 
 	/* ---- Tool inline: truncate summary more aggressively ---- */
@@ -444,17 +437,9 @@
 		padding: 10px 12px;
 	}
 
-	/* ---- Global settings button: move to accommodate hamburger ---- */
+	/* ---- Global settings button: hide on mobile (available via overflow menu) ---- */
 	.global-settings-btn {
-		top: 8px;
-		right: 8px;
-		width: 40px;
-		height: 40px;
-	}
-
-	.global-settings-btn svg {
-		width: 20px;
-		height: 20px;
+		display: none;
 	}
 
 	/* ---- Jump to bottom: touch-friendly ---- */
@@ -507,6 +492,10 @@
 	}
 
 	.mobile-preview-bar {
+		display: none;
+	}
+
+	.mobile-open-app-icon {
 		display: none;
 	}
 
