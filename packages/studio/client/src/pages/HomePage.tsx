@@ -84,7 +84,7 @@ export function HomePage() {
 
 			<div className="hero">
 				<img src="/img/brand/logo.svg" alt="Electric" className="hero-logo" />
-				<p className="hero-subtitle">Build Reactive apps on Sync</p>
+				<p className="hero-subtitle">What do you want to build?</p>
 				<div className="hero-prompt">
 					<PromptInput
 						onSubmit={handleNewProject}
