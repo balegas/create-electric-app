@@ -287,9 +287,11 @@ function gitInstructions(git?: GitConfig): string {
 
 	if (git.mode === "create") {
 		const visibility = git.visibility === "public" ? "--public" : "--private"
-		return `## Git & GitHub (CRITICAL — run after scaffolding is complete)
-After ALL code generation and migrations are done (just before \`pnpm dev:start\`), you MUST initialize git and create the GitHub repo:
+		return `## Git & GitHub (CRITICAL)
+You MUST run these git commands at two points during the session:
 
+### 1. After scaffolding — initialize repo
+Run this right after migrations, BEFORE \`pnpm dev:start\`:
 \`\`\`bash
 git init -b main
 git add -A
@@ -297,11 +299,13 @@ git commit -m "chore: scaffold ${git.repoName.split("/").pop()}"
 gh repo create "${git.repoName}" ${visibility} --source . --remote origin --push
 \`\`\`
 
-After subsequent changes, commit and push:
+### 2. After app generation is complete — push final code
+Run this as your FINAL action, after the dev server is running and all code is written:
 \`\`\`bash
-git add -A && git commit -m "type(scope): description"
+git add -A && git commit -m "feat: initial app implementation"
 git push
 \`\`\`
+
 Commit types: feat, fix, refactor, style, chore, docs, test`
 	}
 
