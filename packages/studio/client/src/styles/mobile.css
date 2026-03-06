@@ -6,6 +6,7 @@
 	/* ---- Layout: single-column, no grid sidebar ---- */
 	.app-shell {
 		grid-template-columns: 1fr;
+		overscroll-behavior: none;
 	}
 
 	/* ---- Sidebar: off-canvas drawer ---- */
@@ -195,10 +196,11 @@
 		overflow-x: hidden;
 	}
 
-	/* ---- Prevent horizontal drag/scroll on conversation content ---- */
+	/* ---- Prevent drag/scroll and overscroll bounce on main content ---- */
 	.main-content {
-		overflow-x: hidden;
+		overflow: hidden;
 		touch-action: pan-y pinch-zoom;
+		overscroll-behavior: none;
 	}
 
 	.session-content {
@@ -272,11 +274,14 @@
 		height: 26px;
 	}
 
-	/* ---- Hero: mobile-specific design ---- */
+	/* ---- Hero: mobile-specific design, fit to screen ---- */
 	.hero {
 		padding: 0 16px;
 		justify-content: flex-start;
 		padding-top: 8vh;
+		max-height: 100%;
+		overflow: hidden;
+		overscroll-behavior: none;
 	}
 
 	.hero-logo {
