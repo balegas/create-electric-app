@@ -1076,6 +1076,19 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						message: "Project ready",
 						ts: ts(),
 					})
+
+					// Log the agent package version installed in the sandbox
+					try {
+						const agentVersion = (await config.sandbox.exec(handle, "electric-agent --version")).trim()
+						await bridge.emit({
+							type: "log",
+							level: "verbose",
+							message: `electric-agent@${agentVersion}`,
+							ts: ts(),
+						})
+					} catch {
+						// Non-critical — don't block session creation
+					}
 				} catch (err) {
 					console.error(`[session:${sessionId}] Project setup failed:`, err)
 					await bridge.emit({
