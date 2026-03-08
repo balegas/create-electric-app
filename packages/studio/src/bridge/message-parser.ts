@@ -22,35 +22,34 @@ export interface ParsedRoomMessage {
 	isGateRequest: boolean
 }
 
-// Matches @room or @<name> at the start of a line, capturing the target and the rest of the line.
-// The body extends to the end of the text (or until the next @room/@name match).
-const ROOM_MESSAGE_RE = /^@(\S+)\s+([\s\S]*?)(?=\n@\S+\s|$)/gm
+// Matches @room or @<name> at the start of a line, capturing just the target.
+const ROOM_PREFIX_RE = /^@(\S+)\s/gm
 
 export function parseRoomMessage(
 	text: string,
 	_senderName: string,
 	knownParticipants?: string[],
 ): ParsedRoomMessage | null {
-	const matches: Array<{ target: string; body: string }> = []
+	// Find all @room / @name positions in the text
+	const hits: Array<{ target: string; startOfBody: number }> = []
 
-	let match: RegExpExecArray | null = ROOM_MESSAGE_RE.exec(text)
+	let match: RegExpExecArray | null = ROOM_PREFIX_RE.exec(text)
 	while (match !== null) {
 		const target = match[1]
-		const body = match[2].trim()
-
-		// Only match @room or @<known participant name>
 		if (target === "room" || knownParticipants?.includes(target)) {
-			matches.push({ target, body })
+			hits.push({ target, startOfBody: match.index + match[0].length })
 		}
-		match = ROOM_MESSAGE_RE.exec(text)
+		match = ROOM_PREFIX_RE.exec(text)
 	}
 
-	if (matches.length === 0) return null
+	if (hits.length === 0) return null
 
 	// Use the last match — agent does work first, then talks
-	const last = matches[matches.length - 1]
+	const last = hits[hits.length - 1]
+
+	// Body runs from after "@room " to end of string (or next hit, but we want the last one)
+	const body = text.slice(last.startOfBody).trim()
 	const to = last.target === "room" ? undefined : last.target
-	const body = last.body
 	const isDone = body.startsWith("DONE:")
 	const isGateRequest = body.startsWith("GATE:")
 
