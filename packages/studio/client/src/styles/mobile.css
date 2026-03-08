@@ -116,7 +116,9 @@
 		text-decoration: none;
 		flex-shrink: 0;
 		-webkit-tap-highlight-color: transparent;
-		transition: color 0.15s, background 0.15s;
+		transition:
+			color 0.15s,
+			background 0.15s;
 	}
 
 	.mobile-open-app-icon:hover {
