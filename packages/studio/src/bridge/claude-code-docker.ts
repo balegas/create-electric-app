@@ -65,8 +65,6 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 
 	/** Claude Code session ID captured from stream-json system.init — used for --resume */
 	private claudeSessionId: string | null = null
-	/** Whether a Claude Code process is currently running */
-	private running = false
 	/** Whether the parser already emitted a session_end (from a "result" message) */
 	private resultReceived = false
 	/** Whether the process was intentionally interrupted (suppress exit handler session_end) */

@@ -1173,9 +1173,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 				}
 
-				const sessionPrompt = body.freeform
-					? body.description
-					: `/create-app ${body.description}`
+				const sessionPrompt = body.freeform ? body.description : `/create-app ${body.description}`
 				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 					config.sandbox.runtime === "sprites"
 						? {
