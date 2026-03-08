@@ -80,6 +80,21 @@ export function getRegistryConnectionInfo(config: StreamConfig): StreamConnectio
 }
 
 /**
+ * Build connection info for a room stream (agent-to-agent messaging).
+ */
+export function getRoomStreamConnectionInfo(
+	roomId: string,
+	config: StreamConfig,
+): StreamConnectionInfo {
+	return {
+		url: `${config.url}/v1/stream/${config.serviceId}/room/${roomId}`,
+		headers: {
+			Authorization: `Bearer ${config.secret}`,
+		},
+	}
+}
+
+/**
  * Env vars to pass to a sandbox so it can connect to the same stream.
  */
 export function getStreamEnvVars(sessionId: string, config: StreamConfig): Record<string, string> {
