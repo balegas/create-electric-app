@@ -219,10 +219,10 @@ function copyTemplateFiles(srcDir: string, destDir: string): void {
 }
 
 const ADDED_DEPENDENCIES: Record<string, string> = {
-	"@tanstack/db": "0.5.25",
-	"@tanstack/react-db": "0.1.69",
-	"@tanstack/electric-db-collection": "0.2.31",
-	"@electric-sql/client": "1.5.1",
+	"@tanstack/db": "0.5.31",
+	"@tanstack/react-db": "0.1.75",
+	"@tanstack/electric-db-collection": "0.2.39",
+	"@electric-sql/client": "1.5.12",
 	"drizzle-orm": "0.45.1",
 	"drizzle-zod": "^0.8.3",
 	postgres: "^3.4",
@@ -232,8 +232,8 @@ const ADDED_DEPENDENCIES: Record<string, string> = {
 const ADDED_DEV_DEPENDENCIES: Record<string, string> = {
 	"drizzle-kit": "0.31.9",
 	vitest: "^3.0.0",
-	// Playbook packages (@electric-sql/playbook, @tanstack/db-playbook,
-	// @durable-streams/playbook) come from the KPB template — don't duplicate here.
+	// Playbook packages (@electric-sql/playbook, @tanstack/db-playbook)
+	// come from the KPB template — don't duplicate here.
 }
 
 const ADDED_SCRIPTS: Record<string, string> = {

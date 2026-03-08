@@ -59,8 +59,6 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 	sections.push("")
 	sections.push(GUARDRAILS)
 	sections.push("")
-	sections.push(PLAYBOOK_INSTRUCTIONS)
-	sections.push("")
 	sections.push(INFRASTRUCTURE)
 	sections.push("")
 	sections.push(devServerInstructions(opts.runtime))
@@ -231,39 +229,6 @@ The skill enforces the correct phase order:
 8. Architecture reference (ARCHITECTURE.md)
 
 Do NOT skip phases or code ad-hoc. Always follow the skill's structured pipeline.`
-
-const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
-Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.
-
-### Available Skills
-Read with the Read tool at these exact paths:
-
-**Electric SQL** (\`node_modules/@electric-sql/playbook/skills/\`):
-- \`electric/SKILL.md\` — core Electric concepts and shape API
-- \`electric-tanstack-integration/SKILL.md\` — how Electric + TanStack DB work together (READ FIRST)
-- \`electric-quickstart/SKILL.md\` — quickstart patterns
-- \`electric-security-check/SKILL.md\` — security best practices
-- \`tanstack-start-quickstart/SKILL.md\` — TanStack Start framework patterns
-- \`deploying-electric/SKILL.md\` — deployment configuration
-- \`electric-go-live/SKILL.md\` — production checklist
-
-**TanStack DB** (\`node_modules/@tanstack/db-playbook/skills/\`):
-- \`tanstack-db/SKILL.md\` — collections, useLiveQuery, mutations (CRITICAL — read before writing any UI)
-
-**Durable Streams** (\`node_modules/@durable-streams/playbook/skills/\`):
-- \`durable-streams/SKILL.md\` — event streaming patterns
-- \`durable-state/SKILL.md\` — state management
-- \`durable-streams-dev-setup/SKILL.md\` — development setup
-
-### Reading Order
-1. \`electric-tanstack-integration/SKILL.md\` — integration rules and guardrails
-2. \`tanstack-db/SKILL.md\` — collections, queries, mutations API
-3. \`electric/SKILL.md\` — shape API for proxy routes
-4. Other skills as needed for your current phase
-
-### Important
-- ONLY read playbooks relevant to your current phase
-- Do NOT use include_references — the SKILL.md content is sufficient`
 
 const INFRASTRUCTURE = `## Infrastructure (Pre-configured — DO NOT MODIFY)
 The database (Postgres) and Electric sync service are already provisioned and configured via environment variables:

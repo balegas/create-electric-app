@@ -120,38 +120,11 @@ Always follow this order:
 - snake_case for SQL table/column names
 - Foreign keys with onDelete: "cascade" where appropriate
 
-## Playbooks (Domain Knowledge — MUST READ)
-Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.
+## Playbooks (Domain Knowledge)
+Skills are discovered automatically via `@tanstack/intent` — the KPB scaffold generates a `<!-- intent-skills -->` block in CLAUDE.md with the full skill mapping. Read relevant skills BEFORE writing code for each phase.
 
-### Available Skills
-Read with the Read tool at these exact paths:
-
-**Electric SQL** (`node_modules/@electric-sql/playbook/skills/`):
-- `electric/SKILL.md` — core Electric concepts and shape API
-- `electric-tanstack-integration/SKILL.md` — how Electric + TanStack DB work together (READ FIRST)
-- `electric-quickstart/SKILL.md` — quickstart patterns
-- `electric-security-check/SKILL.md` — security best practices
-- `tanstack-start-quickstart/SKILL.md` — TanStack Start framework patterns
-- `deploying-electric/SKILL.md` — deployment configuration
-- `electric-go-live/SKILL.md` — production checklist
-
-**TanStack DB** (`node_modules/@tanstack/db-playbook/skills/`):
-- `tanstack-db/SKILL.md` — collections, useLiveQuery, mutations (CRITICAL — read before writing any UI)
-
-**Durable Streams** (`node_modules/@durable-streams/playbook/skills/`):
-- `durable-streams/SKILL.md` — event streaming patterns
-- `durable-state/SKILL.md` — state management
-- `durable-streams-dev-setup/SKILL.md` — development setup
-
-### Reading Order
-1. `electric-tanstack-integration/SKILL.md` — integration rules and guardrails
-2. `tanstack-db/SKILL.md` — collections, queries, mutations API
-3. `electric/SKILL.md` — shape API for proxy routes
-4. Other skills as needed for your current phase
-
-### Important
 - ONLY read playbooks relevant to your current phase
-- Do NOT use include_references — the SKILL.md content is sufficient
+- Sub-skills may have `references/` subdirectories for deeper detail
 
 ## Infrastructure (Pre-configured — DO NOT MODIFY)
 The database (Postgres) and Electric sync service are already provisioned and configured via environment variables:
