@@ -155,7 +155,11 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						<div className="session-item-name">New App</div>
 					</div>
 				</div>
-				<div className="session-item" onClick={() => handleNavigate("/?mode=session")} title="New Session">
+				<div
+					className="session-item"
+					onClick={() => handleNavigate("/?mode=session")}
+					title="New Session"
+				>
 					<span className="session-avatar new-project-avatar">
 						<svg
 							viewBox="0 0 16 16"

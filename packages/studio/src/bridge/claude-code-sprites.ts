@@ -22,8 +22,6 @@ import { formatGateMessage } from "./gate-response.js"
 import { createStreamJsonParser } from "./stream-json-parser.js"
 import type { SessionBridge, StreamMessage } from "./types.js"
 
-const SPRITES_SESSION_ID = "claude-code-session"
-
 export interface ClaudeCodeSpritesConfig {
 	/** Initial prompt (the user's app description or task) */
 	prompt: string
@@ -69,6 +67,7 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 	/** Claude Code session ID captured from stream-json system.init — used for --resume */
 	private claudeSessionId: string | null = null
 	/** Whether a Claude Code process is currently running */
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in startSession/interrupt/process exit
 	private running = false
 	/** Whether the parser already emitted a session_end (from a "result" message) */
 	private resultReceived = false
