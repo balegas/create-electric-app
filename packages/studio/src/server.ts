@@ -2283,6 +2283,28 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ sessionId, participantName: body.name, sessionToken }, 201)
 	})
 
+	// Send a message directly to a specific session in a room (bypasses room stream)
+	app.post("/api/rooms/:id/sessions/:sessionId/iterate", async (c) => {
+		const roomId = c.req.param("id")
+		const sessionId = c.req.param("sessionId")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		const participant = router.participants.find((p) => p.sessionId === sessionId)
+		if (!participant) return c.json({ error: "Session not found in this room" }, 404)
+
+		const body = (await c.req.json()) as { request: string }
+		if (!body.request) {
+			return c.json({ error: "request is required" }, 400)
+		}
+
+		await participant.bridge.sendCommand({
+			command: "iterate",
+			request: body.request,
+		})
+		return c.json({ ok: true })
+	})
+
 	// Send a message to a room (from human or API)
 	app.post("/api/rooms/:id/messages", async (c) => {
 		const roomId = c.req.param("id")

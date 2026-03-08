@@ -761,3 +761,202 @@
 .shared-session-error p {
 	margin: 0;
 }
+
+/* --- Agent Room --- */
+
+.room-messages {
+	flex: 1;
+	overflow-y: auto;
+	padding: 16px;
+}
+
+.room-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	color: var(--text-subtle);
+	font-size: 14px;
+}
+
+.room-event-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.room-event {
+	font-size: 13px;
+}
+
+.room-message {
+	padding: 10px 14px;
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+}
+
+.room-message-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.room-message-from {
+	font-weight: 600;
+	color: var(--brand-1);
+}
+
+.room-message-to {
+	color: var(--text-subtle);
+	font-size: 12px;
+}
+
+.room-message-time {
+	margin-left: auto;
+	color: var(--text-subtle);
+	font-size: 11px;
+}
+
+.room-message-body {
+	white-space: pre-wrap;
+	word-break: break-word;
+	line-height: 1.5;
+}
+
+.room-system-event {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 14px;
+	color: var(--text-subtle);
+	font-size: 12px;
+	font-style: italic;
+}
+
+.room-closed-event {
+	color: var(--yellow);
+}
+
+.room-prompt-bar {
+	gap: 8px;
+}
+
+.room-target-select {
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	padding: 6px 10px;
+	font-size: 13px;
+	font-family: var(--font-mono);
+	min-width: 160px;
+}
+
+.room-target-select:disabled {
+	opacity: 0.5;
+}
+
+/* DM section */
+.room-dm-section {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+
+.room-dm-label {
+	font-size: 12px;
+	color: var(--text-subtle);
+	margin-bottom: 8px;
+}
+
+.room-dm-targets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+.room-dm-target {
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 4px 10px;
+	font-size: 12px;
+	color: var(--text);
+	cursor: pointer;
+	font-family: var(--font-mono);
+}
+
+.room-dm-target:hover {
+	border-color: var(--brand-1);
+}
+
+.room-dm-target.active {
+	border-color: var(--brand-1);
+	background: var(--brand-3);
+}
+
+.room-dm-role {
+	color: var(--text-subtle);
+}
+
+.room-dm-input {
+	display: flex;
+	gap: 8px;
+	align-items: flex-end;
+}
+
+.room-dm-input textarea {
+	flex: 1;
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	padding: 8px 12px;
+	font-size: 13px;
+	font-family: var(--font-mono);
+	resize: none;
+}
+
+/* Add agent modal form */
+.room-form-label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 13px;
+	color: var(--text-muted);
+	margin-bottom: 12px;
+}
+
+.room-form-label input,
+.room-form-label textarea {
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--text);
+	padding: 8px 12px;
+	font-size: 13px;
+	font-family: var(--font-mono);
+}
+
+.room-form-label textarea {
+	resize: vertical;
+}
+
+.room-form-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	color: var(--text-muted);
+	margin-bottom: 12px;
+	cursor: pointer;
+}
+
+.room-form-error {
+	color: var(--red);
+	font-size: 13px;
+	margin-top: 8px;
+}
