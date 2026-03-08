@@ -15,7 +15,7 @@ import {
 	ClaudeCodeSpritesBridge,
 	type ClaudeCodeSpritesConfig,
 } from "./bridge/claude-code-sprites.js"
-import { createAppSkillContent, generateClaudeMd } from "./bridge/claude-md-generator.js"
+import { createAppSkillContent, generateClaudeMd, roomMessagingSkillContent } from "./bridge/claude-md-generator.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
@@ -1149,6 +1149,21 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						)
 					} catch (err) {
 						console.error(`[session:${sessionId}] Failed to write create-app skill:`, err)
+					}
+				}
+
+				// Ensure the room-messaging skill is present so agents have
+				// persistent access to the multi-agent protocol reference.
+				if (roomMessagingSkillContent) {
+					try {
+						const skillDir = `${handle.projectDir}/.claude/skills/room-messaging`
+						const skillB64 = Buffer.from(roomMessagingSkillContent).toString("base64")
+						await config.sandbox.exec(
+							handle,
+							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+						)
+					} catch (err) {
+						console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
 					}
 				}
 
@@ -2690,6 +2705,21 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					)
 				} catch (err) {
 					console.error(`[session:${sessionId}] Failed to write create-app skill:`, err)
+				}
+			}
+
+			// Ensure the room-messaging skill is present so agents have
+			// persistent access to the multi-agent protocol reference.
+			if (roomMessagingSkillContent) {
+				try {
+					const skillDir = `${handle.projectDir}/.claude/skills/room-messaging`
+					const skillB64 = Buffer.from(roomMessagingSkillContent).toString("base64")
+					await config.sandbox.exec(
+						handle,
+						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+					)
+				} catch (err) {
+					console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
 				}
 			}
 
