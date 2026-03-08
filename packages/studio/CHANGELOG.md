@@ -1,5 +1,28 @@
 # @electric-agent/studio
 
+## 1.9.0
+
+### Minor Changes
+
+- ec4822f: Add agent-to-agent communication primitive via room messaging.
+
+  New protocol events: `agent_message`, `room_closed`, `outbound_message_gate`, `outbound_message_gate_resolved`.
+
+  New `RoomRouter` class routes messages between agents through durable streams. Supports broadcast and direct messaging, optional per-agent gating for human approval, automatic discovery on join, turn-based conversation with configurable max rounds, and `DONE:`/`GATE:` conventions for signaling completion or requesting human input.
+
+  New server API routes: `POST /api/rooms`, `POST /api/rooms/:id/agents`, `POST /api/rooms/:id/messages`, `GET /api/rooms/:id/events`, `GET /api/rooms/:id`, `POST /api/rooms/:id/close`.
+
+  New skill file `.claude/skills/room-messaging/SKILL.md` teaches agents the `@room` messaging protocol.
+
+### Patch Changes
+
+- 605e845: Restore hero subtitle to "Build Reactive apps on Sync", change prompt placeholder to "What do you want to build?", and update Caddyfile to split traffic between backend and Vite dev server for HMR support.
+- f7fbab8: Fix mobile header UX: icon-only Open App button in header bar, taller sticky topbar, prevent container drag, update hero prompt text.
+- 57fd4ac: Fix mobile home page overscroll: prevent pull-to-drag rubber-band effect by adding overscroll-behavior: none and constraining hero to viewport.
+- e3dccd2: Log the agent package version from the sandbox to the web UI after project setup. Emit error log events to the UI when session create/resume flows fail. Fix PR preview sprites auth to use dedicated SPRITES_API_TOKEN.
+- Updated dependencies [ec4822f]
+  - @electric-agent/protocol@1.6.0
+
 ## 1.8.0
 
 ### Minor Changes
