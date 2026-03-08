@@ -15,7 +15,11 @@ import {
 	ClaudeCodeSpritesBridge,
 	type ClaudeCodeSpritesConfig,
 } from "./bridge/claude-code-sprites.js"
-import { createAppSkillContent, generateClaudeMd, roomMessagingSkillContent } from "./bridge/claude-md-generator.js"
+import {
+	createAppSkillContent,
+	generateClaudeMd,
+	roomMessagingSkillContent,
+} from "./bridge/claude-md-generator.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
