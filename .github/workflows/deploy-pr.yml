@@ -55,7 +55,7 @@ jobs:
             DS_SERVICE_ID="${{ secrets.DS_SERVICE_ID }}"
             DS_SECRET="${{ secrets.DS_SECRET }}"
             GH_TOKEN="${{ secrets.GH_TOKEN }}"
-            FLY_API_TOKEN="${{ secrets.FLY_API_TOKEN }}"
+            FLY_API_TOKEN="${{ secrets.SPRITES_API_TOKEN }}"
           )
 
           # When agent code changed, point sprites at the pkg-pr-new preview
