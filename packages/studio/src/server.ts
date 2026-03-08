@@ -23,6 +23,7 @@ import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
 import { resolveProjectDir } from "./project-utils.js"
 import type { RoomRegistry } from "./room-registry.js"
+import { type RoomParticipant, RoomRouter } from "./room-router.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
@@ -30,6 +31,7 @@ import { deriveSessionToken, validateSessionToken } from "./session-auth.js"
 import type { SessionInfo } from "./sessions.js"
 import { generateInviteCode } from "./shared-sessions.js"
 import {
+	getRoomStreamConnectionInfo,
 	getSharedStreamConnectionInfo,
 	getStreamConnectionInfo,
 	type StreamConfig,
@@ -58,6 +60,9 @@ const bridges = new Map<string, SessionBridge>()
 /** In-memory room presence: roomId → participantId → { displayName, lastPing } */
 const roomPresence = new Map<string, Map<string, { displayName: string; lastPing: number }>>()
 
+/** Active room routers — one per room with agent-to-agent messaging */
+const roomRouters = new Map<string, RoomRouter>()
+
 /** Inflight hook session creations — prevents duplicate sessions from concurrent hooks */
 const inflightHookCreations = new Map<string, Promise<string>>()
 
@@ -75,6 +80,11 @@ function sessionStream(config: ServerConfig, sessionId: string): StreamConnectio
 /** Get stream connection info for a shared session */
 function sharedSessionStream(config: ServerConfig, sharedSessionId: string): StreamConnectionInfo {
 	return getSharedStreamConnectionInfo(sharedSessionId, config.streamConfig)
+}
+
+/** Get stream connection info for a room */
+function roomStream(config: ServerConfig, roomId: string): StreamConnectionInfo {
+	return getRoomStreamConnectionInfo(roomId, config.streamConfig)
 }
 
 /** Create or retrieve the SessionBridge for a session */
@@ -1421,6 +1431,23 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			// No pending gate — fall through to bridge.sendGateResponse()
 		}
 
+		// Outbound message gates (room agent → room stream): resolved in-process
+		if (gate === "outbound_message_gate") {
+			const gateId = body.gateId as string
+			const action = body.action as "approve" | "edit" | "drop"
+			if (!gateId || !action) {
+				return c.json({ error: "gateId and action are required for outbound_message_gate" }, 400)
+			}
+			const resolved = resolveGate(sessionId, gateId, {
+				action,
+				editedBody: body.editedBody as string | undefined,
+			})
+			if (resolved) {
+				return c.json({ ok: true })
+			}
+			return c.json({ error: "No pending gate found" }, 404)
+		}
+
 		// Server-side gates are resolved in-process (they run on the server, not inside the container)
 		const serverGates = new Set(["infra_config"])
 
@@ -2017,6 +2044,312 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			ts: ts(),
 		}
 		await stream.append(JSON.stringify(event))
+
+		return c.json({ ok: true })
+	})
+
+	// --- Room Routes (agent-to-agent messaging) ---
+
+	// Create a room
+	app.post("/api/rooms", async (c) => {
+		const body = (await c.req.json()) as {
+			name: string
+			maxRounds?: number
+		}
+		if (!body.name) {
+			return c.json({ error: "name is required" }, 400)
+		}
+
+		const roomId = crypto.randomUUID()
+
+		// Create the room's durable stream
+		const conn = roomStream(config, roomId)
+		try {
+			await DurableStream.create({
+				url: conn.url,
+				headers: conn.headers,
+				contentType: "application/json",
+			})
+		} catch (err) {
+			console.error(`[room] Failed to create durable stream:`, err)
+			return c.json({ error: "Failed to create room stream" }, 500)
+		}
+
+		// Create and start the router
+		const router = new RoomRouter(roomId, body.name, config.streamConfig, {
+			maxRounds: body.maxRounds,
+		})
+		await router.start()
+		roomRouters.set(roomId, router)
+
+		// Save to room registry for persistence
+		await config.rooms.addRoom({
+			id: roomId,
+			code: generateInviteCode(),
+			name: body.name,
+			createdAt: new Date().toISOString(),
+			revoked: false,
+		})
+
+		const roomToken = deriveSessionToken(config.streamConfig.secret, roomId)
+		console.log(`[room] Created: id=${roomId} name=${body.name}`)
+		return c.json({ roomId, roomToken }, 201)
+	})
+
+	// Get room state
+	app.get("/api/rooms/:id", (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		return c.json({
+			roomId,
+			state: router.state,
+			roundCount: router.roundCount,
+			participants: router.participants.map((p) => ({
+				sessionId: p.sessionId,
+				name: p.name,
+				role: p.role,
+			})),
+		})
+	})
+
+	// Add an agent to a room
+	app.post("/api/rooms/:id/agents", async (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		const body = (await c.req.json()) as {
+			name: string
+			role?: string
+			gated?: boolean
+			initialPrompt?: string
+			apiKey?: string
+			oauthToken?: string
+			ghToken?: string
+		}
+		if (!body.name) {
+			return c.json({ error: "name is required" }, 400)
+		}
+
+		const sessionId = crypto.randomUUID()
+		const projectName = `room-${body.name}-${sessionId.slice(0, 8)}`
+
+		console.log(`[room:${roomId}] Adding agent: name=${body.name} session=${sessionId}`)
+
+		// Create the session's durable stream
+		const conn = sessionStream(config, sessionId)
+		try {
+			await DurableStream.create({
+				url: conn.url,
+				headers: conn.headers,
+				contentType: "application/json",
+			})
+		} catch (err) {
+			console.error(`[room:${roomId}] Failed to create session stream:`, err)
+			return c.json({ error: "Failed to create session stream" }, 500)
+		}
+
+		// Create bridge
+		const bridge = getOrCreateBridge(config, sessionId)
+
+		// Record session
+		const sandboxProjectDir = `/home/agent/workspace/${projectName}`
+		const session: SessionInfo = {
+			id: sessionId,
+			projectName,
+			sandboxProjectDir,
+			description: `Room agent: ${body.name} (${body.role ?? "participant"})`,
+			createdAt: new Date().toISOString(),
+			lastActiveAt: new Date().toISOString(),
+			status: "running",
+		}
+		config.sessions.add(session)
+
+		// Create sandbox
+		await bridge.emit({
+			type: "log",
+			level: "build",
+			message: `Creating sandbox for room agent "${body.name}"...`,
+			ts: ts(),
+		})
+
+		try {
+			const handle = await config.sandbox.create(sessionId, {
+				projectName,
+				infra: { mode: "local" },
+				apiKey: body.apiKey,
+				oauthToken: body.oauthToken,
+				ghToken: body.ghToken,
+			})
+
+			config.sessions.update(sessionId, {
+				appPort: handle.port,
+				sandboxProjectDir: handle.projectDir,
+				previewUrl: handle.previewUrl,
+			})
+
+			// Create Claude Code bridge
+			const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
+				config.sandbox.runtime === "sprites"
+					? {
+							prompt: `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.`,
+							cwd: handle.projectDir,
+							studioUrl: resolveStudioUrl(config.port),
+						}
+					: {
+							prompt: `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.`,
+							cwd: handle.projectDir,
+							studioPort: config.port,
+						}
+			const ccBridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
+
+			// Track Claude Code session ID and cost
+			ccBridge.onAgentEvent((event) => {
+				if (event.type === "session_start") {
+					const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+					if (ccSessionId) {
+						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
+					}
+				}
+				if (event.type === "session_end") {
+					accumulateSessionCost(config, sessionId, event)
+				}
+				// Route assistant_message output to the room router
+				if (event.type === "assistant_message" && "text" in event) {
+					router
+						.handleAgentOutput(sessionId, (event as EngineEvent & { text: string }).text)
+						.catch((err) => {
+							console.error(`[room:${roomId}] handleAgentOutput error:`, err)
+						})
+				}
+			})
+
+			await bridge.emit({
+				type: "log",
+				level: "done",
+				message: `Sandbox ready for "${body.name}"`,
+				ts: ts(),
+			})
+
+			await ccBridge.start()
+
+			// Add participant to room router
+			const participant: RoomParticipant = {
+				sessionId,
+				name: body.name,
+				role: body.role,
+				bridge: ccBridge,
+			}
+			await router.addParticipant(participant, body.gated ?? false)
+
+			// If there's an initial prompt, send it after a short delay to let the agent process the discovery prompt
+			if (body.initialPrompt) {
+				await router.sendMessage("system", body.initialPrompt)
+			}
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "Failed to create agent sandbox"
+			console.error(`[room:${roomId}] Agent creation failed:`, err)
+			await bridge.emit({ type: "log", level: "error", message: msg, ts: ts() })
+			return c.json({ error: msg }, 500)
+		}
+
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+		return c.json({ sessionId, participantName: body.name, sessionToken }, 201)
+	})
+
+	// Send a message to a room (from human or API)
+	app.post("/api/rooms/:id/messages", async (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		const body = (await c.req.json()) as {
+			from: string
+			body: string
+			to?: string
+		}
+		if (!body.from || !body.body) {
+			return c.json({ error: "from and body are required" }, 400)
+		}
+
+		await router.sendMessage(body.from, body.body, body.to)
+		return c.json({ ok: true })
+	})
+
+	// SSE proxy for room events
+	app.get("/api/rooms/:id/events", async (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		const connection = roomStream(config, roomId)
+		const lastEventId = c.req.header("Last-Event-ID") || c.req.query("offset") || "-1"
+
+		const reader = new DurableStream({
+			url: connection.url,
+			headers: connection.headers,
+			contentType: "application/json",
+		})
+
+		const { readable, writable } = new TransformStream()
+		const writer = writable.getWriter()
+		const encoder = new TextEncoder()
+		let cancelled = false
+
+		const response = await reader.stream<Record<string, unknown>>({
+			offset: lastEventId,
+			live: true,
+		})
+
+		const cancel = response.subscribeJson<Record<string, unknown>>((batch) => {
+			if (cancelled) return
+			for (const item of batch.items) {
+				const data = JSON.stringify(item)
+				writer.write(encoder.encode(`id:${batch.offset}\ndata:${data}\n\n`)).catch(() => {
+					cancelled = true
+				})
+			}
+		})
+
+		c.req.raw.signal.addEventListener("abort", () => {
+			cancelled = true
+			cancel()
+			writer.close().catch(() => {})
+		})
+
+		return new Response(readable, {
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				Connection: "keep-alive",
+				"Access-Control-Allow-Origin": "*",
+			},
+		})
+	})
+
+	// Close a room
+	app.post("/api/rooms/:id/close", async (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		// Emit room_closed event
+		const conn = roomStream(config, roomId)
+		const stream = new DurableStream({
+			url: conn.url,
+			headers: conn.headers,
+			contentType: "application/json",
+		})
+		const event: SharedSessionEvent = {
+			type: "room_closed",
+			closedBy: "human",
+			summary: "Room closed by user",
+			ts: ts(),
+		}
+		await stream.append(JSON.stringify(event))
+		router.close()
 
 		return c.json({ ok: true })
 	})

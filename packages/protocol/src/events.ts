@@ -100,6 +100,26 @@ export type EngineEvent =
 			resolvedBy?: Participant
 			ts: string
 	  }
+	| {
+			/** Outbound message gate: agent wants to send a @room message,
+			 *  human can approve, edit, or drop it before it reaches the room */
+			type: "outbound_message_gate"
+			gateId: string
+			roomId: string
+			/** Intended recipient (omit for broadcast) */
+			to?: string
+			/** The message the agent wants to send */
+			body: string
+			ts: string
+	  }
+	| {
+			type: "outbound_message_gate_resolved"
+			gateId: string
+			action: "approve" | "edit" | "drop"
+			editedBody?: string
+			resolvedBy?: string
+			ts: string
+	  }
 
 export interface AskUserQuestionItem {
 	question: string
@@ -135,6 +155,22 @@ export type SharedSessionEvent =
 	  }
 	| { type: "session_unlinked"; sessionId: string; ts: string }
 	| { type: "code_revoked"; ts: string }
+	| {
+			/** Agent-to-agent message on a room stream */
+			type: "agent_message"
+			from: string
+			/** Specific recipient name, or omit for broadcast */
+			to?: string
+			body: string
+			metadata?: Record<string, unknown>
+			ts: string
+	  }
+	| {
+			type: "room_closed"
+			summary?: string
+			closedBy: string
+			ts: string
+	  }
 
 export function ts(): string {
 	return new Date().toISOString()
