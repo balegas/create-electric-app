@@ -1,5 +1,17 @@
 # @electric-agent/agent
 
+## 1.2.1
+
+### Patch Changes
+
+- Updated dependencies [ec4822f]
+- Updated dependencies [605e845]
+- Updated dependencies [f7fbab8]
+- Updated dependencies [57fd4ac]
+- Updated dependencies [e3dccd2]
+  - @electric-agent/protocol@1.6.0
+  - @electric-agent/studio@1.9.0
+
 ## 1.2.0
 
 ### Minor Changes
