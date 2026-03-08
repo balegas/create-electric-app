@@ -1251,6 +1251,16 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		asyncFlow().catch(async (err) => {
 			console.error(`[session:${sessionId}] Session creation flow failed:`, err)
 			config.sessions.update(sessionId, { status: "error" })
+			try {
+				await bridge.emit({
+					type: "log",
+					level: "error",
+					message: `Session failed: ${err instanceof Error ? err.message : String(err)}`,
+					ts: ts(),
+				})
+			} catch {
+				// Bridge may not be usable if the failure happened early
+			}
 		})
 
 		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
@@ -2449,6 +2459,16 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		asyncFlow().catch(async (err) => {
 			console.error(`[session:${sessionId}] Resume flow failed:`, err)
 			config.sessions.update(sessionId, { status: "error" })
+			try {
+				await bridge.emit({
+					type: "log",
+					level: "error",
+					message: `Resume failed: ${err instanceof Error ? err.message : String(err)}`,
+					ts: ts(),
+				})
+			} catch {
+				// Bridge may not be usable if the failure happened early
+			}
 		})
 
 		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
