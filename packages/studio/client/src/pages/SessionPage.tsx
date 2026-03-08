@@ -90,7 +90,7 @@ export function SessionPage() {
 
 	useEffect(() => {
 		if (id !== "new" || creatingRef.current) return
-		const state = location.state as { description?: string } | null
+		const state = location.state as { description?: string; freeform?: boolean } | null
 		if (!state?.description) {
 			navigate("/", { replace: true })
 			return
@@ -98,7 +98,7 @@ export function SessionPage() {
 		creatingRef.current = true
 		setInitializing(true)
 
-		createSession(state.description)
+		createSession(state.description, undefined, state.freeform)
 			.then(({ sessionId, session }) => {
 				// Save session to localStorage (private to this user)
 				addSession(session)

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { useNavigate, useOutletContext } from "react-router-dom"
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom"
 import { PromptInput } from "../components/PromptInput"
 import { RepoPickerModal } from "../components/RepoPickerModal"
 import { Settings } from "../components/Settings"
@@ -25,8 +25,17 @@ export function HomePage() {
 
 	const navigate = useNavigate()
 	const { openMobileDrawer } = useOutletContext<OutletCtx>()
+	const [searchParams] = useSearchParams()
+	const isFreeformMode = searchParams.get("mode") === "session"
 	const [showRepoPicker, setShowRepoPicker] = useState(false)
 	const [resuming, setResuming] = useState(false)
+
+	const handleNewSession = useCallback(
+		(description: string) => {
+			handleNewProject(description, true)
+		},
+		[handleNewProject],
+	)
 
 	const handleResumeFromGithub = useCallback(
 		async (repoUrl: string, branch: string) => {
@@ -84,14 +93,18 @@ export function HomePage() {
 
 			<div className="hero">
 				<img src="/img/brand/logo.svg" alt="Electric" className="hero-logo" />
-				<p className="hero-subtitle">Build Reactive apps on Sync</p>
+				<p className="hero-subtitle">
+					{isFreeformMode ? "Start a freeform session" : "Build Reactive apps on Sync"}
+				</p>
 				<div className="hero-prompt">
 					<PromptInput
-						onSubmit={handleNewProject}
+						onSubmit={isFreeformMode ? handleNewSession : handleNewProject}
 						placeholder={
 							!authSource
 								? "Set an API key in Settings to get started..."
-								: "What do you want to build?"
+								: isFreeformMode
+									? "What do you want to work on?"
+									: "What do you want to build?"
 						}
 						disabled={loading || !authSource}
 					/>

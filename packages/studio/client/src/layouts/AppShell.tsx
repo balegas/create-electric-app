@@ -28,7 +28,7 @@ interface AppContextValue {
 	setShowSettings: (v: boolean | ((prev: boolean) => boolean)) => void
 	refreshSessions: () => void
 	refreshSettings: () => void
-	handleNewProject: (description: string) => void
+	handleNewProject: (description: string, freeform?: boolean) => void
 	handleDeleteSession: (sessionId: string) => Promise<void>
 	loading: boolean
 	joinedSharedSessions: JoinedSharedSession[]
@@ -163,12 +163,12 @@ export function AppShell() {
 	}, [refreshSettings])
 
 	const handleNewProject = useCallback(
-		(description: string) => {
+		(description: string, freeform?: boolean) => {
 			// Show a faded placeholder avatar while the session is being created
 			const words = description.split(/\s+/).slice(0, 3).join(" ")
 			setPendingProject({ name: words || "New project" })
 			// Navigate immediately — SessionPage will create the session
-			navigate("/session/new", { state: { description } })
+			navigate("/session/new", { state: { description, freeform } })
 		},
 		[navigate],
 	)

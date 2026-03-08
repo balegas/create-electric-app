@@ -882,6 +882,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			description: string
 			name?: string
 			baseDir?: string
+			freeform?: boolean
 			apiKey?: string
 			oauthToken?: string
 			ghToken?: string
@@ -1172,15 +1173,18 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 				}
 
+				const sessionPrompt = body.freeform
+					? body.description
+					: `/create-app ${body.description}`
 				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 					config.sandbox.runtime === "sprites"
 						? {
-								prompt: `/create-app ${body.description}`,
+								prompt: sessionPrompt,
 								cwd: handle.projectDir,
 								studioUrl: resolveStudioUrl(config.port),
 							}
 						: {
-								prompt: `/create-app ${body.description}`,
+								prompt: sessionPrompt,
 								cwd: handle.projectDir,
 								studioPort: config.port,
 							}
@@ -1260,7 +1264,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			await bridge.emit({
 				type: "log",
 				level: "build",
-				message: `Running: claude "/create-app ${body.description}"`,
+				message: body.freeform
+					? `Running: claude "${body.description}"`
+					: `Running: claude "/create-app ${body.description}"`,
 				ts: ts(),
 			})
 
