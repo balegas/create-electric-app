@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
+import { type AgentRoomEntry, getAgentRooms } from "../lib/agent-room-store"
 import { deleteSession, fetchKeychainCredentials, type SessionInfo } from "../lib/api"
 import {
 	hasApiKey as checkHasApiKey,
@@ -33,6 +34,8 @@ interface AppContextValue {
 	loading: boolean
 	joinedSharedSessions: JoinedSharedSession[]
 	refreshJoinedSharedSessions: () => void
+	agentRooms: AgentRoomEntry[]
+	refreshAgentRooms: () => void
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -65,6 +68,7 @@ export function AppShell() {
 	const [joinedSharedSessions, setJoinedSharedSessions] = useState<JoinedSharedSession[]>(() =>
 		getJoinedSharedSessions(),
 	)
+	const [agentRooms, setAgentRooms] = useState<AgentRoomEntry[]>(() => getAgentRooms())
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		() => localStorage.getItem("sidebarCollapsed") === "true",
 	)
@@ -88,6 +92,10 @@ export function AppShell() {
 		setJoinedSharedSessions(getJoinedSharedSessions())
 	}, [])
 
+	const refreshAgentRooms = useCallback(() => {
+		setAgentRooms(getAgentRooms())
+	}, [])
+
 	// Reload sessions from localStorage
 	const refreshSessions = useCallback(() => {
 		setSessions(getSessions())
@@ -97,7 +105,8 @@ export function AppShell() {
 	// Auto-collapse sidebar when first navigating to a session or shared page
 	const prevPathRef = useRef(location.pathname)
 	useEffect(() => {
-		const isDeepPage = (p: string) => p.startsWith("/session/") || p.startsWith("/shared/")
+		const isDeepPage = (p: string) =>
+			p.startsWith("/session/") || p.startsWith("/shared/") || p.startsWith("/room/")
 		const wasDeep = isDeepPage(prevPathRef.current)
 		const isDeep = isDeepPage(location.pathname)
 		prevPathRef.current = location.pathname
@@ -204,6 +213,8 @@ export function AppShell() {
 		loading,
 		joinedSharedSessions,
 		refreshJoinedSharedSessions,
+		agentRooms,
+		refreshAgentRooms,
 	}
 
 	return (

@@ -345,3 +345,61 @@ export function revokeSharedSession(sharedSessionId: string) {
 		method: "POST",
 	})
 }
+
+// --- Agent Rooms ---
+
+export interface RoomState {
+	roomId: string
+	state: "active" | "closed"
+	roundCount: number
+	participants: Array<{ sessionId: string; name: string; role?: string }>
+}
+
+export async function createAgentRoom(name: string, maxRounds?: number) {
+	return request<{ roomId: string; roomToken: string }>("/rooms", {
+		method: "POST",
+		body: { name, maxRounds },
+	})
+}
+
+export function getAgentRoomState(roomId: string) {
+	return request<RoomState>(`/rooms/${roomId}`)
+}
+
+export function addAgentToRoom(
+	roomId: string,
+	config: {
+		name: string
+		role?: string
+		gated?: boolean
+		initialPrompt?: string
+	},
+) {
+	return request<{ sessionId: string; participantName: string; sessionToken: string }>(
+		`/rooms/${roomId}/agents`,
+		{
+			method: "POST",
+			body: { ...config, ...credentialFields() },
+		},
+	)
+}
+
+export function sendRoomMessage(roomId: string, from: string, body: string, to?: string) {
+	return request<{ ok: boolean }>(`/rooms/${roomId}/messages`, {
+		method: "POST",
+		body: { from, body, ...(to ? { to } : {}) },
+	})
+}
+
+export function iterateRoomSession(roomId: string, sessionId: string, userRequest: string) {
+	return request<{ ok: boolean }>(`/rooms/${roomId}/sessions/${sessionId}/iterate`, {
+		method: "POST",
+		body: { request: userRequest },
+	})
+}
+
+export function closeAgentRoom(roomId: string) {
+	return request<{ ok: boolean }>(`/rooms/${roomId}/close`, {
+		method: "POST",
+	})
+}
