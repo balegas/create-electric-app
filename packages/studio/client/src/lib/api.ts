@@ -145,12 +145,12 @@ export async function createLocalSession(description?: string) {
 	return result
 }
 
-export async function createSession(description: string, name?: string) {
+export async function createSession(description: string, name?: string, freeform?: boolean) {
 	const result = await request<{ sessionId: string; session: SessionInfo; sessionToken: string }>(
 		"/sessions",
 		{
 			method: "POST",
-			body: { description, name, ...credentialFields() },
+			body: { description, name, freeform, ...credentialFields() },
 		},
 	)
 	if (result.sessionToken) {

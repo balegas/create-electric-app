@@ -676,6 +676,19 @@ function AskUserQuestionGate({
 					</button>
 				</div>
 			)}
+			{!needsSubmitButton &&
+				questions[0]?.options?.length &&
+				customInputs[questions[0]?.question] && (
+					<div className="gate-actions">
+						<button
+							className="gate-btn gate-btn-primary"
+							onClick={handleSubmit}
+							disabled={disabled || !customTexts[questions[0]?.question]?.trim()}
+						>
+							{submitting ? "Submitting..." : "Submit"}
+						</button>
+					</div>
+				)}
 		</div>
 	)
 }

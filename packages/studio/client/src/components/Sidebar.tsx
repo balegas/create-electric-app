@@ -155,6 +155,27 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						<div className="session-item-name">New App</div>
 					</div>
 				</div>
+				<div className="session-item" onClick={() => handleNavigate("/?mode=session")} title="New Session">
+					<span className="session-avatar new-project-avatar">
+						<svg
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.5"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							width="14"
+							height="14"
+						>
+							<title>New Session</title>
+							<path d="M13 2.5l-9.5 9.5-1 3 3-1 9.5-9.5-2-2z" />
+							<path d="M10.5 5l2 2" />
+						</svg>
+					</span>
+					<div className="session-item-details">
+						<div className="session-item-name">New Session</div>
+					</div>
+				</div>
 				{pendingProject && (
 					<div className="session-item session-item-pending" title={pendingProject.name}>
 						<span className="session-avatar session-avatar-pending" />
