@@ -1080,7 +1080,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Log the agent package version installed in the sandbox
 					try {
 						const agentVersion = (
-							await config.sandbox.exec(handle, "electric-agent --version")
+							await config.sandbox.exec(handle, "electric-agent --version 2>/dev/null | tail -1")
 						).trim()
 						await bridge.emit({
 							type: "log",
