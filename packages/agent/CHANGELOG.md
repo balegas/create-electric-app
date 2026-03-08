@@ -1,5 +1,16 @@
 # @electric-agent/agent
 
+## 1.2.2
+
+### Patch Changes
+
+- e9ee43b: Adopt @tanstack/intent for skill discovery: remove hardcoded playbook paths from CLAUDE.md generator, prepend Electric-specific instructions on top of KPB's CLAUDE.md (preserving intent skill mappings), bump TanStack/Electric dependency versions, and remove stale durable-streams references.
+- Updated dependencies [516c152]
+- Updated dependencies [d71c691]
+- Updated dependencies [fd7e0d2]
+- Updated dependencies [e9ee43b]
+  - @electric-agent/studio@1.10.0
+
 ## 1.2.1
 
 ### Patch Changes
