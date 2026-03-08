@@ -1,5 +1,17 @@
 # @electric-agent/studio
 
+## 1.10.0
+
+### Minor Changes
+
+- 516c152: Deploy room-messaging skill into sandboxes so agents have persistent access to the multi-agent communication protocol reference.
+- fd7e0d2: Add "New Session" button to sidebar for starting freeform sessions without the create-app skill pipeline. Fix submit button not appearing when typing a custom "Other" answer in single-select question gates.
+
+### Patch Changes
+
+- d71c691: Fix lint issues: remove unused private class members and variable, fix formatting.
+- e9ee43b: Adopt @tanstack/intent for skill discovery: remove hardcoded playbook paths from CLAUDE.md generator, prepend Electric-specific instructions on top of KPB's CLAUDE.md (preserving intent skill mappings), bump TanStack/Electric dependency versions, and remove stale durable-streams references.
+
 ## 1.9.0
 
 ### Minor Changes
