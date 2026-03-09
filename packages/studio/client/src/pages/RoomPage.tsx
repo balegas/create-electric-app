@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
+import { useAppContext } from "../layouts/AppShell"
 import {
 	addAgentToRoom,
 	closeAgentRoom,
@@ -9,10 +10,8 @@ import {
 	type RoomState,
 	sendRoomMessage,
 } from "../lib/api"
-import { useAppContext } from "../layouts/AppShell"
 import { getOrCreateParticipant } from "../lib/participant"
-import { addSession } from "../lib/session-store"
-import { setSessionToken } from "../lib/session-store"
+import { addSession, setSessionToken } from "../lib/session-store"
 
 interface OutletCtx {
 	openMobileDrawer: () => void
