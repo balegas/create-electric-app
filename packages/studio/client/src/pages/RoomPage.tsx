@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
+import { useAppContext } from "../layouts/AppShell"
 import {
 	addAgentToRoom,
 	closeAgentRoom,
@@ -10,7 +11,7 @@ import {
 	sendRoomMessage,
 } from "../lib/api"
 import { getOrCreateParticipant } from "../lib/participant"
-import { setSessionToken } from "../lib/session-store"
+import { addSession, setSessionToken } from "../lib/session-store"
 
 interface OutletCtx {
 	openMobileDrawer: () => void
@@ -20,6 +21,7 @@ export function RoomPage() {
 	const { id: roomId } = useParams<{ id: string }>()
 	const navigate = useNavigate()
 	const { openMobileDrawer } = useOutletContext<OutletCtx>()
+	const { refreshSessions } = useAppContext()
 	const [roomState, setRoomState] = useState<RoomState | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [showAddAgent, setShowAddAgent] = useState(false)
@@ -105,6 +107,7 @@ export function RoomPage() {
 					onClose={() => setShowAddAgent(false)}
 					onAdded={() => {
 						setShowAddAgent(false)
+						refreshSessions()
 						// Refresh state to get updated participant list
 						getAgentRoomState(roomId)
 							.then(setRoomState)
@@ -448,6 +451,16 @@ function AddAgentModal({
 			if (result.sessionToken) {
 				setSessionToken(result.sessionId, result.sessionToken)
 			}
+			// Register the session so it appears in the sidebar
+			addSession({
+				id: result.sessionId,
+				projectName: name.trim(),
+				sandboxProjectDir: "",
+				description: role.trim() || `Agent in room ${roomId.slice(0, 8)}`,
+				createdAt: new Date().toISOString(),
+				lastActiveAt: new Date().toISOString(),
+				status: "running",
+			})
 			onAdded()
 		} catch (err) {
 			setAddError(err instanceof Error ? err.message : "Failed to add agent")

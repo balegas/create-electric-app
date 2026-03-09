@@ -1,13 +1,5 @@
 https://localhost:4443 {
 	tls internal
 
-	# API requests go to the backend server
-	handle /api/* {
-		reverse_proxy localhost:4400
-	}
-
-	# Everything else (UI + HMR) goes to Vite dev server
-	handle {
-		reverse_proxy localhost:4401
-	}
+	reverse_proxy localhost:4400
 }
