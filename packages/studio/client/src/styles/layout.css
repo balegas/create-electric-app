@@ -779,6 +779,38 @@
 	font-size: 14px;
 }
 
+.room-header-participants {
+	display: flex;
+	align-items: center;
+	gap: 0;
+}
+
+.room-header-avatar {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	font-size: 11px;
+	font-weight: 600;
+	font-family: var(--font-mono);
+	margin-left: -4px;
+	border: 2px solid var(--bg);
+	cursor: pointer;
+	padding: 0;
+	transition: transform 0.1s ease;
+}
+
+.room-header-avatar:hover {
+	transform: scale(1.15);
+	z-index: 1;
+}
+
+.room-header-avatar:first-child {
+	margin-left: 0;
+}
+
 .room-event-list {
 	display: flex;
 	flex-direction: column;
@@ -806,6 +838,21 @@
 .room-message-from {
 	font-weight: 600;
 	color: var(--brand-1);
+}
+
+.room-message-from-link {
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	font-weight: 600;
+	color: var(--brand-1);
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.room-message-from-link:hover {
+	text-decoration: underline;
 }
 
 .room-message-to {
@@ -931,7 +978,8 @@
 }
 
 .room-form-label input,
-.room-form-label textarea {
+.room-form-label textarea,
+.room-form-label select {
 	background: var(--bg-surface);
 	border: 1px solid var(--border);
 	border-radius: 6px;
@@ -939,6 +987,26 @@
 	padding: 8px 12px;
 	font-size: 13px;
 	font-family: var(--font-mono);
+}
+
+.room-form-label select {
+	appearance: none;
+	-webkit-appearance: none;
+	cursor: pointer;
+	padding-right: 32px;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 10px center;
+}
+
+.room-form-label select:hover {
+	border-color: var(--text-subtle);
+}
+
+.room-form-label select:focus {
+	outline: none;
+	border-color: var(--brand);
+	box-shadow: 0 0 0 1px var(--brand);
 }
 
 .room-form-label textarea {

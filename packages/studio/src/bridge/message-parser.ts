@@ -33,6 +33,8 @@ export function parseRoomMessage(
 	// Find all @room / @name positions in the text
 	const hits: Array<{ target: string; startOfBody: number }> = []
 
+	// Reset lastIndex — /g regexes retain state between exec() calls
+	ROOM_PREFIX_RE.lastIndex = 0
 	let match: RegExpExecArray | null = ROOM_PREFIX_RE.exec(text)
 	while (match !== null) {
 		const target = match[1]

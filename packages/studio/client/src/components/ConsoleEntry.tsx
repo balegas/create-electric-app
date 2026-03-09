@@ -38,10 +38,11 @@ export function ConsoleUserMessage({
 }: {
 	entry: Extract<ConsoleEntryType, { kind: "user_prompt" }>
 }) {
+	const label = entry.sender ?? "you"
 	return (
 		<div className="console-entry user-message">
 			<span className="prefix" style={{ color: "var(--orange)" }}>
-				[you]
+				[{label}]
 			</span>
 			<span>{entry.message}</span>
 		</div>

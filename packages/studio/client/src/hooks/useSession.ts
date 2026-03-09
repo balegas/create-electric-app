@@ -34,7 +34,7 @@ export function useSession(sessionId: string | null) {
 					]
 
 				case "user_prompt":
-					return [...prev, { kind: "user_prompt" as const, message: event.message }]
+					return [...prev, { kind: "user_prompt" as const, message: event.message, sender: event.sender }]
 
 				case "pre_tool_use":
 					return [

@@ -219,7 +219,7 @@ describe("RoomRouter", () => {
 		router.close()
 	})
 
-	it("closes the room on DONE: message", async () => {
+	it("DONE: message does not auto-close the room", async () => {
 		const roomId = uniqueId()
 		const conn = getRoomStreamConnectionInfo(roomId, server.config)
 		await ensureStream(conn.url, conn.headers)
@@ -234,8 +234,10 @@ describe("RoomRouter", () => {
 
 		await router.handleAgentOutput("sess-alice", "@room DONE: All tasks completed.")
 
-		await waitFor(() => router.state === "closed", 5000)
-		assert.equal(router.state, "closed")
+		// Room should remain active — no auto-close on DONE:
+		assert.equal(router.state, "active")
+
+		router.close()
 	})
 
 	it("external message delivery via sendMessage", async () => {
@@ -263,12 +265,12 @@ describe("RoomRouter", () => {
 		router.close()
 	})
 
-	it("respects maxRounds", async () => {
+	it("counts rounds without auto-closing", async () => {
 		const roomId = uniqueId()
 		const conn = getRoomStreamConnectionInfo(roomId, server.config)
 		await ensureStream(conn.url, conn.headers)
 
-		const router = new RoomRouter(roomId, "Test Room", server.config, { maxRounds: 2 })
+		const router = new RoomRouter(roomId, "Test Room", server.config)
 		await router.start()
 
 		const bridgeAlice = createMockBridge("sess-alice")
@@ -281,11 +283,14 @@ describe("RoomRouter", () => {
 		await router.handleAgentOutput("sess-alice", "@room Message 1")
 		await waitFor(() => router.roundCount >= 1, 5000)
 
-		// Round 2 (should hit max)
+		// Round 2
 		await router.handleAgentOutput("sess-bob", "@room Message 2")
-		await waitFor(() => router.state === "closed", 5000)
+		await waitFor(() => router.roundCount >= 2, 5000)
 
-		assert.equal(router.state, "closed")
+		// Room should remain active — no auto-close
+		assert.equal(router.state, "active")
 		assert.equal(router.roundCount, 2)
+
+		router.close()
 	})
 })

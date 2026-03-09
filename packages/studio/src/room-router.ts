@@ -102,6 +102,20 @@ export class RoomRouter {
 			command: "iterate",
 			request: prompt,
 		})
+
+		// Notify other participants that this agent joined
+		const roleSuffix = participant.role ? ` (${participant.role})` : ""
+		for (const p of this._participants.values()) {
+			if (p.sessionId !== participant.sessionId) {
+				const joinMsg = `${participant.name}${roleSuffix} has joined the room.`
+				await p.bridge.emit({
+					type: "user_prompt",
+					message: joinMsg,
+					sender: "system",
+					ts: ts(),
+				})
+			}
+		}
 	}
 
 	/**
@@ -119,6 +133,17 @@ export class RoomRouter {
 			ts: ts(),
 		}
 		await this.stream.append(JSON.stringify(leaveEvent))
+
+		// Notify remaining participants that this agent left
+		const roleSuffix = participant.role ? ` (${participant.role})` : ""
+		for (const p of this._participants.values()) {
+			await p.bridge.emit({
+				type: "user_prompt",
+				message: `${participant.name}${roleSuffix} has left the room.`,
+				sender: "system",
+				ts: ts(),
+			})
+		}
 	}
 
 	/**
@@ -196,18 +221,6 @@ export class RoomRouter {
 		await this.sendMessage(participant.name, finalBody, parsed.to)
 
 		this._roundCount++
-
-		// Handle DONE: prefix — close the room
-		if (parsed.isDone) {
-			const summary = finalBody.replace(/^DONE:\s*/, "")
-			await this.closeRoom(participant.name, summary)
-			return
-		}
-
-		// Check max rounds
-		if (this._roundCount >= this.maxRounds) {
-			await this.closeRoom("system", `Maximum rounds (${this.maxRounds}) reached`)
-		}
 	}
 
 	/**
@@ -293,11 +306,21 @@ export class RoomRouter {
 		const prompt = `Message from ${msg.from}:\n\n${msg.body}`
 
 		await Promise.all(
-			deliverTo.map((p) =>
-				p.bridge.sendCommand({ command: "iterate", request: prompt }).catch((err) => {
+			deliverTo.map(async (p) => {
+				try {
+					// Emit the incoming message to the agent's session stream
+					// so it's visible in the session UI
+					await p.bridge.emit({
+						type: "user_prompt",
+						message: msg.body,
+						sender: msg.from,
+						ts: ts(),
+					})
+					await p.bridge.sendCommand({ command: "iterate", request: prompt })
+				} catch (err) {
 					console.error(`[room-router] failed to deliver to ${p.name}:`, err)
-				}),
-			),
+				}
+			}),
 		)
 	}
 
@@ -392,6 +415,7 @@ export class RoomRouter {
 
 		if (self.role) {
 			lines.push(`Your role: ${self.role}`)
+			lines.push(`Read .claude/skills/role/SKILL.md for your role-specific guidelines.`)
 		}
 
 		lines.push("")
@@ -419,7 +443,6 @@ export class RoomRouter {
 			"To send a message: @room <your message> (broadcast) or @<name> <message> (direct).",
 			"Place your @room message at the END of your response, after completing any work.",
 			"If you have nothing to say, finish without @room — your turn ends silently.",
-			"To signal completion: @room DONE: <summary>",
 			"To request human input: @room GATE: <question>",
 		)
 

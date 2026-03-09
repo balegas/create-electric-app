@@ -6,10 +6,10 @@ import {
 	addAgentToRoom,
 	closeAgentRoom,
 	getAgentRoomState,
-	iterateRoomSession,
 	type RoomState,
 	sendRoomMessage,
 } from "../lib/api"
+import { getAvatarColor } from "../components/SessionListItem"
 import { getOrCreateParticipant } from "../lib/participant"
 import { addSession, setSessionToken } from "../lib/session-store"
 
@@ -26,6 +26,7 @@ export function RoomPage() {
 	const [error, setError] = useState<string | null>(null)
 	const [showAddAgent, setShowAddAgent] = useState(false)
 	const [sending, setSending] = useState(false)
+	const loadedRef = useRef(false)
 
 	const { events, isClosed } = useRoomEvents(roomId ?? null)
 
@@ -33,13 +34,19 @@ export function RoomPage() {
 	useEffect(() => {
 		if (!roomId) return
 		let cancelled = false
+		loadedRef.current = false
 		const fetchState = () => {
 			getAgentRoomState(roomId)
 				.then((state) => {
-					if (!cancelled) setRoomState(state)
+					if (!cancelled) {
+						loadedRef.current = true
+						setRoomState(state)
+						setError(null)
+					}
 				})
 				.catch((err) => {
-					if (!cancelled) setError(err.message)
+					// Only show error if we never loaded successfully
+					if (!cancelled && !loadedRef.current) setError(err.message)
 				})
 		}
 		fetchState()
@@ -136,6 +143,7 @@ function RoomHeader({
 	onAddAgent: () => void
 	openMobileDrawer: () => void
 }) {
+	const navigate = useNavigate()
 	return (
 		<div className="session-header">
 			<button
@@ -173,8 +181,23 @@ function RoomHeader({
 				</span>
 			)}
 
-			<span className="session-header-cost" title={`${roundCount} rounds`}>
-				{participants.length} agents &middot; {roundCount} rounds
+			<span className="room-header-participants">
+				{participants.map((p) => {
+					const color = getAvatarColor(p.sessionId)
+					const initial = p.name.charAt(0).toUpperCase()
+					return (
+						<button
+							key={p.sessionId}
+							type="button"
+							className="room-header-avatar"
+							style={{ background: color.bg, color: color.fg }}
+							title={`${p.name}${p.role ? ` (${p.role})` : ""} — click to open session`}
+							onClick={() => navigate(`/session/${p.sessionId}`)}
+						>
+							{initial}
+						</button>
+					)
+				})}
 			</span>
 
 			<span className="session-header-actions-group">
@@ -196,6 +219,28 @@ function RoomHeader({
 	)
 }
 
+function ParticipantLink({
+	name,
+	participants,
+}: {
+	name: string
+	participants: Array<{ sessionId: string; name: string; role?: string }>
+}) {
+	const navigate = useNavigate()
+	const participant = participants.find((p) => p.name === name)
+	if (!participant) return <span className="room-message-from">{name}</span>
+	return (
+		<button
+			type="button"
+			className="room-message-from room-message-from-link"
+			onClick={() => navigate(`/session/${participant.sessionId}`)}
+			title={`Go to ${name}'s session`}
+		>
+			{name}
+		</button>
+	)
+}
+
 function RoomEventList({
 	events,
 	participants,
@@ -206,27 +251,10 @@ function RoomEventList({
 	roomId: string
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
-	const [dmTarget, setDmTarget] = useState<{ sessionId: string; name: string } | null>(null)
-	const [dmText, setDmText] = useState("")
-	const [dmSending, setDmSending] = useState(false)
 
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" })
 	}, [events.length])
-
-	const handleSendDm = useCallback(async () => {
-		if (!dmTarget || !dmText.trim()) return
-		setDmSending(true)
-		try {
-			await iterateRoomSession(roomId, dmTarget.sessionId, dmText.trim())
-			setDmText("")
-			setDmTarget(null)
-		} catch (err) {
-			console.error("Failed to send DM:", err)
-		} finally {
-			setDmSending(false)
-		}
-	}, [roomId, dmTarget, dmText])
 
 	if (events.length === 0) {
 		return (
@@ -245,7 +273,7 @@ function RoomEventList({
 						return (
 							<div key={key} className="room-event room-message">
 								<div className="room-message-header">
-									<span className="room-message-from">{event.from}</span>
+									<ParticipantLink name={event.from} participants={participants} />
 									{event.to && <span className="room-message-to">&rarr; {event.to}</span>}
 									<span className="room-message-time">
 										{new Date(event.ts).toLocaleTimeString()}
@@ -279,55 +307,6 @@ function RoomEventList({
 				}
 			})}
 			<div ref={bottomRef} />
-
-			{participants.length > 0 && (
-				<div className="room-dm-section">
-					<div className="room-dm-label">Direct message to session:</div>
-					<div className="room-dm-targets">
-						{participants.map((p) => (
-							<button
-								key={p.sessionId}
-								type="button"
-								className={`room-dm-target ${dmTarget?.sessionId === p.sessionId ? "active" : ""}`}
-								onClick={() =>
-									setDmTarget(
-										dmTarget?.sessionId === p.sessionId
-											? null
-											: { sessionId: p.sessionId, name: p.name },
-									)
-								}
-							>
-								{p.name}
-								{p.role && <span className="room-dm-role"> ({p.role})</span>}
-							</button>
-						))}
-					</div>
-					{dmTarget && (
-						<div className="room-dm-input">
-							<textarea
-								value={dmText}
-								onChange={(e) => setDmText(e.target.value)}
-								placeholder={`Message to ${dmTarget.name}...`}
-								rows={2}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" && !e.shiftKey) {
-										e.preventDefault()
-										handleSendDm()
-									}
-								}}
-							/>
-							<button
-								type="button"
-								className="primary"
-								onClick={handleSendDm}
-								disabled={!dmText.trim() || dmSending}
-							>
-								{dmSending ? "Sending..." : "Send DM"}
-							</button>
-						</div>
-					)}
-				</div>
-			)}
 		</div>
 	)
 }
@@ -420,6 +399,12 @@ function RoomInput({
 	)
 }
 
+/** Built-in roles that map to role skill files with specific tool permissions. */
+const BUILT_IN_ROLES = [
+	{ value: "coder", label: "Coder", description: "Writes code, creates PRs" },
+	{ value: "reviewer", label: "Reviewer", description: "Reviews PRs (read-only)" },
+] as const
+
 function AddAgentModal({
 	roomId,
 	onClose,
@@ -485,12 +470,14 @@ function AddAgentModal({
 					</label>
 					<label className="room-form-label">
 						Role
-						<input
-							type="text"
-							value={role}
-							onChange={(e) => setRole(e.target.value)}
-							placeholder="e.g. code reviewer, test writer"
-						/>
+						<select value={role} onChange={(e) => setRole(e.target.value)}>
+							<option value="">No role (generic participant)</option>
+							{BUILT_IN_ROLES.map((r) => (
+								<option key={r.value} value={r.value}>
+									{r.label} — {r.description}
+								</option>
+							))}
+						</select>
 					</label>
 					<label className="room-form-label">
 						Initial Prompt
