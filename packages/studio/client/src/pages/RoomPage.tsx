@@ -10,7 +10,6 @@ import {
 	type RoomState,
 	sendRoomMessage,
 } from "../lib/api"
-import { getAvatarColor } from "../components/SessionListItem"
 import { getOrCreateParticipant } from "../lib/participant"
 import { addSession, setSessionToken } from "../lib/session-store"
 
