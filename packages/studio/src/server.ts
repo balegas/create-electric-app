@@ -18,6 +18,7 @@ import {
 import {
 	createAppSkillContent,
 	generateClaudeMd,
+	resolveRoleSkill,
 	roomMessagingSkillContent,
 } from "./bridge/claude-md-generator.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
@@ -2226,20 +2227,59 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				previewUrl: handle.previewUrl,
 			})
 
-			// Create Claude Code bridge
+			// Inject room-messaging skill so agents know the @room protocol
+			if (roomMessagingSkillContent) {
+				try {
+					const skillDir = `${handle.projectDir}/.claude/skills/room-messaging`
+					const skillB64 = Buffer.from(roomMessagingSkillContent).toString("base64")
+					await config.sandbox.exec(
+						handle,
+						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+					)
+				} catch (err) {
+					console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
+				}
+			}
+
+			// Resolve role skill (behavioral guidelines + tool permissions)
+			const roleSkill = resolveRoleSkill(body.role)
+
+			// Inject role skill file into sandbox
+			if (roleSkill) {
+				try {
+					const skillDir = `${handle.projectDir}/.claude/skills/role`
+					const skillB64 = Buffer.from(roleSkill.skillContent).toString("base64")
+					await config.sandbox.exec(
+						handle,
+						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+					)
+				} catch (err) {
+					console.error(`[session:${sessionId}] Failed to write role skill:`, err)
+				}
+			}
+
+			// Build prompt — reference the role skill if available
+			const rolePromptSuffix = roleSkill
+				? `\nRead .claude/skills/role/SKILL.md for your role guidelines before proceeding.`
+				: ""
+			const agentPrompt = `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.${rolePromptSuffix}`
+
+			// Create Claude Code bridge (with role-specific tool permissions)
 			const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 				config.sandbox.runtime === "sprites"
 					? {
-							prompt: `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.`,
+							prompt: agentPrompt,
 							cwd: handle.projectDir,
 							studioUrl: resolveStudioUrl(config.port),
 							agentName: body.name,
+							...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
 						}
 					: {
-							prompt: `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.`,
+							prompt: agentPrompt,
 							cwd: handle.projectDir,
 							studioPort: config.port,
 							agentName: body.name,
+							...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
 						}
 			const ccBridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
 
@@ -2282,9 +2322,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			}
 			await router.addParticipant(participant, body.gated ?? false)
 
-			// If there's an initial prompt, send it after a short delay to let the agent process the discovery prompt
+			// If there's an initial prompt, send it directly to this agent only (not broadcast)
 			if (body.initialPrompt) {
-				await router.sendMessage("system", body.initialPrompt)
+				await ccBridge.sendCommand({ command: "iterate", request: body.initialPrompt })
 			}
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Failed to create agent sandbox"

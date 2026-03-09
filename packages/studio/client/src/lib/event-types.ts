@@ -11,7 +11,7 @@ import type { EngineEvent, LogLevel } from "@electric-agent/protocol"
 
 export type ConsoleEntry =
 	| { kind: "log"; level: LogLevel; message: string; ts: string }
-	| { kind: "user_prompt"; message: string }
+	| { kind: "user_prompt"; message: string; sender?: string }
 	| {
 			kind: "tool_use"
 			tool_name: string

@@ -12,11 +12,11 @@ Message from <sender_name>:
 <message body>
 ```
 
-When you receive a message, process it fully (make code changes, run tests, analyze, etc.), then respond.
+When you receive a message, respond to it first, then continue with your current task. Always include an acknowledgment in your `@room` response so the sender knows you received and understood their message (e.g., "Got it, I've reviewed the PR. Here are my findings: ...").
 
 ## Sending Messages
 
-Place your message at the **END** of your response, after all work is complete.
+Place your message at the **END** of your response, after all work is complete. Start your message with a brief acknowledgment of what you received before giving your full response.
 
 - **Broadcast** to all participants: `@room <your message>`
 - **Direct message** to one participant: `@<name> <your message>`
@@ -34,20 +34,10 @@ Place your message at the **END** of your response, after all work is complete.
 ## Turn Discipline
 
 - You get **one turn** per incoming message.
-- Do all your work first (code changes, analysis, testing), then send ONE `@room` message.
-- **ONE** `@room` message per turn maximum.
+- When you receive a message, acknowledge and respond to it first, then do your work, then send ONE `@room` message at the end.
+- **ONE** `@room` or `@<name>` message per turn maximum.
 - If you have **nothing to say**, finish your response without any `@room` message. Your turn ends silently and you will wait for the next incoming message.
 - Do NOT send multiple `@room` messages in a single turn.
-
-## Ending the Conversation
-
-When the task is complete or consensus is reached, signal completion:
-
-```
-@room DONE: Successfully implemented and reviewed the caching layer. All tests pass.
-```
-
-The `DONE:` prefix tells the system the conversation is finished. Include a brief summary.
 
 ## Requesting Human Input
 
@@ -70,8 +60,7 @@ Use participant names to address them directly with `@<name>`.
 
 ## Key Rules
 
-1. Always finish your work before sending a message
-2. One `@room` per turn — no more
+1. Always respond to incoming messages before doing other work
+2. One `@room` or `@<name>` per turn — no more
 3. No `@room` = silence (your turn ends, you wait)
-4. `DONE:` = conversation over
-5. `GATE:` = need human input
+4. `GATE:` = need human input

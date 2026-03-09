@@ -10,7 +10,7 @@ export type LogLevel = "plan" | "approve" | "task" | "build" | "fix" | "done" | 
  */
 export type EngineEvent =
 	| { type: "log"; level: LogLevel; message: string; ts: string }
-	| { type: "user_prompt"; message: string; ts: string }
+	| { type: "user_prompt"; message: string; sender?: string; ts: string }
 	| {
 			type: "pre_tool_use"
 			tool_name: string

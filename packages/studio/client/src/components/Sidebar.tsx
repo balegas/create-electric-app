@@ -105,7 +105,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		: null
 
 	const sortedSessions = [...sessions].sort(
-		(a, b) => new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime(),
+		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
 	)
 
 	const handleNavigate = (path: string) => {
