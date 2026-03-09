@@ -390,6 +390,25 @@ export function addAgentToRoom(
 	)
 }
 
+export function addSessionToRoom(
+	roomId: string,
+	config: {
+		sessionId: string
+		name: string
+		role?: string
+		gated?: boolean
+		initialPrompt?: string
+	},
+) {
+	return request<{ sessionId: string; participantName: string; sessionToken: string }>(
+		`/rooms/${roomId}/sessions`,
+		{
+			method: "POST",
+			body: config,
+		},
+	)
+}
+
 export function sendRoomMessage(roomId: string, from: string, body: string, to?: string) {
 	return request<{ ok: boolean }>(`/rooms/${roomId}/messages`, {
 		method: "POST",

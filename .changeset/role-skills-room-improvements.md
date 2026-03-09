@@ -24,3 +24,4 @@ Add role-based skills for agent rooms and multiple room UX improvements.
 - Session sidebar uses deterministic ordering (createdAt instead of lastActiveAt)
 - Reviewer skill instructs posting PR summary comment when review is complete
 - Room-messaging skill updated to encourage message acknowledgment
+- Add existing running session to a room (new/existing toggle in Add Agent modal)

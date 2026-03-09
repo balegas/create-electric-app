@@ -1023,6 +1023,41 @@
 	cursor: pointer;
 }
 
+.room-form-toggle {
+	display: flex;
+	gap: 0;
+	margin-bottom: 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.room-form-toggle-btn {
+	flex: 1;
+	padding: 6px 12px;
+	font-size: 13px;
+	background: var(--bg-surface);
+	color: var(--text-muted);
+	border: none;
+	cursor: pointer;
+	transition:
+		background 0.15s,
+		color 0.15s;
+}
+
+.room-form-toggle-btn:not(:last-child) {
+	border-right: 1px solid var(--border);
+}
+
+.room-form-toggle-btn.active {
+	background: var(--brand);
+	color: #fff;
+}
+
+.room-form-toggle-btn:hover:not(.active) {
+	background: var(--bg-hover);
+}
+
 .room-form-error {
 	color: var(--red);
 	font-size: 13px;

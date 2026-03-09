@@ -2362,6 +2362,108 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ sessionId, participantName: body.name, sessionToken }, 201)
 	})
 
+	// Add an existing running session to a room
+	app.post("/api/rooms/:id/sessions", async (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		const body = (await c.req.json()) as {
+			sessionId: string
+			name: string
+			role?: string
+			gated?: boolean
+			initialPrompt?: string
+		}
+		if (!body.sessionId || !body.name) {
+			return c.json({ error: "sessionId and name are required" }, 400)
+		}
+
+		const { sessionId } = body
+
+		// Verify the session exists
+		const sessionInfo = config.sessions.get(sessionId)
+		if (!sessionInfo) {
+			return c.json({ error: "Session not found" }, 404)
+		}
+
+		// Get the sandbox handle — must be running
+		const handle = config.sandbox.get(sessionId)
+		if (!handle) {
+			return c.json({ error: "Session sandbox not found or not running" }, 400)
+		}
+
+		// Get or create bridge (it should already exist for a running session)
+		const bridge = getOrCreateBridge(config, sessionId)
+
+		console.log(`[room:${roomId}] Adding existing session: name=${body.name} session=${sessionId}`)
+
+		try {
+			// Inject room-messaging skill
+			if (roomMessagingSkillContent) {
+				try {
+					const skillDir = `${handle.projectDir}/.claude/skills/room-messaging`
+					const skillB64 = Buffer.from(roomMessagingSkillContent).toString("base64")
+					await config.sandbox.exec(
+						handle,
+						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+					)
+				} catch (err) {
+					console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
+				}
+			}
+
+			// Resolve role skill (behavioral guidelines + tool permissions)
+			const roleSkill = resolveRoleSkill(body.role)
+
+			// Inject role skill file into sandbox
+			if (roleSkill) {
+				try {
+					const skillDir = `${handle.projectDir}/.claude/skills/role`
+					const skillB64 = Buffer.from(roleSkill.skillContent).toString("base64")
+					await config.sandbox.exec(
+						handle,
+						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+					)
+				} catch (err) {
+					console.error(`[session:${sessionId}] Failed to write role skill:`, err)
+				}
+			}
+
+			// The existing bridge is already a Claude Code bridge — wire up room output handling
+			bridge.onAgentEvent((event) => {
+				if (event.type === "assistant_message" && "text" in event) {
+					router
+						.handleAgentOutput(sessionId, (event as EngineEvent & { text: string }).text)
+						.catch((err) => {
+							console.error(`[room:${roomId}] handleAgentOutput error:`, err)
+						})
+				}
+			})
+
+			// Add participant to room router
+			const participant: RoomParticipant = {
+				sessionId,
+				name: body.name,
+				role: body.role,
+				bridge,
+			}
+			await router.addParticipant(participant, body.gated ?? false)
+
+			// If there's an initial prompt, send it directly to this agent
+			if (body.initialPrompt) {
+				await bridge.sendCommand({ command: "iterate", request: body.initialPrompt })
+			}
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "Failed to add session to room"
+			console.error(`[room:${roomId}] Add session failed:`, err)
+			return c.json({ error: msg }, 500)
+		}
+
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+		return c.json({ sessionId, participantName: body.name, sessionToken }, 201)
+	})
+
 	// Send a message directly to a specific session in a room (bypasses room stream)
 	app.post("/api/rooms/:id/sessions/:sessionId/iterate", async (c) => {
 		const roomId = c.req.param("id")
