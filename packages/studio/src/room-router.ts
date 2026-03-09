@@ -271,19 +271,6 @@ export class RoomRouter {
 		}
 	}
 
-	// --- Internals ---
-
-	private async closeRoom(closedBy: string, summary?: string): Promise<void> {
-		const event: SharedSessionEvent = {
-			type: "room_closed",
-			closedBy,
-			...(summary ? { summary } : {}),
-			ts: ts(),
-		}
-		await this.stream.append(JSON.stringify(event))
-		this.close()
-	}
-
 	/**
 	 * Deliver a message to recipient agent(s) via their bridges.
 	 */

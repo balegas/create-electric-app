@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { getAvatarColor } from "../components/SessionListItem"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
 import { useAppContext } from "../layouts/AppShell"
 import {
@@ -9,7 +10,6 @@ import {
 	type RoomState,
 	sendRoomMessage,
 } from "../lib/api"
-import { getAvatarColor } from "../components/SessionListItem"
 import { getOrCreateParticipant } from "../lib/participant"
 import { addSession, setSessionToken } from "../lib/session-store"
 
@@ -88,7 +88,6 @@ export function RoomPage() {
 				roomId={roomId}
 				state={effectiveState}
 				participants={participants}
-				roundCount={roomState?.roundCount ?? 0}
 				onClose={handleClose}
 				onAddAgent={() => setShowAddAgent(true)}
 				openMobileDrawer={openMobileDrawer}
@@ -96,7 +95,7 @@ export function RoomPage() {
 
 			<div className="session-content">
 				<div className="room-messages">
-					<RoomEventList events={events} participants={participants} roomId={roomId ?? ""} />
+					<RoomEventList events={events} participants={participants} />
 				</div>
 
 				<RoomInput
@@ -130,7 +129,6 @@ function RoomHeader({
 	roomId,
 	state,
 	participants,
-	roundCount,
 	onClose,
 	onAddAgent,
 	openMobileDrawer,
@@ -138,7 +136,6 @@ function RoomHeader({
 	roomId?: string
 	state?: string
 	participants: Array<{ sessionId: string; name: string; role?: string }>
-	roundCount: number
 	onClose: () => void
 	onAddAgent: () => void
 	openMobileDrawer: () => void
@@ -244,11 +241,9 @@ function ParticipantLink({
 function RoomEventList({
 	events,
 	participants,
-	roomId,
 }: {
 	events: RoomEvent[]
 	participants: Array<{ sessionId: string; name: string; role?: string }>
-	roomId: string
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
 

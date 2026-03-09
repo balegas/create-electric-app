@@ -131,7 +131,7 @@ export function resolveRoleSkill(role?: string): RoleSkill | undefined {
 		roleSkillCache.set(roleName, content)
 	}
 
-	const skillContent = roleSkillCache.get(roleName)!
+	const skillContent = roleSkillCache.get(roleName) as string
 	return {
 		roleName,
 		skillContent,
