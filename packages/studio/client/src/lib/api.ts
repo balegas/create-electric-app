@@ -356,10 +356,16 @@ export interface RoomState {
 }
 
 export async function createAgentRoom(name: string, maxRounds?: number) {
-	return request<{ roomId: string; roomToken: string }>("/rooms", {
+	return request<{ roomId: string; code: string; roomToken: string }>("/rooms", {
 		method: "POST",
 		body: { name, maxRounds },
 	})
+}
+
+export async function joinAgentRoom(code: string) {
+	return request<{ id: string; code: string; name: string; roomToken: string }>(
+		`/rooms/join/${code}`,
+	)
 }
 
 export function getAgentRoomState(roomId: string) {

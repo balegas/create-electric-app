@@ -2107,17 +2107,29 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		roomRouters.set(roomId, router)
 
 		// Save to room registry for persistence
+		const code = generateInviteCode()
 		await config.rooms.addRoom({
 			id: roomId,
-			code: generateInviteCode(),
+			code,
 			name: body.name,
 			createdAt: new Date().toISOString(),
 			revoked: false,
 		})
 
 		const roomToken = deriveSessionToken(config.streamConfig.secret, roomId)
-		console.log(`[room] Created: id=${roomId} name=${body.name}`)
-		return c.json({ roomId, roomToken }, 201)
+		console.log(`[room] Created: id=${roomId} name=${body.name} code=${code}`)
+		return c.json({ roomId, code, roomToken }, 201)
+	})
+
+	// Join an agent room by invite code
+	app.get("/api/rooms/join/:code", (c) => {
+		const code = c.req.param("code")
+		const room = config.rooms.getRoomByCode(code)
+		if (!room) return c.json({ error: "Room not found" }, 404)
+		if (room.revoked) return c.json({ error: "Room has been revoked" }, 410)
+
+		const roomToken = deriveSessionToken(config.streamConfig.secret, room.id)
+		return c.json({ id: room.id, code: room.code, name: room.name, roomToken })
 	})
 
 	// Get room state
@@ -2221,11 +2233,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							prompt: `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.`,
 							cwd: handle.projectDir,
 							studioUrl: resolveStudioUrl(config.port),
+							agentName: body.name,
 						}
 					: {
 							prompt: `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.`,
 							cwd: handle.projectDir,
 							studioPort: config.port,
+							agentName: body.name,
 						}
 			const ccBridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAppContext } from "../layouts/AppShell"
 import { addAgentRoom, removeAgentRoom } from "../lib/agent-room-store"
-import { createAgentRoom, createSharedSession } from "../lib/api"
+import { createAgentRoom, createSharedSession, joinAgentRoom } from "../lib/api"
 import { removeJoinedSharedSession } from "../lib/shared-session-store"
 import { getAvatarColor, SessionListItem } from "./SessionListItem"
 
@@ -75,6 +75,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 	const [createName, setCreateName] = useState("")
 	const [createAgentRoomOpen, setCreateAgentRoomOpen] = useState(false)
 	const [agentRoomName, setAgentRoomName] = useState("")
+	const [joinAgentRoomOpen, setJoinAgentRoomOpen] = useState(false)
+	const [joinAgentRoomCode, setJoinAgentRoomCode] = useState("")
 
 	// Close inline inputs when sidebar collapses
 	useEffect(() => {
@@ -85,6 +87,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 			setCreateName("")
 			setCreateAgentRoomOpen(false)
 			setAgentRoomName("")
+			setJoinAgentRoomOpen(false)
+			setJoinAgentRoomCode("")
 		}
 	}, [collapsed])
 
@@ -138,8 +142,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		const trimmed = agentRoomName.trim()
 		if (!trimmed) return
 		try {
-			const { roomId } = await createAgentRoom(trimmed)
-			addAgentRoom({ id: roomId, name: trimmed, createdAt: new Date().toISOString() })
+			const { roomId, code } = await createAgentRoom(trimmed)
+			addAgentRoom({ id: roomId, code, name: trimmed, createdAt: new Date().toISOString() })
 			refreshAgentRooms()
 			setAgentRoomName("")
 			setCreateAgentRoomOpen(false)
@@ -148,7 +152,23 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		} catch (err) {
 			console.error("Failed to create agent room:", err)
 		}
-	}, [agentRoomName, navigate, onMobileClose])
+	}, [agentRoomName, navigate, onMobileClose, refreshAgentRooms])
+
+	const handleJoinAgentRoom = useCallback(async () => {
+		const trimmed = joinAgentRoomCode.trim()
+		if (!trimmed) return
+		try {
+			const { id, code, name } = await joinAgentRoom(trimmed)
+			addAgentRoom({ id, code, name, createdAt: new Date().toISOString() })
+			refreshAgentRooms()
+			setJoinAgentRoomCode("")
+			setJoinAgentRoomOpen(false)
+			navigate(`/room/${id}`)
+			onMobileClose?.()
+		} catch (err) {
+			console.error("Failed to join agent room:", err)
+		}
+	}, [joinAgentRoomCode, navigate, onMobileClose, refreshAgentRooms])
 
 	const handleCreateShared = useCallback(async () => {
 		const trimmed = createName.trim()
@@ -389,7 +409,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 							<div className="session-item-details">
 								<div className="session-item-name">{r.name}</div>
 								<div className="session-item-meta">
-									<span>{r.id.slice(0, 8)}</span>
+									<span>{r.code || r.id.slice(0, 8)}</span>
 								</div>
 							</div>
 							<button
@@ -445,6 +465,50 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						<span className="session-avatar new-project-avatar">+</span>
 						<div className="session-item-details">
 							<div className="session-item-name">Create</div>
+						</div>
+					</div>
+				)}
+
+				{joinAgentRoomOpen && !collapsed ? (
+					<div className="sidebar-join-input">
+						<input
+							type="text"
+							placeholder="Invite code..."
+							value={joinAgentRoomCode}
+							onChange={(e) => setJoinAgentRoomCode(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleJoinAgentRoom()
+								if (e.key === "Escape") {
+									setJoinAgentRoomOpen(false)
+									setJoinAgentRoomCode("")
+								}
+							}}
+						/>
+						<button
+							type="button"
+							className="sidebar-join-go"
+							onClick={handleJoinAgentRoom}
+							disabled={!joinAgentRoomCode.trim()}
+						>
+							Go
+						</button>
+					</div>
+				) : (
+					<div
+						className="session-item"
+						onClick={() => {
+							if (collapsed) {
+								onToggle()
+							}
+							setJoinAgentRoomOpen(true)
+						}}
+						title="Join agent room"
+					>
+						<span className="session-avatar new-project-avatar">
+							<LinkIcon />
+						</span>
+						<div className="session-item-details">
+							<div className="session-item-name">Join</div>
 						</div>
 					</div>
 				)}

@@ -35,6 +35,8 @@ export interface ClaudeCodeSpritesConfig {
 	extraFlags?: string[]
 	/** Studio server URL — used to set up AskUserQuestion hooks inside the sprite */
 	studioUrl?: string
+	/** Agent name — injected into assistant_message events for display */
+	agentName?: string
 }
 
 const DEFAULT_ALLOWED_TOOLS = [
@@ -361,6 +363,11 @@ exit 0`
 	}
 
 	private dispatchEvent(event: EngineEvent): void {
+		// Inject agent name into assistant_message events for display
+		if (this.config.agentName && event.type === "assistant_message") {
+			;(event as EngineEvent & { agent?: string }).agent = this.config.agentName
+		}
+
 		const msg: StreamMessage = { source: "agent", ...event }
 		this.writer.append(JSON.stringify(msg)).catch(() => {})
 

@@ -2,6 +2,7 @@ const STORAGE_KEY = "electric-agent:agent-rooms"
 
 export interface AgentRoomEntry {
 	id: string
+	code: string
 	name: string
 	createdAt: string
 }
