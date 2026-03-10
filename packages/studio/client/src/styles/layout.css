@@ -811,13 +811,6 @@
 	margin-left: 0;
 }
 
-.room-header-avatar--running {
-	border-color: transparent;
-	box-shadow:
-		0 0 0 2px var(--bg-surface),
-		0 0 0 4px var(--cyan);
-}
-
 .room-event-list {
 	display: flex;
 	flex-direction: column;

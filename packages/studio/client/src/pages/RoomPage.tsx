@@ -198,9 +198,9 @@ function RoomHeader({
 						<button
 							key={p.sessionId}
 							type="button"
-							className={`room-header-avatar${p.running ? " room-header-avatar--running" : ""}`}
+							className="room-header-avatar"
 							style={{ background: color.bg, color: color.fg }}
-							title={`${p.name}${p.role ? ` (${p.role})` : ""} — ${p.running ? "working" : "idle"}`}
+							title={p.name}
 							onClick={() => navigate(`/session/${p.sessionId}`)}
 						>
 							{initials}
