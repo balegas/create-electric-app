@@ -32,7 +32,12 @@ import { type RoomParticipant, RoomRouter } from "./room-router.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
-import { deriveSessionToken, validateSessionToken } from "./session-auth.js"
+import {
+	deriveHookToken,
+	deriveSessionToken,
+	validateHookToken,
+	validateSessionToken,
+} from "./session-auth.js"
 import type { SessionInfo } from "./sessions.js"
 import { generateInviteCode } from "./shared-sessions.js"
 import {
@@ -416,7 +421,7 @@ export function createApp(config: ServerConfig) {
 	// :id="local", so we must explicitly skip those.
 
 	const authExemptIds = new Set(["local", "auto", "resume"])
-	const hookExemptSuffixes = new Set(["/hook-event"])
+	// Hook-event auth is handled in the endpoint handler via validateHookToken
 
 	/** Extract session token from Authorization header or query param. */
 	function extractToken(c: {
@@ -436,7 +441,9 @@ export function createApp(config: ServerConfig) {
 		if (authExemptIds.has(id)) return next()
 
 		const subPath = c.req.path.replace(/^\/api\/sessions\/[^/]+/, "")
-		if (hookExemptSuffixes.has(subPath)) return next()
+
+		// Hook-event uses a purpose-scoped hook token (validated in the handler)
+		if (subPath === "/hook-event") return next()
 
 		const token = extractToken(c)
 		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
@@ -503,8 +510,9 @@ export function createApp(config: ServerConfig) {
 		getOrCreateBridge(config, sessionId)
 
 		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+		const hookToken = deriveHookToken(config.streamConfig.secret, sessionId)
 		console.log(`[local-session] Created session: ${sessionId}`)
-		return c.json({ sessionId, sessionToken }, 201)
+		return c.json({ sessionId, sessionToken, hookToken }, 201)
 	})
 
 	// Auto-register a local session on first hook event (SessionStart).
@@ -557,8 +565,9 @@ export function createApp(config: ServerConfig) {
 		}
 
 		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+		const hookToken = deriveHookToken(config.streamConfig.secret, sessionId)
 		console.log(`[auto-session] Created session: ${sessionId} (project: ${projectName})`)
-		return c.json({ sessionId, sessionToken }, 201)
+		return c.json({ sessionId, sessionToken, hookToken }, 201)
 	})
 
 	// Receive a hook event from Claude Code (via forward.sh) and write it
@@ -566,6 +575,13 @@ export function createApp(config: ServerConfig) {
 	// For AskUserQuestion, this blocks until the user answers in the web UI.
 	app.post("/api/sessions/:id/hook-event", async (c) => {
 		const sessionId = c.req.param("id")
+
+		// Validate hook token (scoped per-session, separate from session token)
+		const token = extractToken(c)
+		if (!token || !validateHookToken(config.streamConfig.secret, sessionId, token)) {
+			return c.json({ error: "Invalid or missing hook token" }, 401)
+		}
+
 		const body = (await c.req.json()) as Record<string, unknown>
 
 		const bridge = getOrCreateBridge(config, sessionId)
@@ -1175,17 +1191,20 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}
 
 				const sessionPrompt = body.freeform ? body.description : `/create-app ${body.description}`
+				const sessionHookToken = deriveHookToken(config.streamConfig.secret, sessionId)
 				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 					config.sandbox.runtime === "sprites"
 						? {
 								prompt: sessionPrompt,
 								cwd: handle.projectDir,
 								studioUrl: resolveStudioUrl(config.port),
+								hookToken: sessionHookToken,
 							}
 						: {
 								prompt: sessionPrompt,
 								cwd: handle.projectDir,
 								studioPort: config.port,
+								hookToken: sessionHookToken,
 							}
 				bridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
 			}
@@ -1837,11 +1856,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ id, code, roomToken }, 201)
 	})
 
-	// Resolve invite code → shared session ID + room token
-	app.get("/api/shared-sessions/join/:code", (c) => {
+	// Resolve invite (id + code) → shared session ID + room token
+	app.get("/api/shared-sessions/join/:id/:code", (c) => {
+		const id = c.req.param("id")
 		const code = c.req.param("code")
-		const entry = config.rooms.getRoomByCode(code)
-		if (!entry) return c.json({ error: "Shared session not found" }, 404)
+		const entry = config.rooms.getRoom(id)
+		if (!entry || entry.code !== code) return c.json({ error: "Shared session not found" }, 404)
 		const roomToken = deriveSessionToken(config.streamConfig.secret, entry.id)
 		return c.json({ id: entry.id, code: entry.code, revoked: entry.revoked, roomToken })
 	})
@@ -2122,11 +2142,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ roomId, code, roomToken }, 201)
 	})
 
-	// Join an agent room by invite code
-	app.get("/api/rooms/join/:code", (c) => {
+	// Join an agent room by id + invite code
+	app.get("/api/rooms/join/:id/:code", (c) => {
+		const id = c.req.param("id")
 		const code = c.req.param("code")
-		const room = config.rooms.getRoomByCode(code)
-		if (!room) return c.json({ error: "Room not found" }, 404)
+		const room = config.rooms.getRoom(id)
+		if (!room || room.code !== code) return c.json({ error: "Room not found" }, 404)
 		if (room.revoked) return c.json({ error: "Room has been revoked" }, 410)
 
 		const roomToken = deriveSessionToken(config.streamConfig.secret, room.id)
@@ -2265,12 +2286,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const agentPrompt = `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.${rolePromptSuffix}`
 
 			// Create Claude Code bridge (with role-specific tool permissions)
+			const agentHookToken = deriveHookToken(config.streamConfig.secret, sessionId)
 			const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 				config.sandbox.runtime === "sprites"
 					? {
 							prompt: agentPrompt,
 							cwd: handle.projectDir,
 							studioUrl: resolveStudioUrl(config.port),
+							hookToken: agentHookToken,
 							agentName: body.name,
 							...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
 						}
@@ -2278,6 +2301,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							prompt: agentPrompt,
 							cwd: handle.projectDir,
 							studioPort: config.port,
+							hookToken: agentHookToken,
 							agentName: body.name,
 							...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
 						}
@@ -2812,17 +2836,20 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const resumePrompt =
 				"You are resuming work on an existing project. Explore the codebase to understand its structure, then wait for instructions from the user."
 
+			const resumeHookToken = deriveHookToken(config.streamConfig.secret, sessionId)
 			const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 				config.sandbox.runtime === "sprites"
 					? {
 							prompt: resumePrompt,
 							cwd: handle.projectDir,
 							studioUrl: resolveStudioUrl(config.port),
+							hookToken: resumeHookToken,
 						}
 					: {
 							prompt: resumePrompt,
 							cwd: handle.projectDir,
 							studioPort: config.port,
+							hookToken: resumeHookToken,
 						}
 			const ccBridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
 

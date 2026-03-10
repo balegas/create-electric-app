@@ -35,6 +35,8 @@ export interface ClaudeCodeSpritesConfig {
 	extraFlags?: string[]
 	/** Studio server URL — used to set up AskUserQuestion hooks inside the sprite */
 	studioUrl?: string
+	/** HMAC token for authenticating hook-event requests back to the studio */
+	hookToken?: string
 	/** Agent name — injected into assistant_message events for display */
 	agentName?: string
 }
@@ -177,10 +179,12 @@ export class ClaudeCodeSpritesBridge implements SessionBridge {
 		const hookDir = `${this.config.cwd}/.claude/hooks`
 		const settingsFile = `${this.config.cwd}/.claude/settings.local.json`
 
+		const hookToken = this.config.hookToken ?? ""
 		const forwardScript = `#!/bin/bash
 BODY="$(cat)"
 RESPONSE=$(curl -s -X POST "${studioUrl}/api/sessions/${this.sessionId}/hook-event" \\
   -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${hookToken}" \\
   -d "\${BODY}" \\
   --max-time 360 \\
   --connect-timeout 5 \\

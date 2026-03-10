@@ -272,9 +272,9 @@ export async function createSharedSession(name: string) {
 	return result
 }
 
-export async function joinSharedSession(code: string) {
+export async function joinSharedSession(id: string, code: string) {
 	const result = await request<{ id: string; code: string; revoked: boolean; roomToken: string }>(
-		`/shared-sessions/join/${code}`,
+		`/shared-sessions/join/${id}/${code}`,
 	)
 	if (result.roomToken) {
 		setRoomToken(result.id, result.roomToken)
@@ -362,9 +362,9 @@ export async function createAgentRoom(name: string, maxRounds?: number) {
 	})
 }
 
-export async function joinAgentRoom(code: string) {
+export async function joinAgentRoom(id: string, code: string) {
 	return request<{ id: string; code: string; name: string; roomToken: string }>(
-		`/rooms/join/${code}`,
+		`/rooms/join/${id}/${code}`,
 	)
 }
 

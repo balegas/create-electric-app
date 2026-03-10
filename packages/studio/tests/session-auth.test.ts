@@ -257,7 +257,7 @@ describe("session-auth integration", () => {
 		assert.equal(res.status, 401)
 	})
 
-	it("POST /api/sessions/:id/hook-event succeeds without token (exempt)", async () => {
+	it("POST /api/sessions/:id/hook-event requires hook token", async () => {
 		const app = createTestApp()
 
 		const createRes = await appFetch(app, "/api/sessions/local", {
@@ -265,9 +265,13 @@ describe("session-auth integration", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({}),
 		})
-		const { sessionId } = (await createRes.json()) as { sessionId: string }
+		const { sessionId, hookToken } = (await createRes.json()) as {
+			sessionId: string
+			hookToken: string
+		}
 
-		const res = await appFetch(app, `/api/sessions/${sessionId}/hook-event`, {
+		// Without token — should be rejected
+		const noTokenRes = await appFetch(app, `/api/sessions/${sessionId}/hook-event`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
@@ -277,7 +281,23 @@ describe("session-auth integration", () => {
 				tool_input: { command: "ls" },
 			}),
 		})
-		assert.equal(res.status, 200)
+		assert.equal(noTokenRes.status, 401)
+
+		// With hook token — should succeed
+		const withTokenRes = await appFetch(app, `/api/sessions/${sessionId}/hook-event`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${hookToken}`,
+			},
+			body: JSON.stringify({
+				hook_event_name: "PreToolUse",
+				tool_name: "Bash",
+				tool_use_id: "tu_auth_test_2",
+				tool_input: { command: "ls" },
+			}),
+		})
+		assert.equal(withTokenRes.status, 200)
 	})
 
 	it("token for session A is rejected on session B", async () => {
@@ -386,7 +406,7 @@ describe("room-auth integration", () => {
 		assert.equal(body.roomToken.length, 64)
 	})
 
-	it("GET /api/shared-sessions/join/:code returns roomToken", async () => {
+	it("GET /api/shared-sessions/join/:id/:code returns roomToken", async () => {
 		const app = createTestApp()
 
 		// Create a room first
@@ -395,10 +415,10 @@ describe("room-auth integration", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ name: "Join Test", participant }),
 		})
-		const { code } = (await createRes.json()) as { id: string; code: string; roomToken: string }
+		const { id, code } = (await createRes.json()) as { id: string; code: string; roomToken: string }
 
-		// Join by code
-		const joinRes = await appFetch(app, `/api/shared-sessions/join/${code}`)
+		// Join by id + code
+		const joinRes = await appFetch(app, `/api/shared-sessions/join/${id}/${code}`)
 		assert.equal(joinRes.status, 200)
 		const body = (await joinRes.json()) as { id: string; roomToken: string }
 		assert.ok(body.roomToken, "Should return roomToken on join")

@@ -9,3 +9,14 @@ export function validateSessionToken(secret: string, sessionId: string, token: s
 	if (expected.length !== token.length) return false
 	return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(token, "hex"))
 }
+
+/** Derive a purpose-scoped token for hook-event authentication. */
+export function deriveHookToken(secret: string, sessionId: string): string {
+	return crypto.createHmac("sha256", secret).update(`hook:${sessionId}`).digest("hex")
+}
+
+export function validateHookToken(secret: string, sessionId: string, token: string): boolean {
+	const expected = deriveHookToken(secret, sessionId)
+	if (expected.length !== token.length) return false
+	return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(token, "hex"))
+}

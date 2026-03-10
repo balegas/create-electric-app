@@ -11,7 +11,7 @@ export const router = createBrowserRouter([
 		children: [
 			{ path: "/", element: <HomePage /> },
 			{ path: "/session/:id", element: <SessionPage /> },
-			{ path: "/shared/:code", element: <SharedSessionPage /> },
+			{ path: "/shared/:id/:code", element: <SharedSessionPage /> },
 			{ path: "/room/:id", element: <RoomPage /> },
 		],
 	},

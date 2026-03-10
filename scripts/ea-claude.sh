@@ -53,6 +53,7 @@ if [ -z "${EA_SESSION_ID:-}" ]; then
     2>/dev/null) || true
 
   EA_SESSION_ID=$(echo "$RESPONSE" | grep -o '"sessionId":"[^"]*"' | cut -d'"' -f4)
+  EA_HOOK_TOKEN=$(echo "$RESPONSE" | grep -o '"hookToken":"[^"]*"' | cut -d'"' -f4)
 
   if [ -n "$EA_SESSION_ID" ]; then
     echo "✓ Session: ${EA_SERVER_URL}/session/${EA_SESSION_ID}" >&2
@@ -63,6 +64,7 @@ if [ -z "${EA_SESSION_ID:-}" ]; then
 fi
 
 export EA_SESSION_ID
+export EA_HOOK_TOKEN
 export EA_PORT
 
 # --- Cleanup on exit: send SessionEnd ---
@@ -70,6 +72,7 @@ cleanup() {
   if [ -n "${EA_SESSION_ID:-}" ]; then
     curl -sf -X POST "${EA_SERVER_URL}/api/sessions/${EA_SESSION_ID}/hook-event" \
       -H "Content-Type: application/json" \
+      -H "Authorization: Bearer ${EA_HOOK_TOKEN}" \
       -d '{"hook_event_name":"SessionEnd"}' \
       --max-time 2 \
       2>/dev/null || true
