@@ -265,7 +265,10 @@ describe("session-auth integration", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({}),
 		})
-		const { sessionId, hookToken } = (await createRes.json()) as { sessionId: string; hookToken: string }
+		const { sessionId, hookToken } = (await createRes.json()) as {
+			sessionId: string
+			hookToken: string
+		}
 
 		// Without token — should be rejected
 		const noTokenRes = await appFetch(app, `/api/sessions/${sessionId}/hook-event`, {

@@ -178,7 +178,10 @@ describe("hook-bridge integration", () => {
 				cwd: "/Users/test/forwarding-test",
 			}),
 		})
-		const { sessionId, hookToken } = (await autoRes.json()) as { sessionId: string; hookToken: string }
+		const { sessionId, hookToken } = (await autoRes.json()) as {
+			sessionId: string
+			hookToken: string
+		}
 
 		// 2. Forward a PreToolUse event (with hook token)
 		const hookRes = await appFetch(app, `/api/sessions/${sessionId}/hook-event`, {
@@ -230,7 +233,10 @@ describe("hook-bridge integration", () => {
 				cwd: "/Users/test/end-test",
 			}),
 		})
-		const { sessionId, hookToken } = (await autoRes.json()) as { sessionId: string; hookToken: string }
+		const { sessionId, hookToken } = (await autoRes.json()) as {
+			sessionId: string
+			hookToken: string
+		}
 
 		// 2. Send SessionEnd (with hook token)
 		const endRes = await appFetch(app, `/api/sessions/${sessionId}/hook-event`, {

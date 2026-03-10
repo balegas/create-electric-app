@@ -4,7 +4,12 @@ export { resolveProjectDir } from "./project-utils.js"
 export type { RoomInfo } from "./room-registry.js"
 export { RoomRegistry } from "./room-registry.js"
 export { createApp, startWebServer } from "./server.js"
-export { deriveHookToken, deriveSessionToken, validateHookToken, validateSessionToken } from "./session-auth.js"
+export {
+	deriveHookToken,
+	deriveSessionToken,
+	validateHookToken,
+	validateSessionToken,
+} from "./session-auth.js"
 export type { SessionInfo } from "./sessions.js"
 export {
 	addSession,

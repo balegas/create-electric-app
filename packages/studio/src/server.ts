@@ -32,7 +32,12 @@ import { type RoomParticipant, RoomRouter } from "./room-router.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
-import { deriveHookToken, deriveSessionToken, validateHookToken, validateSessionToken } from "./session-auth.js"
+import {
+	deriveHookToken,
+	deriveSessionToken,
+	validateHookToken,
+	validateSessionToken,
+} from "./session-auth.js"
 import type { SessionInfo } from "./sessions.js"
 import { generateInviteCode } from "./shared-sessions.js"
 import {
