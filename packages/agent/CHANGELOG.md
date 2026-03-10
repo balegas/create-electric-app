@@ -1,5 +1,39 @@
 # @electric-agent/agent
 
+## 1.3.0
+
+### Minor Changes
+
+- 41c4dc9: Remove Daytona sandbox provider. The project now supports two sandbox runtimes: Docker (local) and Sprites (Fly.io cloud).
+
+### Patch Changes
+
+- f14b9ff: Align guardrails with TanStack playbooks and restore skill discovery.
+
+  - Adopt TanStack's `z.union([z.string(), z.date()]).transform().default()` timestamp
+    pattern (from tanstack-db/collections/SKILL.md) — strictly better than our old
+    `z.union([z.date(), z.string()]).default()` because it converts strings to Dates
+  - Remove stale `z.coerce.date()` ban — works correctly with zod >=3.25
+  - Bump zod from `^3.24` to `^3.25` to satisfy drizzle-zod 0.8.x peer dep
+  - Add all TanStack DB sub-skills (collections, schemas, mutations, live-queries,
+    electric) to playbook listing with updated reading order
+  - Integrate `npx @tanstack/intent list` into create-app Phase 1 for dynamic
+    skill discovery
+  - Keep `zod/v4` import requirement (verified: drizzle-zod rejects v3 overrides)
+  - Revert fragile mv/cat/append CLAUDE.md merge back to simple overwrite
+
+- 41c4dc9: Rewrite project documentation from scratch. Add docs/ directory with detailed reference docs covering protocol & events, multi-agent rooms, sandboxes & bridges, security & authentication, architecture, and publishing. Rewrite README as a concise quick-start guide. Update CLAUDE.md with clear development instructions, pre-commit checklist, and changeset requirements.
+- Updated dependencies [ff36816]
+- Updated dependencies [b80b6e0]
+- Updated dependencies [1434666]
+- Updated dependencies [41c4dc9]
+- Updated dependencies [f14b9ff]
+- Updated dependencies [41c4dc9]
+- Updated dependencies [5c53e82]
+- Updated dependencies [29d02f3]
+  - @electric-agent/studio@1.11.0
+  - @electric-agent/protocol@1.7.0
+
 ## 1.2.2
 
 ### Patch Changes

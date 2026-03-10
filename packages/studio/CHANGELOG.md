@@ -1,5 +1,69 @@
 # @electric-agent/studio
 
+## 1.11.0
+
+### Minor Changes
+
+- ff36816: Add Room UI for agent-to-agent messaging: create rooms, add agents, live SSE message stream, broadcast and targeted messaging, direct session iterate endpoint.
+- b80b6e0: Agent room improvements: joinable rooms via invite code, agent sessions in sidebar, agent name labels in session console
+- 1434666: Security: authenticate hook-event endpoint with scoped HMAC tokens and require id+code for room joins
+
+  - Hook-event endpoint now requires a purpose-scoped HMAC token (`deriveHookToken`) instead of being auth-exempt
+  - Hook token is derived with a `hook:` prefix so it cannot be used as a session token
+  - Sprites and Docker containers receive only the scoped hook token, not `DS_SECRET`
+  - Room/shared-session join endpoints now require both the session ID and invite code, preventing brute-force of short codes
+  - Join token format changed to `id:code` for copy/paste workflows
+
+- 41c4dc9: Remove Daytona sandbox provider. The project now supports two sandbox runtimes: Docker (local) and Sprites (Fly.io cloud).
+- 5c53e82: Add role-based skills for agent rooms and multiple room UX improvements.
+
+  **Role skills:**
+
+  - Built-in `coder` and `reviewer` roles with skill files defining workflows, interaction protocols, and boundaries
+  - Role-specific tool permissions: reviewer is read-only (no Write/Edit), coder has full access
+  - Role selector dropdown in the Add Agent modal (replaces freeform text input)
+  - Role skill files are injected into agent sandboxes alongside the room-messaging skill
+
+  **Room improvements:**
+
+  - Room-messaging skill is now injected into room agent sandboxes (was missing)
+  - Fix regex lastIndex bug in message parser that caused agents to miss @room messages
+  - Initial prompts sent only to the target agent (no longer broadcast to all)
+  - Rooms no longer auto-close on DONE: or max rounds — only manual close via UI
+  - Agent join/leave events broadcast to other participants' session streams
+  - Participant avatars in room header (clickable, navigate to agent session)
+  - Agent names in room messages are clickable links to their sessions
+  - Room messages appear in agent session streams with sender label ([reviewer] instead of [you])
+  - Removed "Direct message to session" section (redundant with room prompt input)
+  - Session sidebar uses deterministic ordering (createdAt instead of lastActiveAt)
+  - Reviewer skill instructs posting PR summary comment when review is complete
+  - Room-messaging skill updated to encourage message acknowledgment
+  - Add existing running session to a room (new/existing toggle in Add Agent modal)
+
+- 29d02f3: Improve agent room UX: extract shared bridge base class, queue messages instead of interrupting busy agents, add working indicator to room conversation, unify avatar styles between sidebar and room header, sync running status to sidebar, skip Electric infra for freeform sessions, inject room-messaging skill reference into CLAUDE.md, and remove role/gated from existing session flow.
+
+### Patch Changes
+
+- f14b9ff: Align guardrails with TanStack playbooks and restore skill discovery.
+
+  - Adopt TanStack's `z.union([z.string(), z.date()]).transform().default()` timestamp
+    pattern (from tanstack-db/collections/SKILL.md) — strictly better than our old
+    `z.union([z.date(), z.string()]).default()` because it converts strings to Dates
+  - Remove stale `z.coerce.date()` ban — works correctly with zod >=3.25
+  - Bump zod from `^3.24` to `^3.25` to satisfy drizzle-zod 0.8.x peer dep
+  - Add all TanStack DB sub-skills (collections, schemas, mutations, live-queries,
+    electric) to playbook listing with updated reading order
+  - Integrate `npx @tanstack/intent list` into create-app Phase 1 for dynamic
+    skill discovery
+  - Keep `zod/v4` import requirement (verified: drizzle-zod rejects v3 overrides)
+  - Revert fragile mv/cat/append CLAUDE.md merge back to simple overwrite
+
+- 41c4dc9: Rewrite project documentation from scratch. Add docs/ directory with detailed reference docs covering protocol & events, multi-agent rooms, sandboxes & bridges, security & authentication, architecture, and publishing. Rewrite README as a concise quick-start guide. Update CLAUDE.md with clear development instructions, pre-commit checklist, and changeset requirements.
+- Updated dependencies [41c4dc9]
+- Updated dependencies [41c4dc9]
+- Updated dependencies [5c53e82]
+  - @electric-agent/protocol@1.7.0
+
 ## 1.10.0
 
 ### Minor Changes
