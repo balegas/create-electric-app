@@ -52,7 +52,7 @@ export const entityName = pgTable("entity_name", {
 ## Implementation Tasks
 
 ### Phase 1: Data Model & Migrations
-- [ ] Read guardrails and relevant skills from CLAUDE.md skill mappings (electric integration, schemas)
+- [ ] Read guardrails and playbooks (electric-app-guardrails, electric-tanstack-integration, tanstack-db, schemas, collections, mutations, live-queries)
 - [ ] Define all Drizzle table schemas in src/db/schema.ts
 - [ ] Derive Zod schemas in src/db/zod-schemas.ts (drizzle-zod, z from "zod/v4", timestamp overrides)
 - [ ] Run drizzle-kit generate && drizzle-kit migrate

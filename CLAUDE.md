@@ -1,178 +1,191 @@
-# Electric Agent — Development Guide
+# create-electric-app
 
-## Project Overview
+## Project Context
+This is a reactive, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start.
 
-Electric Agent is a multi-agent platform that generates reactive Electric SQL + TanStack DB applications from natural language. It is a pnpm monorepo with three packages:
+## Sandbox Environment (IMPORTANT — READ FIRST)
+You are running inside a cloud micro-VM (Fly.io Sprite). This is NOT a local machine.
 
-| Package | Path | Description |
-|---|---|---|
-| `@electric-agent/protocol` | `packages/protocol/` | Shared event types (`EngineEvent`) — the contract between agent and studio |
-| `@electric-agent/studio` | `packages/studio/` | Hono server, React SPA, sandbox providers, session bridges, room messaging |
-| `@electric-agent/agent` | `packages/agent/` | CLI entry point, project scaffolding, playbooks, template assets |
+### Networking & Port Exposure
+- The Sprite HTTP proxy routes all external traffic to **port 8080** inside the VM
+- Your app MUST listen on port 8080 to be accessible via the preview URL — this is pre-configured via the `VITE_PORT` environment variable
+- The app MUST bind to `0.0.0.0` (not localhost) — pre-configured via `host: true` in vite.config.ts
+- The preview URL follows the pattern: `https://<sprite-name>.sprites.app`
+- There is NO way to expose other ports — only port 8080 is proxied
 
-## Reference Documentation
+### What's Available
+- Node.js (via nvm at `/.sprite/languages/node/nvm/`)
+- pnpm, git, gh CLI
+- Outbound internet access (npm install, API calls, etc.)
+- `DATABASE_URL` — remote Postgres (Neon), no local database
 
-Read the relevant docs **before** making changes to unfamiliar areas:
+### What's NOT Available
+- Docker, docker-compose, or any container runtime
+- Local Postgres or any local database
+- Ports other than 8080 for external HTTP access
 
-| Document | Path | When to read |
-|---|---|---|
-| [Protocol & Events](docs/protocol.md) | `docs/protocol.md` | Modifying event types, gate mechanics, streaming |
-| [Multi-Agent Rooms](docs/multi-agent.md) | `docs/multi-agent.md` | Working on room messaging, agent roles, or gating |
-| [Sandboxes & Bridges](docs/sandboxes-and-bridges.md) | `docs/sandboxes-and-bridges.md` | Changing sandbox providers or bridge implementations |
-| [Security](docs/security.md) | `docs/security.md` | Modifying authentication, tokens, or endpoint protection |
-| [Architecture](docs/architecture.md) | `docs/architecture.md` | Understanding system design, request lifecycle, data flow |
-| [Publishing](docs/publishing.md) | `docs/publishing.md` | Releasing to npm, changeset workflow |
+### PATH
+- npm global binaries are NOT in PATH by default
+- If you need a globally installed tool, source the profile first: `source /etc/profile.d/npm-global.sh`
 
-## Build & Lint Commands
+## Changesets (REQUIRED before every commit)
 
-```bash
-pnpm run build        # build all packages (protocol → studio → agent)
-pnpm run typecheck    # type-check all packages
-pnpm run check        # biome lint + format check (MUST pass before committing)
-pnpm run check:fix    # auto-fix biome lint/format issues
-pnpm run test         # run all tests
-```
+This is a pnpm monorepo with three packages: `@electric-agent/agent`, `@electric-agent/studio`, `@electric-agent/protocol`.
 
-### Per-Package
-
-```bash
-pnpm --filter @electric-agent/protocol run build
-pnpm --filter @electric-agent/studio run build
-pnpm --filter @electric-agent/studio run test
-pnpm --filter @electric-agent/agent run build
-pnpm --filter @electric-agent/agent run test
-```
-
-## Pre-Commit Checklist
-
-Before every commit, you MUST:
-
-1. **Run lint**: `pnpm run check` — fix any issues with `pnpm run check:fix`
-2. **Run tests**: `pnpm run test` — ensure nothing is broken
-3. **Create a changeset** (see below)
-4. **Update docs** if your change affects documented behavior (see below)
-
-Do NOT commit code that fails lint or tests.
-
-## Keeping Documentation Up to Date
-
-When you change code, you MUST update the corresponding reference docs in `docs/` if the change affects documented behavior. Use this mapping:
-
-| If you changed... | Update this doc |
-|---|---|
-| Event types in `packages/protocol/src/events.ts` | `docs/protocol.md` |
-| Room router, messaging, agent roles in `packages/studio/src/room-router.ts`, `room-registry.ts`, `bridge/role-skills.ts` | `docs/multi-agent.md` |
-| Sandbox providers in `packages/studio/src/sandbox/` | `docs/sandboxes-and-bridges.md` |
-| Bridge implementations in `packages/studio/src/bridge/` | `docs/sandboxes-and-bridges.md` |
-| Auth, tokens, or middleware in `packages/studio/src/session-auth.ts`, `server.ts` | `docs/security.md` |
-| Server routes, data flow, or system design | `docs/architecture.md` |
-| CLI commands, scaffolding, or serve entrypoint | `docs/architecture.md` and `README.md` |
-| Changeset or publishing workflow | `docs/publishing.md` |
-| Environment variables or setup steps | `README.md` |
-
-If you are unsure whether a doc needs updating, read the relevant doc and check.
-
-## Changesets (REQUIRED)
-
-Every commit that changes package code MUST include a changeset. This is how versions and changelogs are managed.
-
-### Creating a Changeset
-
-Create a markdown file in `.changeset/` with a short kebab-case name:
+Before committing any change, create a changeset for each affected package:
 
 ```bash
-# Example: .changeset/fix-session-token-validation.md
-```
-
-File format:
-
-```markdown
+# Create a new changeset file manually in .changeset/<short-description>.md
+# Format:
 ---
-"@electric-agent/studio": patch
+"@electric-agent/studio": patch   # or minor / major
 ---
 
-Fix session token validation for SSE reconnection.
+Short description of what changed and why.
 ```
 
-### Bump Types
+- Use `patch` for bug fixes, `minor` for new features, `major` for breaking changes.
+- Only list packages that were actually modified.
+- The file name should be a short kebab-case description of the change.
 
-| Type | When to use |
-|---|---|
-| `patch` | Bug fixes, small improvements |
-| `minor` | New features, non-breaking additions |
-| `major` | Breaking changes to public API or event types |
+## Current Task
+Resumed from https://github.com/balegas/create-electric-app
 
-### Rules
+## App Generation Pipeline (CRITICAL)
+When building a new app, you MUST use the /create-app skill. This skill is available at .claude/skills/create-app/SKILL.md and provides the structured phased pipeline for generating Electric SQL apps.
 
-- Only list packages that were **actually modified** in the changeset
-- One changeset per logical change (a PR may have multiple changesets)
-- Write a clear, concise description of **what changed and why**
-- If you modified files in multiple packages, list all affected packages in the same changeset
+Invoke it with: /create-app <description>
 
-### Example: Multi-Package Changeset
+The skill enforces the correct phase order:
+1. Clarification (if description is vague)
+2. Plan generation (PLAN.md with data model + tasks)
+3. Data model validation (schema + zod-schemas + tests — STOP if tests fail)
+4. Collections & API routes
+5. UI components
+6. Build & lint
+7. Final tests
+8. Architecture reference (ARCHITECTURE.md)
 
-```markdown
----
-"@electric-agent/protocol": minor
-"@electric-agent/studio": minor
----
+Do NOT skip phases or code ad-hoc. Always follow the skill's structured pipeline.
 
-Add agent_message event type for room messaging protocol.
-```
+## Scaffold Structure (DO NOT EXPLORE)
+The project is scaffolded from a known template. DO NOT read or explore scaffold files before coding. You already know the structure:
+- src/db/schema.ts — placeholder Drizzle schema (you will overwrite)
+- src/db/zod-schemas.ts — placeholder Zod derivation (you will overwrite)
+- src/db/index.ts — Drizzle client setup (do not modify)
+- src/db/utils.ts — parseDates + generateTxId helpers (do not modify)
+- src/lib/electric-proxy.ts — Electric shape proxy helper (do not modify)
+- src/components/ClientOnly.tsx — SSR wrapper (do not modify, just import when needed)
+- src/routes/__root.tsx — root layout with SSR (do not add ssr:false here)
+- tests/helpers/schema-test-utils.ts — generateValidRow/generateRowWithout (do not modify)
 
-## Code Style
+DO NOT use Bash/ls/find to explore the project. DO NOT read files you aren't about to modify. Start writing code.
 
-- **Formatter/Linter**: Biome (configured in `biome.json` — do NOT modify)
-- **Import style**: Named imports, no default exports unless required by framework
-- **TypeScript**: Strict mode, no `any` unless unavoidable
+## Drizzle Workflow (CRITICAL)
+Always follow this order:
+1. Edit src/db/schema.ts (Drizzle pgTable definitions)
+2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas — ALWAYS import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()]).default(() => new Date()) — the .default() is required so collection.insert() works without timestamps)
+3. Create collection files in src/db/collections/ (import from ../zod-schemas)
+4. Create API routes (proxy + mutation)
+5. Create UI components
 
-## Key Directories
+## Guardrails (MUST FOLLOW)
 
-```
-packages/
-├── protocol/src/          # Event type definitions (events.ts)
-├── studio/
-│   ├── src/               # Hono server, bridges, sandbox providers, room router
-│   ├── client/src/        # React SPA (pages, components, hooks)
-│   └── tests/             # Server-side tests
-└── agent/
-    ├── src/               # CLI, scaffolding, serve command
-    ├── playbooks/         # Runtime playbook assets
-    ├── template/          # Project template files (overlaid on scaffolded apps)
-    └── tests/             # Agent tests
-```
+### Protected Files — DO NOT MODIFY
+- docker-compose.yml
+- vite.config.ts (pre-configured with port, host, allowedHosts, and proxy — modifying it WILL break the preview)
+- tsconfig.json
+- biome.json
+- pnpm-lock.yaml
+- postgres.conf
+- vitest.config.ts
+- Caddyfile
 
-## Running the Server Locally
+### Import Rules
+- Use "zod/v4" (NOT "zod") for all Zod imports
+- Use "lucide-react" for icons (NOT @radix-ui/react-icons)
+- Use "@radix-ui/themes" for Radix components (NOT @radix-ui/react-*)
+- Use "react-router" for routing (NOT react-router-dom)
 
+### Dependency Rules
+- NEVER remove existing dependencies from package.json
+- Only add new dependencies
+
+### Schema Rules
+- ALL timestamp columns MUST use: z.union([z.date(), z.string()]).default(() => new Date())
+- NEVER use z.coerce.date() — it breaks TanStack DB
+- ALL tables MUST have REPLICA IDENTITY FULL (auto-applied by migration hook)
+- UUID primary keys with defaultRandom()
+- timestamp({ withTimezone: true }) for all dates
+- snake_case for SQL table/column names
+- Foreign keys with onDelete: "cascade" where appropriate
+
+## Playbooks (Domain Knowledge — MUST READ)
+Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.
+
+### Available Skills
+Read with the Read tool at these exact paths:
+
+**Electric SQL** (`node_modules/@electric-sql/playbook/skills/`):
+- `electric/SKILL.md` — core Electric concepts and shape API
+- `electric-tanstack-integration/SKILL.md` — how Electric + TanStack DB work together (READ FIRST)
+- `electric-quickstart/SKILL.md` — quickstart patterns
+- `electric-security-check/SKILL.md` — security best practices
+- `tanstack-start-quickstart/SKILL.md` — TanStack Start framework patterns
+- `deploying-electric/SKILL.md` — deployment configuration
+- `electric-go-live/SKILL.md` — production checklist
+
+**TanStack DB** (`node_modules/@tanstack/db-playbook/skills/`):
+- `tanstack-db/SKILL.md` — collections, useLiveQuery, mutations (CRITICAL — read before writing any UI)
+- `tanstack-db/schemas/SKILL.md` — schema validation patterns (BUT see guardrails below for overrides)
+
+### Reading Order
+1. `electric-tanstack-integration/SKILL.md` — integration rules and guardrails
+2. `tanstack-db/SKILL.md` — collections, queries, mutations API
+3. `electric/SKILL.md` — shape API for proxy routes
+4. Other skills as needed for your current phase
+
+### Important
+- ONLY read playbooks relevant to your current phase
+- Do NOT use include_references — the SKILL.md content is sufficient
+- Our project guardrails (above) OVERRIDE playbook patterns — e.g. always use `zod/v4` and `z.union([z.date(), z.string()]).default()` for timestamps, even if playbooks show different patterns
+
+## Infrastructure (Pre-configured — DO NOT MODIFY)
+The database (Postgres) and Electric sync service are already provisioned and configured via environment variables:
+- `DATABASE_URL` — Postgres connection string
+- `ELECTRIC_URL` — Electric sync service URL
+- `ELECTRIC_SOURCE_ID` / `ELECTRIC_SECRET` — Electric Cloud auth (if using cloud mode)
+
+These are read by:
+- `src/db/index.ts` — Drizzle client (DO NOT MODIFY)
+- `drizzle.config.ts` — Drizzle Kit migrations (DO NOT MODIFY)
+- `src/lib/electric-proxy.ts` — Electric shape proxy for API routes (DO NOT MODIFY)
+
+You do NOT need to set up database connections or configure Electric. Just define your schema, run migrations, and write your app.
+
+## Dev Server & Migrations
+### Dev Server (CRITICAL — use pnpm scripts ONLY)
+- `pnpm dev:start` — start the Vite dev server in the background
+- `pnpm dev:stop` — stop the dev server
+- `pnpm dev:restart` — stop then start
+
+**IMPORTANT**: Always use `pnpm dev:start` from the project directory. Do NOT use `sprite-env services create` or launch Vite manually — the project's vite.config.ts contains required settings (allowedHosts, port, proxy) that will not be applied if Vite is started from a different directory or with different arguments.
+
+The app listens on port 8080 (set via VITE_PORT) — this is the only port the Sprite proxy exposes.
+The database and Electric sync service are remote (cloud-hosted) — there is no local Postgres or Docker.
+
+### Migrations (CRITICAL)
+After modifying src/db/schema.ts, ALWAYS run migrations:
 ```bash
-cp .env.example .env       # fill in DS_URL, DS_SERVICE_ID, DS_SECRET
-pnpm run build
-pnpm run serve             # http://127.0.0.1:4400
+pnpm drizzle-kit generate   # generate SQL from schema changes
+pnpm drizzle-kit migrate    # apply migration to the database
 ```
 
-For development with hot reload, run in separate terminals:
+### Workflow
+After finishing ALL code generation: run migrations, then `pnpm dev:start` so the user can preview the app.
 
-```bash
-pnpm --filter @electric-agent/agent run dev     # tsc --watch
-pnpm run serve                                  # backend (port 4400)
-pnpm --filter @electric-agent/studio run dev:web # vite HMR (port 4401)
-```
+## SSR Configuration (CRITICAL)
+NEVER add ssr: false to __root.tsx — it renders the HTML shell and must always SSR.
+Instead, add ssr: false to each LEAF route that uses useLiveQuery or collections.
+This is needed because useLiveQuery uses useSyncExternalStore without getServerSnapshot.
 
-## Environment Variables
-
-See `.env.example` for all available variables. The required ones are:
-
-| Variable | Purpose |
-|----------|---------|
-| `DS_URL` | Durable Streams API URL |
-| `DS_SERVICE_ID` | Durable Streams service ID |
-| `DS_SECRET` | JWT secret (also used for HMAC token derivation) |
-
-## Sandbox Environment Notes
-
-When running inside a cloud sandbox (Fly.io Sprite), these constraints apply:
-
-- Only **port 8080** is externally accessible
-- No Docker or local database available
-- `DATABASE_URL` points to a remote Postgres (Neon)
-- npm global binaries require: `source /etc/profile.d/npm-global.sh`

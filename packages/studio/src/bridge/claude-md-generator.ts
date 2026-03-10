@@ -59,6 +59,8 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 	sections.push("")
 	sections.push(GUARDRAILS)
 	sections.push("")
+	sections.push(PLAYBOOK_INSTRUCTIONS)
+	sections.push("")
 	sections.push(INFRASTRUCTURE)
 	sections.push("")
 	sections.push(devServerInstructions(opts.runtime))
@@ -133,6 +135,36 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - timestamp({ withTimezone: true }) for all dates
 - snake_case for SQL table/column names
 - Foreign keys with onDelete: "cascade" where appropriate`
+
+const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
+Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.
+
+### Available Skills
+Read with the Read tool at these exact paths:
+
+**Electric SQL** (\`node_modules/@electric-sql/playbook/skills/\`):
+- \`electric/SKILL.md\` — core Electric concepts and shape API
+- \`electric-tanstack-integration/SKILL.md\` — how Electric + TanStack DB work together (READ FIRST)
+- \`electric-quickstart/SKILL.md\` — quickstart patterns
+- \`electric-security-check/SKILL.md\` — security best practices
+- \`tanstack-start-quickstart/SKILL.md\` — TanStack Start framework patterns
+- \`deploying-electric/SKILL.md\` — deployment configuration
+- \`electric-go-live/SKILL.md\` — production checklist
+
+**TanStack DB** (\`node_modules/@tanstack/db-playbook/skills/\`):
+- \`tanstack-db/SKILL.md\` — collections, useLiveQuery, mutations (CRITICAL — read before writing any UI)
+- \`tanstack-db/schemas/SKILL.md\` — schema validation patterns (BUT see guardrails below for overrides)
+
+### Reading Order
+1. \`electric-tanstack-integration/SKILL.md\` — integration rules and guardrails
+2. \`tanstack-db/SKILL.md\` — collections, queries, mutations API
+3. \`electric/SKILL.md\` — shape API for proxy routes
+4. Other skills as needed for your current phase
+
+### Important
+- ONLY read playbooks relevant to your current phase
+- Do NOT use include_references — the SKILL.md content is sufficient
+- Our project guardrails (above) OVERRIDE playbook patterns — e.g. always use \`zod/v4\` and \`z.union([z.date(), z.string()]).default()\` for timestamps, even if playbooks show different patterns`
 
 function sandboxEnvironment(runtime?: string): string {
 	if (runtime === "sprites") {

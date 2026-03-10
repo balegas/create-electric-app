@@ -1133,8 +1133,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					})
 				}
 
-				// Prepend our Electric-specific CLAUDE.md on top of the KPB scaffold's
-				// CLAUDE.md (which includes @tanstack/intent skill mappings).
+				// Write CLAUDE.md to the sandbox workspace.
+				// Our generator includes hardcoded playbook paths and reading order
+				// so we don't depend on @tanstack/intent generating a skill block.
 				const claudeMd = generateClaudeMd({
 					description: body.description,
 					projectName,
@@ -1153,7 +1154,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				try {
 					await config.sandbox.exec(
 						handle,
-						`mv '${handle.projectDir}/CLAUDE.md' '${handle.projectDir}/CLAUDE.md.kpb' 2>/dev/null || true && cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF\ncat '${handle.projectDir}/CLAUDE.md.kpb' >> '${handle.projectDir}/CLAUDE.md' 2>/dev/null || true && rm -f '${handle.projectDir}/CLAUDE.md.kpb'`,
+						`cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF`,
 					)
 				} catch (err) {
 					console.error(`[session:${sessionId}] Failed to write CLAUDE.md:`, err)
@@ -2782,7 +2783,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				ts: ts(),
 			})
 
-			// 2. Prepend our Electric-specific CLAUDE.md on top of the existing one
+			// 2. Write CLAUDE.md to the sandbox workspace
 			const claudeMd = generateClaudeMd({
 				description: `Resumed from ${body.repoUrl}`,
 				projectName: repoName,
@@ -2797,7 +2798,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			try {
 				await config.sandbox.exec(
 					handle,
-					`mv '${handle.projectDir}/CLAUDE.md' '${handle.projectDir}/CLAUDE.md.kpb' 2>/dev/null || true && cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF\ncat '${handle.projectDir}/CLAUDE.md.kpb' >> '${handle.projectDir}/CLAUDE.md' 2>/dev/null || true && rm -f '${handle.projectDir}/CLAUDE.md.kpb'`,
+					`cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF`,
 				)
 			} catch (err) {
 				console.error(`[session:${sessionId}] Failed to write CLAUDE.md:`, err)
