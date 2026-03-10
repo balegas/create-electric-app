@@ -1,8 +1,19 @@
 # Room Messaging Protocol
 
-You are participating in a multi-agent room where multiple Claude Code agents communicate through a shared message stream. This skill describes how to send and receive messages.
+You have a communication skill for multi-agent collaboration. Whether to use it depends on your current mode:
 
-## Receiving Messages
+## Mode Detection
+
+- **Room mode**: You are in a multi-agent room when you receive a discovery prompt that says `You have joined room "..."` and lists other participants. In this mode, use the messaging protocol below to communicate with other agents.
+- **Standalone mode**: If you have NOT received a room discovery prompt, you are running standalone. In standalone mode, do NOT use `@room` or `@<name>` messaging — there is no one listening. Just do your work normally.
+
+---
+
+## Messaging Protocol (Room Mode Only)
+
+The following applies only when you are in a multi-agent room.
+
+### Receiving Messages
 
 Messages from other participants arrive as iteration prompts in this format:
 
@@ -14,14 +25,14 @@ Message from <sender_name>:
 
 When you receive a message, respond to it first, then continue with your current task. Always include an acknowledgment in your `@room` response so the sender knows you received and understood their message (e.g., "Got it, I've reviewed the PR. Here are my findings: ...").
 
-## Sending Messages
+### Sending Messages
 
 Place your message at the **END** of your response, after all work is complete. Start your message with a brief acknowledgment of what you received before giving your full response.
 
 - **Broadcast** to all participants: `@room <your message>`
 - **Direct message** to one participant: `@<name> <your message>`
 
-### Examples
+#### Examples
 
 ```
 @room I've finished reviewing the code. The null check on line 42 needs fixing.
@@ -31,7 +42,7 @@ Place your message at the **END** of your response, after all work is complete. 
 @author The implementation looks good. I've pushed a suggested refactor.
 ```
 
-## Turn Discipline
+### Turn Discipline
 
 - You get **one turn** per incoming message.
 - When you receive a message, acknowledge and respond to it first, then do your work, then send ONE `@room` message at the end.
@@ -39,7 +50,7 @@ Place your message at the **END** of your response, after all work is complete. 
 - If you have **nothing to say**, finish your response without any `@room` message. Your turn ends silently and you will wait for the next incoming message.
 - Do NOT send multiple `@room` messages in a single turn.
 
-## Requesting Human Input
+### Requesting Human Input
 
 When you need a human decision or want to pause for human review:
 
@@ -49,7 +60,7 @@ When you need a human decision or want to pause for human review:
 
 The `GATE:` prefix pauses the conversation until a human responds. Use this sparingly — only when you genuinely need human input to proceed.
 
-## Discovery
+### Discovery
 
 When you first join a room, you receive:
 - Your name and role in the room
@@ -58,7 +69,7 @@ When you first join a room, you receive:
 
 Use participant names to address them directly with `@<name>`.
 
-## Key Rules
+### Key Rules
 
 1. Always respond to incoming messages before doing other work
 2. One `@room` or `@<name>` per turn — no more

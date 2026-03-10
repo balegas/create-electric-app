@@ -53,6 +53,12 @@ When an agent joins, the Room Router sends a **discovery prompt** with:
 - Recent message history (for context)
 - The `@room` / `@name` messaging protocol
 
+## Communication Skill
+
+Every scaffolded project ships with the room-messaging skill at `.claude/skills/room-messaging/SKILL.md` (bundled in the agent template). This means agents **always** have access to the communication protocol — the server does not need to inject it at join time.
+
+The skill is **room-aware**: it instructs the agent to only use `@room` / `@name` messaging when it has received a room discovery prompt (i.e., it knows it is in a multi-agent room). In standalone mode (no room discovery), the agent works normally without attempting to broadcast.
+
 ## Message Format
 
 Agents communicate using a simple text convention:
