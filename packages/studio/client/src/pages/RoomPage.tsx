@@ -12,7 +12,7 @@ import {
 	sendRoomMessage,
 } from "../lib/api"
 import { getOrCreateParticipant } from "../lib/participant"
-import { addSession, setSessionToken } from "../lib/session-store"
+import { addSession, setSessionToken, updateSession } from "../lib/session-store"
 
 interface OutletCtx {
 	openMobileDrawer: () => void
@@ -43,6 +43,13 @@ export function RoomPage() {
 						loadedRef.current = true
 						setRoomState(state)
 						setError(null)
+						// Sync participant running status to localStorage so sidebar reflects it
+						for (const p of state.participants) {
+							updateSession(p.sessionId, {
+								status: p.running ? "running" : "complete",
+							})
+						}
+						refreshSessions()
 					}
 				})
 				.catch((err) => {
@@ -56,7 +63,7 @@ export function RoomPage() {
 			cancelled = true
 			clearInterval(interval)
 		}
-	}, [roomId])
+	}, [roomId, refreshSessions])
 
 	const handleClose = useCallback(async () => {
 		if (!roomId) return
@@ -136,7 +143,7 @@ function RoomHeader({
 }: {
 	roomId?: string
 	state?: string
-	participants: Array<{ sessionId: string; name: string; role?: string }>
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 	onClose: () => void
 	onAddAgent: () => void
 	openMobileDrawer: () => void
@@ -182,17 +189,21 @@ function RoomHeader({
 			<span className="room-header-participants">
 				{participants.map((p) => {
 					const color = getAvatarColor(p.sessionId)
-					const initial = p.name.charAt(0).toUpperCase()
+					const initials = p.name
+						.split(/[-_ ]+/)
+						.slice(0, 2)
+						.map((w) => w.charAt(0).toUpperCase())
+						.join("")
 					return (
 						<button
 							key={p.sessionId}
 							type="button"
-							className="room-header-avatar"
+							className={`room-header-avatar${p.running ? " room-header-avatar--running" : ""}`}
 							style={{ background: color.bg, color: color.fg }}
-							title={`${p.name}${p.role ? ` (${p.role})` : ""} — click to open session`}
+							title={`${p.name}${p.role ? ` (${p.role})` : ""} — ${p.running ? "working" : "idle"}`}
 							onClick={() => navigate(`/session/${p.sessionId}`)}
 						>
-							{initial}
+							{initials}
 						</button>
 					)
 				})}
@@ -222,7 +233,7 @@ function ParticipantLink({
 	participants,
 }: {
 	name: string
-	participants: Array<{ sessionId: string; name: string; role?: string }>
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 }) {
 	const navigate = useNavigate()
 	const participant = participants.find((p) => p.name === name)
@@ -244,13 +255,14 @@ function RoomEventList({
 	participants,
 }: {
 	events: RoomEvent[]
-	participants: Array<{ sessionId: string; name: string; role?: string }>
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
+	const workingAgents = participants.filter((p) => p.running)
 
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-	}, [events.length])
+	}, [events.length, workingAgents.length])
 
 	if (events.length === 0) {
 		return (
@@ -302,6 +314,19 @@ function RoomEventList({
 						return null
 				}
 			})}
+			{workingAgents.length > 0 && (
+				<div className="room-working-indicator">
+					<span className="room-working-dots">
+						<span />
+						<span />
+						<span />
+					</span>
+					<span className="room-working-text">
+						{workingAgents.map((a) => a.name).join(", ")}{" "}
+						{workingAgents.length === 1 ? "is" : "are"} working
+					</span>
+				</div>
+			)}
 			<div ref={bottomRef} />
 		</div>
 	)
@@ -420,8 +445,10 @@ function AddAgentModal({
 	const [adding, setAdding] = useState(false)
 	const [addError, setAddError] = useState<string | null>(null)
 
-	// Filter to running sessions only
-	const runningSessions = sessions.filter((s) => s.status === "running")
+	// Show sessions that are still usable (running or complete — sandbox is still alive)
+	const availableSessions = sessions.filter(
+		(s) => s.status === "running" || s.status === "complete",
+	)
 
 	const handleAdd = useCallback(async () => {
 		setAdding(true)
@@ -432,8 +459,6 @@ function AddAgentModal({
 				await addSessionToRoom(roomId, {
 					sessionId: selectedSessionId,
 					name: name.trim(),
-					role: role.trim() || undefined,
-					gated,
 					initialPrompt: initialPrompt.trim() || undefined,
 				})
 				// Session token already in localStorage — no need to re-store
@@ -498,13 +523,13 @@ function AddAgentModal({
 									setSelectedSessionId(e.target.value)
 									// Auto-fill name from session project name if empty
 									if (!name.trim()) {
-										const session = runningSessions.find((s) => s.id === e.target.value)
+										const session = availableSessions.find((s) => s.id === e.target.value)
 										if (session) setName(session.projectName)
 									}
 								}}
 							>
-								<option value="">Select a running session...</option>
-								{runningSessions.map((s) => (
+								<option value="">Select a session...</option>
+								{availableSessions.map((s) => (
 									<option key={s.id} value={s.id}>
 										{s.projectName} ({s.id.slice(0, 8)})
 									</option>
@@ -521,17 +546,19 @@ function AddAgentModal({
 							placeholder="e.g. reviewer, coder, architect"
 						/>
 					</label>
-					<label className="room-form-label">
-						Role
-						<select value={role} onChange={(e) => setRole(e.target.value)}>
-							<option value="">No role (generic participant)</option>
-							{BUILT_IN_ROLES.map((r) => (
-								<option key={r.value} value={r.value}>
-									{r.label} — {r.description}
-								</option>
-							))}
-						</select>
-					</label>
+					{mode === "new" && (
+						<label className="room-form-label">
+							Role
+							<select value={role} onChange={(e) => setRole(e.target.value)}>
+								<option value="">No role (generic participant)</option>
+								{BUILT_IN_ROLES.map((r) => (
+									<option key={r.value} value={r.value}>
+										{r.label} — {r.description}
+									</option>
+								))}
+							</select>
+						</label>
+					)}
 					<label className="room-form-label">
 						Initial Prompt
 						<textarea

@@ -955,29 +955,32 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Write user prompt to the stream so it shows in the UI
 		await bridge.emit({ type: "user_prompt", message: body.description, ts: ts() })
 
-		// Gather GitHub accounts for the merged setup gate
-		// Only check if the client provided a token — never fall back to server-side GH_TOKEN
+		// Freeform sessions skip the infra config gate — no Electric/DB setup needed
 		let ghAccounts: { login: string; type: "user" | "org" }[] = []
-		if (body.ghToken && isGhAuthenticated(body.ghToken)) {
-			try {
-				ghAccounts = ghListAccounts(body.ghToken)
-			} catch {
-				// gh not available — no repo setup
+		if (!body.freeform) {
+			// Gather GitHub accounts for the merged setup gate
+			// Only check if the client provided a token — never fall back to server-side GH_TOKEN
+			if (body.ghToken && isGhAuthenticated(body.ghToken)) {
+				try {
+					ghAccounts = ghListAccounts(body.ghToken)
+				} catch {
+					// gh not available — no repo setup
+				}
 			}
-		}
 
-		// Emit combined infra + repo setup gate
-		await bridge.emit({
-			type: "infra_config_prompt",
-			projectName,
-			ghAccounts,
-			runtime: config.sandbox.runtime,
-			ts: ts(),
-		})
+			// Emit combined infra + repo setup gate
+			await bridge.emit({
+				type: "infra_config_prompt",
+				projectName,
+				ghAccounts,
+				runtime: config.sandbox.runtime,
+				ts: ts(),
+			})
+		}
 
 		// Launch async flow: wait for setup gate → create sandbox → start agent
 		const asyncFlow = async () => {
-			// 1. Wait for combined infra + repo config
+			// 1. Wait for combined infra + repo config (skip for freeform)
 			let infra: InfraConfig
 			let repoConfig: {
 				account: string
@@ -985,58 +988,64 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				visibility: "public" | "private"
 			} | null = null
 
-			console.log(`[session:${sessionId}] Waiting for infra_config gate...`)
 			let claimId: string | undefined
-			try {
-				const gateValue = await createGate<
-					InfraConfig & {
-						repoAccount?: string
-						repoName?: string
-						repoVisibility?: "public" | "private"
-						claimId?: string
-					}
-				>(sessionId, "infra_config")
+			if (body.freeform) {
+				// Freeform sessions don't need Electric infrastructure
+				infra = { mode: "none" }
+				console.log(`[session:${sessionId}] Freeform session — skipping infra gate`)
+			} else {
+				console.log(`[session:${sessionId}] Waiting for infra_config gate...`)
+				try {
+					const gateValue = await createGate<
+						InfraConfig & {
+							repoAccount?: string
+							repoName?: string
+							repoVisibility?: "public" | "private"
+							claimId?: string
+						}
+					>(sessionId, "infra_config")
 
-				console.log(`[session:${sessionId}] Infra gate resolved: mode=${gateValue.mode}`)
+					console.log(`[session:${sessionId}] Infra gate resolved: mode=${gateValue.mode}`)
 
-				if (gateValue.mode === "cloud" || gateValue.mode === "claim") {
-					// Normalize claim → cloud for the sandbox layer (same env vars)
-					infra = {
-						mode: "cloud",
-						databaseUrl: gateValue.databaseUrl,
-						electricUrl: gateValue.electricUrl,
-						sourceId: gateValue.sourceId,
-						secret: gateValue.secret,
+					if (gateValue.mode === "cloud" || gateValue.mode === "claim") {
+						// Normalize claim → cloud for the sandbox layer (same env vars)
+						infra = {
+							mode: "cloud",
+							databaseUrl: gateValue.databaseUrl,
+							electricUrl: gateValue.electricUrl,
+							sourceId: gateValue.sourceId,
+							secret: gateValue.secret,
+						}
+						if (gateValue.mode === "claim") {
+							claimId = gateValue.claimId
+						}
+					} else {
+						infra = { mode: "local" }
 					}
-					if (gateValue.mode === "claim") {
-						claimId = gateValue.claimId
+
+					// Extract repo config if provided
+					if (gateValue.repoAccount && gateValue.repoName?.trim()) {
+						repoConfig = {
+							account: gateValue.repoAccount,
+							repoName: gateValue.repoName,
+							visibility: gateValue.repoVisibility ?? "private",
+						}
+						config.sessions.update(sessionId, {
+							git: {
+								branch: "main",
+								remoteUrl: null,
+								repoName: `${repoConfig.account}/${repoConfig.repoName}`,
+								repoVisibility: repoConfig.visibility,
+								lastCommitHash: null,
+								lastCommitMessage: null,
+								lastCheckpointAt: null,
+							},
+						})
 					}
-				} else {
+				} catch (err) {
+					console.log(`[session:${sessionId}] Infra gate error (defaulting to local):`, err)
 					infra = { mode: "local" }
 				}
-
-				// Extract repo config if provided
-				if (gateValue.repoAccount && gateValue.repoName?.trim()) {
-					repoConfig = {
-						account: gateValue.repoAccount,
-						repoName: gateValue.repoName,
-						visibility: gateValue.repoVisibility ?? "private",
-					}
-					config.sessions.update(sessionId, {
-						git: {
-							branch: "main",
-							remoteUrl: null,
-							repoName: `${repoConfig.account}/${repoConfig.repoName}`,
-							repoVisibility: repoConfig.visibility,
-							lastCommitHash: null,
-							lastCommitMessage: null,
-							lastCheckpointAt: null,
-						},
-					})
-				}
-			} catch (err) {
-				console.log(`[session:${sessionId}] Infra gate error (defaulting to local):`, err)
-				infra = { mode: "local" }
 			}
 
 			// 2. Create sandbox — emit progress events so the UI shows feedback
@@ -1079,100 +1088,102 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			{
 				console.log(`[session:${sessionId}] Setting up Claude Code bridge...`)
 
-				// Copy pre-scaffolded project from the image and customize per-session
-				await bridge.emit({
-					type: "log",
-					level: "build",
-					message: "Setting up project...",
-					ts: ts(),
-				})
-				try {
-					if (config.sandbox.runtime === "docker") {
-						// Docker: copy the pre-built scaffold base (baked into the image)
-						await config.sandbox.exec(handle, `cp -r /opt/scaffold-base '${handle.projectDir}'`)
-						await config.sandbox.exec(
-							handle,
-							`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`,
-						)
-					} else {
-						// Sprites: run scaffold from globally installed electric-agent
-						await config.sandbox.exec(
-							handle,
-							`source /etc/profile.d/npm-global.sh 2>/dev/null; electric-agent scaffold '${handle.projectDir}' --name '${projectName}' --skip-git`,
-						)
-					}
-					console.log(`[session:${sessionId}] Project setup complete`)
+				if (!body.freeform) {
+					// Copy pre-scaffolded project from the image and customize per-session
 					await bridge.emit({
 						type: "log",
-						level: "done",
-						message: "Project ready",
+						level: "build",
+						message: "Setting up project...",
 						ts: ts(),
 					})
-
-					// Log the agent package version installed in the sandbox
 					try {
-						const agentVersion = (
-							await config.sandbox.exec(handle, "electric-agent --version 2>/dev/null | tail -1")
-						).trim()
+						if (config.sandbox.runtime === "docker") {
+							// Docker: copy the pre-built scaffold base (baked into the image)
+							await config.sandbox.exec(handle, `cp -r /opt/scaffold-base '${handle.projectDir}'`)
+							await config.sandbox.exec(
+								handle,
+								`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`,
+							)
+						} else {
+							// Sprites: run scaffold from globally installed electric-agent
+							await config.sandbox.exec(
+								handle,
+								`source /etc/profile.d/npm-global.sh 2>/dev/null; electric-agent scaffold '${handle.projectDir}' --name '${projectName}' --skip-git`,
+							)
+						}
+						console.log(`[session:${sessionId}] Project setup complete`)
 						await bridge.emit({
 							type: "log",
-							level: "verbose",
-							message: `electric-agent@${agentVersion}`,
+							level: "done",
+							message: "Project ready",
 							ts: ts(),
 						})
-					} catch {
-						// Non-critical — don't block session creation
+
+						// Log the agent package version installed in the sandbox
+						try {
+							const agentVersion = (
+								await config.sandbox.exec(handle, "electric-agent --version 2>/dev/null | tail -1")
+							).trim()
+							await bridge.emit({
+								type: "log",
+								level: "verbose",
+								message: `electric-agent@${agentVersion}`,
+								ts: ts(),
+							})
+						} catch {
+							// Non-critical — don't block session creation
+						}
+					} catch (err) {
+						console.error(`[session:${sessionId}] Project setup failed:`, err)
+						await bridge.emit({
+							type: "log",
+							level: "error",
+							message: `Project setup failed: ${err instanceof Error ? err.message : "unknown"}`,
+							ts: ts(),
+						})
 					}
-				} catch (err) {
-					console.error(`[session:${sessionId}] Project setup failed:`, err)
-					await bridge.emit({
-						type: "log",
-						level: "error",
-						message: `Project setup failed: ${err instanceof Error ? err.message : "unknown"}`,
-						ts: ts(),
+
+					// Write CLAUDE.md to the sandbox workspace.
+					// Our generator includes hardcoded playbook paths and reading order
+					// so we don't depend on @tanstack/intent generating a skill block.
+					const claudeMd = generateClaudeMd({
+						description: body.description,
+						projectName,
+						projectDir: handle.projectDir,
+						runtime: config.sandbox.runtime,
+						...(repoConfig
+							? {
+									git: {
+										mode: "create" as const,
+										repoName: `${repoConfig.account}/${repoConfig.repoName}`,
+										visibility: repoConfig.visibility,
+									},
+								}
+							: {}),
 					})
-				}
-
-				// Write CLAUDE.md to the sandbox workspace.
-				// Our generator includes hardcoded playbook paths and reading order
-				// so we don't depend on @tanstack/intent generating a skill block.
-				const claudeMd = generateClaudeMd({
-					description: body.description,
-					projectName,
-					projectDir: handle.projectDir,
-					runtime: config.sandbox.runtime,
-					...(repoConfig
-						? {
-								git: {
-									mode: "create" as const,
-									repoName: `${repoConfig.account}/${repoConfig.repoName}`,
-									visibility: repoConfig.visibility,
-								},
-							}
-						: {}),
-				})
-				try {
-					await config.sandbox.exec(
-						handle,
-						`cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF`,
-					)
-				} catch (err) {
-					console.error(`[session:${sessionId}] Failed to write CLAUDE.md:`, err)
-				}
-
-				// Ensure the create-app skill is present in the project.
-				// The npm-installed electric-agent may be an older version that
-				// doesn't include .claude/skills/ in its template directory.
-				if (createAppSkillContent) {
 					try {
-						const skillDir = `${handle.projectDir}/.claude/skills/create-app`
-						const skillB64 = Buffer.from(createAppSkillContent).toString("base64")
 						await config.sandbox.exec(
 							handle,
-							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+							`cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF`,
 						)
 					} catch (err) {
-						console.error(`[session:${sessionId}] Failed to write create-app skill:`, err)
+						console.error(`[session:${sessionId}] Failed to write CLAUDE.md:`, err)
+					}
+
+					// Ensure the create-app skill is present in the project.
+					// The npm-installed electric-agent may be an older version that
+					// doesn't include .claude/skills/ in its template directory.
+					if (createAppSkillContent) {
+						try {
+							const skillDir = `${handle.projectDir}/.claude/skills/create-app`
+							const skillB64 = Buffer.from(createAppSkillContent).toString("base64")
+							await config.sandbox.exec(
+								handle,
+								`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+							)
+						} catch (err) {
+							console.error(`[session:${sessionId}] Failed to write create-app skill:`, err)
+						}
 					}
 				}
 
@@ -2169,6 +2180,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				sessionId: p.sessionId,
 				name: p.name,
 				role: p.role,
+				running: p.bridge.isRunning(),
 			})),
 		})
 	})
@@ -2226,139 +2238,152 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 		config.sessions.add(session)
 
-		// Create sandbox
-		await bridge.emit({
-			type: "log",
-			level: "build",
-			message: `Creating sandbox for room agent "${body.name}"...`,
-			ts: ts(),
-		})
+		// Return early so the client can store the session token and show the
+		// session in the sidebar immediately. The sandbox setup continues in
+		// the background — events stream to the session's durable stream so
+		// the UI stays up to date.
+		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
 
-		try {
-			const handle = await config.sandbox.create(sessionId, {
-				projectName,
-				infra: { mode: "local" },
-				apiKey: body.apiKey,
-				oauthToken: body.oauthToken,
-				ghToken: body.ghToken,
-			})
-
-			config.sessions.update(sessionId, {
-				appPort: handle.port,
-				sandboxProjectDir: handle.projectDir,
-				previewUrl: handle.previewUrl,
-			})
-
-			// Inject room-messaging skill so agents know the @room protocol
-			if (roomMessagingSkillContent) {
-				try {
-					const skillDir = `${handle.projectDir}/.claude/skills/room-messaging`
-					const skillB64 = Buffer.from(roomMessagingSkillContent).toString("base64")
-					await config.sandbox.exec(
-						handle,
-						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
-					)
-				} catch (err) {
-					console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
-				}
-			}
-
-			// Resolve role skill (behavioral guidelines + tool permissions)
-			const roleSkill = resolveRoleSkill(body.role)
-
-			// Inject role skill file into sandbox
-			if (roleSkill) {
-				try {
-					const skillDir = `${handle.projectDir}/.claude/skills/role`
-					const skillB64 = Buffer.from(roleSkill.skillContent).toString("base64")
-					await config.sandbox.exec(
-						handle,
-						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
-					)
-				} catch (err) {
-					console.error(`[session:${sessionId}] Failed to write role skill:`, err)
-				}
-			}
-
-			// Build prompt — reference the role skill if available
-			const rolePromptSuffix = roleSkill
-				? `\nRead .claude/skills/role/SKILL.md for your role guidelines before proceeding.`
-				: ""
-			const agentPrompt = `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.${rolePromptSuffix}`
-
-			// Create Claude Code bridge (with role-specific tool permissions)
-			const agentHookToken = deriveHookToken(config.streamConfig.secret, sessionId)
-			const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
-				config.sandbox.runtime === "sprites"
-					? {
-							prompt: agentPrompt,
-							cwd: handle.projectDir,
-							studioUrl: resolveStudioUrl(config.port),
-							hookToken: agentHookToken,
-							agentName: body.name,
-							...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
-						}
-					: {
-							prompt: agentPrompt,
-							cwd: handle.projectDir,
-							studioPort: config.port,
-							hookToken: agentHookToken,
-							agentName: body.name,
-							...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
-						}
-			const ccBridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
-
-			// Track Claude Code session ID and cost
-			ccBridge.onAgentEvent((event) => {
-				if (event.type === "session_start") {
-					const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
-					if (ccSessionId) {
-						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
-					}
-				}
-				if (event.type === "session_end") {
-					accumulateSessionCost(config, sessionId, event)
-				}
-				// Route assistant_message output to the room router
-				if (event.type === "assistant_message" && "text" in event) {
-					router
-						.handleAgentOutput(sessionId, (event as EngineEvent & { text: string }).text)
-						.catch((err) => {
-							console.error(`[room:${roomId}] handleAgentOutput error:`, err)
-						})
-				}
-			})
-
+		// Kick off sandbox creation + agent startup in the background
+		;(async () => {
 			await bridge.emit({
 				type: "log",
-				level: "done",
-				message: `Sandbox ready for "${body.name}"`,
+				level: "build",
+				message: `Creating sandbox for room agent "${body.name}"...`,
 				ts: ts(),
 			})
 
-			await ccBridge.start()
+			try {
+				const handle = await config.sandbox.create(sessionId, {
+					projectName,
+					infra: { mode: "local" },
+					apiKey: body.apiKey,
+					oauthToken: body.oauthToken,
+					ghToken: body.ghToken,
+				})
 
-			// Add participant to room router
-			const participant: RoomParticipant = {
-				sessionId,
-				name: body.name,
-				role: body.role,
-				bridge: ccBridge,
+				config.sessions.update(sessionId, {
+					appPort: handle.port,
+					sandboxProjectDir: handle.projectDir,
+					previewUrl: handle.previewUrl,
+				})
+
+				// Inject room-messaging skill so agents know the @room protocol
+				if (roomMessagingSkillContent) {
+					try {
+						const skillDir = `${handle.projectDir}/.claude/skills/room-messaging`
+						const skillB64 = Buffer.from(roomMessagingSkillContent).toString("base64")
+						await config.sandbox.exec(
+							handle,
+							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+						)
+						// Append room-messaging reference to CLAUDE.md so the agent knows to read it
+						const roomRef = `\n\n## Room Messaging (CRITICAL)\nYou are a participant in a multi-agent room. Read .claude/skills/room-messaging/SKILL.md for the messaging protocol.\nAll communication with other agents MUST use @room or @<name> messages as described in that skill.\n`
+						const refB64 = Buffer.from(roomRef).toString("base64")
+						await config.sandbox.exec(
+							handle,
+							`echo '${refB64}' | base64 -d >> '${handle.projectDir}/CLAUDE.md'`,
+						)
+					} catch (err) {
+						console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
+					}
+				}
+
+				// Resolve role skill (behavioral guidelines + tool permissions)
+				const roleSkill = resolveRoleSkill(body.role)
+
+				// Inject role skill file into sandbox
+				if (roleSkill) {
+					try {
+						const skillDir = `${handle.projectDir}/.claude/skills/role`
+						const skillB64 = Buffer.from(roleSkill.skillContent).toString("base64")
+						await config.sandbox.exec(
+							handle,
+							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+						)
+					} catch (err) {
+						console.error(`[session:${sessionId}] Failed to write role skill:`, err)
+					}
+				}
+
+				// Build prompt — reference the role skill if available
+				const rolePromptSuffix = roleSkill
+					? `\nRead .claude/skills/role/SKILL.md for your role guidelines before proceeding.`
+					: ""
+				const agentPrompt = `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.${rolePromptSuffix}`
+
+				// Create Claude Code bridge (with role-specific tool permissions)
+				const agentHookToken = deriveHookToken(config.streamConfig.secret, sessionId)
+				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
+					config.sandbox.runtime === "sprites"
+						? {
+								prompt: agentPrompt,
+								cwd: handle.projectDir,
+								studioUrl: resolveStudioUrl(config.port),
+								hookToken: agentHookToken,
+								agentName: body.name,
+								...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
+							}
+						: {
+								prompt: agentPrompt,
+								cwd: handle.projectDir,
+								studioPort: config.port,
+								hookToken: agentHookToken,
+								agentName: body.name,
+								...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
+							}
+				const ccBridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
+
+				// Track Claude Code session ID and cost
+				ccBridge.onAgentEvent((event) => {
+					if (event.type === "session_start") {
+						const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+						if (ccSessionId) {
+							config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
+						}
+					}
+					if (event.type === "session_end") {
+						accumulateSessionCost(config, sessionId, event)
+					}
+					// Route assistant_message output to the room router
+					if (event.type === "assistant_message" && "text" in event) {
+						router
+							.handleAgentOutput(sessionId, (event as EngineEvent & { text: string }).text)
+							.catch((err) => {
+								console.error(`[room:${roomId}] handleAgentOutput error:`, err)
+							})
+					}
+				})
+
+				await bridge.emit({
+					type: "log",
+					level: "done",
+					message: `Sandbox ready for "${body.name}"`,
+					ts: ts(),
+				})
+
+				await ccBridge.start()
+
+				// Add participant to room router
+				const participant: RoomParticipant = {
+					sessionId,
+					name: body.name,
+					role: body.role,
+					bridge: ccBridge,
+				}
+				await router.addParticipant(participant, body.gated ?? false)
+
+				// If there's an initial prompt, send it directly to this agent only (not broadcast)
+				if (body.initialPrompt) {
+					await ccBridge.sendCommand({ command: "iterate", request: body.initialPrompt })
+				}
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : "Failed to create agent sandbox"
+				console.error(`[room:${roomId}] Agent creation failed:`, err)
+				await bridge.emit({ type: "log", level: "error", message: msg, ts: ts() })
 			}
-			await router.addParticipant(participant, body.gated ?? false)
+		})()
 
-			// If there's an initial prompt, send it directly to this agent only (not broadcast)
-			if (body.initialPrompt) {
-				await ccBridge.sendCommand({ command: "iterate", request: body.initialPrompt })
-			}
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : "Failed to create agent sandbox"
-			console.error(`[room:${roomId}] Agent creation failed:`, err)
-			await bridge.emit({ type: "log", level: "error", message: msg, ts: ts() })
-			return c.json({ error: msg }, 500)
-		}
-
-		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
 		return c.json({ sessionId, participantName: body.name, sessionToken }, 201)
 	})
 
@@ -2371,8 +2396,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = (await c.req.json()) as {
 			sessionId: string
 			name: string
-			role?: string
-			gated?: boolean
 			initialPrompt?: string
 		}
 		if (!body.sessionId || !body.name) {
@@ -2415,25 +2438,15 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						handle,
 						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
 					)
-				} catch (err) {
-					console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
-				}
-			}
-
-			// Resolve role skill (behavioral guidelines + tool permissions)
-			const roleSkill = resolveRoleSkill(body.role)
-
-			// Inject role skill file into sandbox
-			if (roleSkill) {
-				try {
-					const skillDir = `${handle.projectDir}/.claude/skills/role`
-					const skillB64 = Buffer.from(roleSkill.skillContent).toString("base64")
+					// Append room-messaging reference to CLAUDE.md so the agent knows to read it
+					const roomRef = `\n\n## Room Messaging (CRITICAL)\nYou are a participant in a multi-agent room. Read .claude/skills/room-messaging/SKILL.md for the messaging protocol.\nAll communication with other agents MUST use @room or @<name> messages as described in that skill.\n`
+					const refB64 = Buffer.from(roomRef).toString("base64")
 					await config.sandbox.exec(
 						handle,
-						`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+						`echo '${refB64}' | base64 -d >> '${handle.projectDir}/CLAUDE.md'`,
 					)
 				} catch (err) {
-					console.error(`[session:${sessionId}] Failed to write role skill:`, err)
+					console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
 				}
 			}
 
@@ -2452,10 +2465,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const participant: RoomParticipant = {
 				sessionId,
 				name: body.name,
-				role: body.role,
 				bridge,
 			}
-			await router.addParticipant(participant, body.gated ?? false)
+			await router.addParticipant(participant, false)
 
 			// If there's an initial prompt, send it directly to this agent
 			if (body.initialPrompt) {

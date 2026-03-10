@@ -352,7 +352,7 @@ export interface RoomState {
 	roomId: string
 	state: "active" | "closed"
 	roundCount: number
-	participants: Array<{ sessionId: string; name: string; role?: string }>
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 }
 
 export async function createAgentRoom(name: string, maxRounds?: number) {
@@ -395,8 +395,6 @@ export function addSessionToRoom(
 	config: {
 		sessionId: string
 		name: string
-		role?: string
-		gated?: boolean
 		initialPrompt?: string
 	},
 ) {

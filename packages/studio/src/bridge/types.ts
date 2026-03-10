@@ -77,6 +77,11 @@ export interface SessionBridge {
 	 * Cancels any active subscriptions.
 	 */
 	close(): void
+
+	/**
+	 * Whether the agent is currently executing (process is running).
+	 */
+	isRunning(): boolean
 }
 
 /**

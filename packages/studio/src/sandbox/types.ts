@@ -30,6 +30,7 @@ export interface GitStatus {
 // ---------------------------------------------------------------------------
 
 export type InfraConfig =
+	| { mode: "none" }
 	| { mode: "local" }
 	| {
 			mode: "cloud"

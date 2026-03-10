@@ -392,24 +392,6 @@
 		0 0 0 4px var(--cyan);
 }
 
-.session-avatar-complete {
-	box-shadow:
-		0 0 0 2px var(--bg-surface),
-		0 0 0 4px var(--green);
-}
-
-.session-avatar-error {
-	box-shadow:
-		0 0 0 2px var(--bg-surface),
-		0 0 0 4px var(--red);
-}
-
-.session-avatar-cancelled {
-	box-shadow:
-		0 0 0 2px var(--bg-surface),
-		0 0 0 4px var(--text-subtle);
-}
-
 /* Pending session — faded placeholder while creating */
 .session-item-pending {
 	opacity: 0.5;

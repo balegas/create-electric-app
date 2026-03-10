@@ -128,4 +128,9 @@ export class HostedStreamBridge implements SessionBridge {
 			this.cancelSubscription = null
 		}
 	}
+
+	isRunning(): boolean {
+		// Hosted bridges don't track process state — assume running if not closed
+		return !this.closed
+	}
 }
