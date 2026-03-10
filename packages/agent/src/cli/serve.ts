@@ -3,8 +3,6 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { RoomRegistry } from "@electric-agent/studio/room-registry"
 import type { SandboxProvider } from "@electric-agent/studio/sandbox"
-import { DaytonaSandboxProvider } from "@electric-agent/studio/sandbox/daytona"
-import { getSnapshotStatus } from "@electric-agent/studio/sandbox/daytona-registry"
 import { DockerSandboxProvider } from "@electric-agent/studio/sandbox/docker"
 import { SpritesSandboxProvider } from "@electric-agent/studio/sandbox/sprites"
 import { startWebServer } from "@electric-agent/studio/server"
@@ -28,42 +26,13 @@ export async function serveCommand(opts: {
 
 	// Select sandbox provider:
 	//   SANDBOX_RUNTIME=docker  → always Docker
-	//   SANDBOX_RUNTIME=daytona → always Daytona
-	//   (unset)                 → Daytona if DAYTONA_API_KEY is set, otherwise Docker
+	//   SANDBOX_RUNTIME=sprites → always Sprites
+	//   (unset)                 → Sprites if FLY_API_TOKEN is set, otherwise Docker
 	const runtime = process.env.SANDBOX_RUNTIME?.toLowerCase()
 	let sandbox: SandboxProvider
 	if (runtime === "docker") {
 		sandbox = new DockerSandboxProvider()
 		console.log("[serve] Sandbox runtime: Docker (SANDBOX_RUNTIME=docker)")
-	} else if (runtime === "daytona" || (!runtime && process.env.DAYTONA_API_KEY)) {
-		if (!process.env.DAYTONA_API_KEY) {
-			console.error("Error: SANDBOX_RUNTIME=daytona requires DAYTONA_API_KEY to be set.")
-			process.exit(1)
-		}
-		sandbox = new DaytonaSandboxProvider({
-			apiKey: process.env.DAYTONA_API_KEY,
-			apiUrl: process.env.DAYTONA_API_URL,
-			target: process.env.DAYTONA_TARGET,
-		})
-		console.log(`[serve] Sandbox runtime: Daytona (target: ${process.env.DAYTONA_TARGET ?? "eu"})`)
-
-		// Check snapshot status (non-blocking)
-		const { Daytona } = await import("@daytonaio/sdk")
-		const daytona = new Daytona({
-			apiKey: process.env.DAYTONA_API_KEY,
-			apiUrl: process.env.DAYTONA_API_URL,
-			target: process.env.DAYTONA_TARGET ?? "eu",
-		})
-		const snapshotImage = process.env.SANDBOX_IMAGE || "electric-agent-sandbox"
-		const status = await getSnapshotStatus(daytona, snapshotImage)
-		if (status.exists) {
-			console.log(`[serve] Snapshot "${snapshotImage}": ${status.state}`)
-		} else {
-			console.log(
-				`[serve] Snapshot "${snapshotImage}" not found — will be created on first sandbox creation`,
-			)
-			console.log(`[serve] To pre-push: npm run push:sandbox:daytona`)
-		}
 	} else if (runtime === "sprites" || (!runtime && process.env.FLY_API_TOKEN)) {
 		if (!process.env.FLY_API_TOKEN) {
 			console.error("Error: SANDBOX_RUNTIME=sprites requires FLY_API_TOKEN to be set.")

@@ -21,8 +21,7 @@
 		"serve": "node dist/index.js serve",
 		"test": "node --import tsx --test tests/*.test.ts",
 		"test:e2e:docker": "node --import tsx --test tests/e2e-docker.test.ts",
-		"test:daytona": "node --import tsx --test tests/e2e-daytona.test.ts",
-		"test:sprites": "node --import tsx --test tests/sprites.test.ts",
+"test:sprites": "node --import tsx --test tests/sprites.test.ts",
 		"clean": "rm -rf dist"
 	},
 	"license": "Apache-2.0",
@@ -36,7 +35,6 @@
 		"@electric-agent/protocol": "workspace:*",
 		"@electric-agent/studio": "workspace:*",
 		"@anthropic-ai/claude-agent-sdk": "^0.1.0",
-		"@daytonaio/sdk": "^0.144.0",
 		"@durable-streams/client": "^0.2.1",
 		"commander": "^13.1.0",
 		"dotenv": "^17.3.1",

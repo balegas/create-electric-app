@@ -26,7 +26,7 @@ export interface ClaudeMdOptions {
 	/** Iteration request text (if isIteration) */
 	iterationRequest?: string
 	/** Sandbox runtime — affects environment-specific instructions */
-	runtime?: "docker" | "sprites" | "daytona"
+	runtime?: "docker" | "sprites"
 	/** Git/GitHub configuration — when set, git instructions are injected */
 	git?: GitConfig
 }
@@ -135,7 +135,7 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - Foreign keys with onDelete: "cascade" where appropriate`
 
 function sandboxEnvironment(runtime?: string): string {
-	if (runtime === "sprites" || runtime === "daytona") {
+	if (runtime === "sprites") {
 		return `## Sandbox Environment (IMPORTANT — READ FIRST)
 You are running inside a cloud micro-VM (Fly.io Sprite). This is NOT a local machine.
 
@@ -165,7 +165,7 @@ You are running inside a cloud micro-VM (Fly.io Sprite). This is NOT a local mac
 }
 
 function devServerInstructions(runtime?: string): string {
-	if (runtime === "sprites" || runtime === "daytona") {
+	if (runtime === "sprites") {
 		return `## Dev Server & Migrations
 ### Dev Server (CRITICAL — use pnpm scripts ONLY)
 - \`pnpm dev:start\` — start the Vite dev server in the background

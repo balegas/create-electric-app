@@ -87,7 +87,7 @@ export type EngineEvent =
 			/** GitHub accounts available for repo creation (empty if gh not authenticated) */
 			ghAccounts: { login: string; type: "user" | "org" }[]
 			/** Sandbox runtime — "docker" supports local mode, cloud runtimes hide it */
-			runtime: "docker" | "sprites" | "daytona"
+			runtime: "docker" | "sprites"
 			ts: string
 	  }
 	| {
