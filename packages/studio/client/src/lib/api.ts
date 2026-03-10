@@ -402,14 +402,11 @@ export function addSessionToRoom(
 ) {
 	// Must prove ownership of the session being added
 	const token = getSessionToken(config.sessionId)
-	return request<{ sessionId: string; participantName: string }>(
-		`/rooms/${roomId}/sessions`,
-		{
-			method: "POST",
-			body: config,
-			headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-		},
-	)
+	return request<{ sessionId: string; participantName: string }>(`/rooms/${roomId}/sessions`, {
+		method: "POST",
+		body: config,
+		headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+	})
 }
 
 export function sendRoomMessage(roomId: string, from: string, body: string, to?: string) {
