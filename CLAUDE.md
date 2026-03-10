@@ -50,8 +50,27 @@ Before every commit, you MUST:
 1. **Run lint**: `pnpm run check` — fix any issues with `pnpm run check:fix`
 2. **Run tests**: `pnpm run test` — ensure nothing is broken
 3. **Create a changeset** (see below)
+4. **Update docs** if your change affects documented behavior (see below)
 
 Do NOT commit code that fails lint or tests.
+
+## Keeping Documentation Up to Date
+
+When you change code, you MUST update the corresponding reference docs in `docs/` if the change affects documented behavior. Use this mapping:
+
+| If you changed... | Update this doc |
+|---|---|
+| Event types in `packages/protocol/src/events.ts` | `docs/protocol.md` |
+| Room router, messaging, agent roles in `packages/studio/src/room-router.ts`, `room-registry.ts`, `bridge/role-skills.ts` | `docs/multi-agent.md` |
+| Sandbox providers in `packages/studio/src/sandbox/` | `docs/sandboxes-and-bridges.md` |
+| Bridge implementations in `packages/studio/src/bridge/` | `docs/sandboxes-and-bridges.md` |
+| Auth, tokens, or middleware in `packages/studio/src/session-auth.ts`, `server.ts` | `docs/security.md` |
+| Server routes, data flow, or system design | `docs/architecture.md` |
+| CLI commands, scaffolding, or serve entrypoint | `docs/architecture.md` and `README.md` |
+| Changeset or publishing workflow | `docs/publishing.md` |
+| Environment variables or setup steps | `README.md` |
+
+If you are unsure whether a doc needs updating, read the relevant doc and check.
 
 ## Changesets (REQUIRED)
 
