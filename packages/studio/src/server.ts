@@ -2381,6 +2381,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		const { sessionId } = body
 
+		// Require a valid session token — caller must already own this session
+		const authHeader = c.req.header("Authorization")
+		const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined
+		if (!token || !validateSessionToken(config.streamConfig.secret, sessionId, token)) {
+			return c.json({ error: "Invalid or missing session token" }, 401)
+		}
+
 		// Verify the session exists
 		const sessionInfo = config.sessions.get(sessionId)
 		if (!sessionInfo) {
@@ -2460,8 +2467,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			return c.json({ error: msg }, 500)
 		}
 
-		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
-		return c.json({ sessionId, participantName: body.name, sessionToken }, 201)
+		// No need to return sessionToken — caller already proved they have it
+		return c.json({ sessionId, participantName: body.name }, 201)
 	})
 
 	// Send a message directly to a specific session in a room (bypasses room stream)

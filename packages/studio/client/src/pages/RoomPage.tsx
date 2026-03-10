@@ -429,16 +429,14 @@ function AddAgentModal({
 		try {
 			if (mode === "existing") {
 				if (!selectedSessionId || !name.trim()) return
-				const result = await addSessionToRoom(roomId, {
+				await addSessionToRoom(roomId, {
 					sessionId: selectedSessionId,
 					name: name.trim(),
 					role: role.trim() || undefined,
 					gated,
 					initialPrompt: initialPrompt.trim() || undefined,
 				})
-				if (result.sessionToken) {
-					setSessionToken(result.sessionId, result.sessionToken)
-				}
+				// Session token already in localStorage — no need to re-store
 			} else {
 				if (!name.trim()) return
 				const result = await addAgentToRoom(roomId, {

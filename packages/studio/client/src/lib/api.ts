@@ -400,11 +400,14 @@ export function addSessionToRoom(
 		initialPrompt?: string
 	},
 ) {
-	return request<{ sessionId: string; participantName: string; sessionToken: string }>(
+	// Must prove ownership of the session being added
+	const token = getSessionToken(config.sessionId)
+	return request<{ sessionId: string; participantName: string }>(
 		`/rooms/${roomId}/sessions`,
 		{
 			method: "POST",
 			body: config,
+			headers: token ? { Authorization: `Bearer ${token}` } : undefined,
 		},
 	)
 }

@@ -94,6 +94,24 @@ The `hook:` prefix prevents a session token from being used as a hook token and 
 | `GET /api/shared-sessions/:id/events` | Yes | SSE stream (`?token=` query param) |
 | `POST /api/shared-sessions/:id/revoke` | Yes | Revoke invite code |
 
+### Agent Room Endpoints
+
+Agent rooms (`/api/rooms/*`) are a separate system from shared sessions. They currently rely on the studio being deployed behind a trusted network boundary (local or reverse proxy) rather than per-request token auth.
+
+| Endpoint | Auth | Notes |
+|----------|:----:|-------|
+| `POST /api/rooms` | No | Create room |
+| `GET /api/rooms/join/:id/:code` | No | Invite code lookup |
+| `GET /api/rooms/:id` | No | Get room state |
+| `POST /api/rooms/:id/agents` | No | Create new agent in room — returns `sessionToken` |
+| `POST /api/rooms/:id/sessions` | Session token | Add existing session to room — caller must prove ownership |
+| `POST /api/rooms/:id/sessions/:sessionId/iterate` | No | Send message to specific agent |
+| `POST /api/rooms/:id/messages` | No | Broadcast message to room |
+| `GET /api/rooms/:id/events` | No | SSE stream of room events |
+| `POST /api/rooms/:id/close` | No | Close room |
+
+**Trust boundary note**: Most agent room endpoints are unauthenticated — they rely on the studio running behind a trusted network boundary. The exception is `POST /api/rooms/:id/sessions`, which requires the caller to present a valid session token (via `Authorization: Bearer <token>`) for the session being added. This prevents privilege escalation: without owning the session token, an attacker cannot hijack an existing session by adding it to a room. The response does not return the session token — the caller must already have it.
+
 ### Hook Endpoints
 
 | Endpoint | Auth | Notes |
