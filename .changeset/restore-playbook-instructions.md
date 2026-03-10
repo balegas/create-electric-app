@@ -1,19 +1,18 @@
 ---
+"@electric-agent/agent": patch
 "@electric-agent/studio": patch
 ---
 
-Restore hardcoded playbook paths and reading order in CLAUDE.md generator.
+Align guardrails with TanStack playbooks and restore skill discovery.
 
-The switch to @tanstack/intent for skill discovery removed explicit playbook paths
-and reading order from the generated CLAUDE.md. Since @tanstack/intent install is
-a prompt (not auto-generated), agents in sandboxes had no playbook guidance at all.
-Additionally, the tanstack-db-schemas playbook uses `import { z } from 'zod'` and
-`z.date().default()` which conflict with our guardrails (`zod/v4` and
-`z.union([z.date(), z.string()]).default()`).
-
-Changes:
-- Restore PLAYBOOK_INSTRUCTIONS with explicit paths and reading order
-- Add note that project guardrails override playbook patterns
-- Include new tanstack-db sub-skills (schemas/) in the skill list
+- Adopt TanStack's `z.union([z.string(), z.date()]).transform().default()` timestamp
+  pattern (from tanstack-db/collections/SKILL.md) — strictly better than our old
+  `z.union([z.date(), z.string()]).default()` because it converts strings to Dates
+- Remove stale `z.coerce.date()` ban — works correctly with zod >=3.25
+- Bump zod from `^3.24` to `^3.25` to satisfy drizzle-zod 0.8.x peer dep
+- Add all TanStack DB sub-skills (collections, schemas, mutations, live-queries,
+  electric) to playbook listing with updated reading order
+- Integrate `npx @tanstack/intent list` into create-app Phase 1 for dynamic
+  skill discovery
+- Keep `zod/v4` import requirement (verified: drizzle-zod rejects v3 overrides)
 - Revert fragile mv/cat/append CLAUDE.md merge back to simple overwrite
-- Restore specific Phase 1 checklist in create-app SKILL.md
