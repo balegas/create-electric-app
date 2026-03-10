@@ -48,7 +48,6 @@ cp .env.example .env
 |----------|---------|
 | `ANTHROPIC_API_KEY` | Claude API key (or use `claude login` on macOS) |
 | `GH_TOKEN` | GitHub PAT for repo/PR operations |
-| `DAYTONA_API_KEY` | Daytona cloud sandbox provider |
 
 ### 3. Build
 

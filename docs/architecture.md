@@ -21,7 +21,7 @@ Browser (React SPA)
   │     ├── Create Durable Stream (event log)
   │     ├── Emit infra_config_prompt gate
   │     ├── Wait for gate resolution (user picks infra mode)
-  │     ├── Create sandbox (Docker / Sprites / Daytona)
+  │     ├── Create sandbox (Docker / Sprites)
   │     ├── Create bridge (stream / claude-code)
   │     └── Send "new" command to agent
   │
@@ -97,7 +97,7 @@ Returns { txid } for optimistic update correlation
 All tokens are derived via HMAC-SHA256 from a single secret (`DS_SECRET`). No token database. See [Security](./security.md).
 
 ### Sandbox Isolation
-Every session runs in its own sandbox. Generated code never touches the host machine. The sandbox provider abstraction makes it possible to swap between Docker (local), Sprites (Fly.io), and Daytona (cloud) without changing application code. See [Sandboxes & Bridges](./sandboxes-and-bridges.md).
+Every session runs in its own sandbox. Generated code never touches the host machine. The sandbox provider abstraction makes it possible to swap between Docker (local) and Sprites (Fly.io cloud) without changing application code. See [Sandboxes & Bridges](./sandboxes-and-bridges.md).
 
 ### Persistent Event Streaming
 Durable Streams provide an append-only event log per session. This enables reconnect catch-up, full replay, and multi-writer support (both server and agent write to the same stream). See [Protocol](./protocol.md).

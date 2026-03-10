@@ -11,7 +11,7 @@ One command scaffolds a full-stack reactive app — Drizzle schema, Postgres mig
 ## What Electric Agent Does
 
 1. **Generates apps from plain English.** Describe what you want; the agent plans a data model, writes the code, runs migrations, and starts a dev server.
-2. **Runs agents in sandboxes.** Each session gets its own isolated environment (Docker, Fly.io Sprites, or Daytona) so generated code never touches your host machine.
+2. **Runs agents in sandboxes.** Each session gets its own isolated environment (Docker or Fly.io Sprites) so generated code never touches your host machine.
 3. **Streams everything in real time.** Every tool call, plan decision, and build result is streamed to a web UI via persistent event logs (Durable Streams).
 4. **Supports multi-agent collaboration.** Multiple Claude agents can join a shared room, communicate via a structured messaging protocol, and work on different aspects of a project simultaneously.
 
@@ -36,7 +36,7 @@ packages/
 |---|---|
 | [Protocol & Events](./protocol.md) | The `EngineEvent` type system — every event the agent can emit, gate mechanics, and streaming |
 | [Multi-Agent Rooms](./multi-agent.md) | Room messaging protocol, agent roles, discovery prompts, and gating |
-| [Sandboxes & Bridges](./sandboxes-and-bridges.md) | Sandbox providers (Docker, Sprites, Daytona), bridge modes, and session lifecycle |
+| [Sandboxes & Bridges](./sandboxes-and-bridges.md) | Sandbox providers (Docker, Sprites), bridge modes, and session lifecycle |
 | [Security & Authentication](./security.md) | Session tokens, room tokens, hook authentication, and endpoint protection |
 | [Architecture](./architecture.md) | System overview, request lifecycle, data flow, and key design decisions |
 | [Publishing](./publishing.md) | npm releases via Changesets, OIDC trusted publishing, and CI workflow |

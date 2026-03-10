@@ -130,4 +130,3 @@ app.use("/api/sessions/:id", ...)    // Base path (GET/DELETE only)
 | `ANTHROPIC_API_KEY` | Claude API access | Yes (or OAuth) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Alternative Claude auth | Optional |
 | `GH_TOKEN` | GitHub repo/PR operations | Optional |
-| `DAYTONA_API_KEY` | Daytona sandbox provider | Optional |

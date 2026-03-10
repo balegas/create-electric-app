@@ -4,13 +4,12 @@ Every agent session runs inside an isolated **sandbox**. The server communicates
 
 ## Sandbox Providers
 
-Three sandbox runtimes are supported, selected via the `SANDBOX_RUNTIME` environment variable:
+Two sandbox runtimes are supported, selected via the `SANDBOX_RUNTIME` environment variable:
 
 | Runtime | Provider | Use Case |
 |---------|----------|----------|
 | `docker` | `DockerSandboxProvider` | Local development. Requires Docker daemon on the host. |
 | `sprites` | `SpritesSandboxProvider` | Production. Fly.io cloud micro-VMs. |
-| `daytona` | `DaytonaSandboxProvider` | Alternative cloud runtime via Daytona. |
 
 ### SandboxProvider Interface
 
@@ -49,13 +48,6 @@ pnpm run build:sandbox    # builds electric-agent-sandbox Docker image
 - Each VM gets a preview URL: `https://<sprite-name>.sprites.app`.
 - Only port 8080 is exposed externally.
 - Communicates via SSH + stream-json.
-
-### Daytona (`daytona`)
-
-- Creates sandboxes via the Daytona SDK.
-- Manages snapshots for fast startup.
-- Injects environment variables (API keys, DB URL, Electric config).
-- Communicates via the Daytona session API (stdin/stdout).
 
 ## Bridge Modes
 
@@ -142,11 +134,8 @@ Server                          Sandbox
 
 | Variable | Provider | Purpose |
 |----------|----------|---------|
-| `SANDBOX_RUNTIME` | All | Which provider to use: `docker`, `sprites`, or `daytona` |
-| `DAYTONA_API_KEY` | Daytona | API authentication |
-| `DAYTONA_API_URL` | Daytona | API endpoint (default: `https://app.daytona.io/api`) |
-| `DAYTONA_TARGET` | Daytona | Region target (e.g., `eu`) |
-| `SPRITES_API_TOKEN` | Sprites | Fly.io Sprites API authentication |
+| `SANDBOX_RUNTIME` | All | Which provider to use: `docker` or `sprites` |
+| `FLY_API_TOKEN` | Sprites | Fly.io Sprites API authentication |
 
 ### Agent Credentials (Passed to Sandbox)
 

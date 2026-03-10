@@ -19,7 +19,6 @@
 		"build:sandbox": "docker build -f Dockerfile.sandbox -t electric-agent-sandbox .",
 		"build:test-sandbox": "docker build -f Dockerfile.test-sandbox -t electric-agent-test-sandbox .",
 		"push:sandbox": "docker build -f Dockerfile.sandbox -t ${DOCKER_HUB_USER}/electric-agent-sandbox . && docker push ${DOCKER_HUB_USER}/electric-agent-sandbox",
-		"push:sandbox:daytona": "tsx packages/agent/src/sandbox-push/daytona-push.ts",
 		"changeset": "changeset",
 		"version": "changeset version",
 		"release": "pnpm run build && changeset publish"

@@ -67,8 +67,6 @@
 	},
 	"dependencies": {
 		"@electric-agent/protocol": "workspace:*",
-		"@daytonaio/api-client": "^0.144.0",
-		"@daytonaio/sdk": "^0.144.0",
 		"@durable-streams/client": "^0.2.1",
 		"@durable-streams/server": "^0.2.1",
 		"@fly/sprites": "^0.0.1",

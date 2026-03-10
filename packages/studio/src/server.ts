@@ -1095,7 +1095,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`,
 						)
 					} else {
-						// Sprites/Daytona: run scaffold from globally installed electric-agent
+						// Sprites: run scaffold from globally installed electric-agent
 						await config.sandbox.exec(
 							handle,
 							`source /etc/profile.d/npm-global.sh 2>/dev/null; electric-agent scaffold '${handle.projectDir}' --name '${projectName}' --skip-git`,
