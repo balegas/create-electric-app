@@ -178,12 +178,15 @@ describe("hook-bridge integration", () => {
 				cwd: "/Users/test/forwarding-test",
 			}),
 		})
-		const { sessionId } = (await autoRes.json()) as { sessionId: string }
+		const { sessionId, hookToken } = (await autoRes.json()) as { sessionId: string; hookToken: string }
 
-		// 2. Forward a PreToolUse event
+		// 2. Forward a PreToolUse event (with hook token)
 		const hookRes = await appFetch(app, `/api/sessions/${sessionId}/hook-event`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${hookToken}`,
+			},
 			body: JSON.stringify({
 				hook_event_name: "PreToolUse",
 				tool_name: "Bash",
@@ -227,12 +230,15 @@ describe("hook-bridge integration", () => {
 				cwd: "/Users/test/end-test",
 			}),
 		})
-		const { sessionId } = (await autoRes.json()) as { sessionId: string }
+		const { sessionId, hookToken } = (await autoRes.json()) as { sessionId: string; hookToken: string }
 
-		// 2. Send SessionEnd
+		// 2. Send SessionEnd (with hook token)
 		const endRes = await appFetch(app, `/api/sessions/${sessionId}/hook-event`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${hookToken}`,
+			},
 			body: JSON.stringify({
 				hook_event_name: "SessionEnd",
 			}),

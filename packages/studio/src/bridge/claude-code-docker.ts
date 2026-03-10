@@ -34,6 +34,8 @@ export interface ClaudeCodeDockerConfig {
 	extraFlags?: string[]
 	/** Studio server port — used to set up AskUserQuestion hooks inside the container */
 	studioPort?: number
+	/** HMAC token for authenticating hook-event requests back to the studio */
+	hookToken?: string
 	/** Agent name — injected into assistant_message events for display */
 	agentName?: string
 }
@@ -192,12 +194,14 @@ export class ClaudeCodeDockerBridge implements SessionBridge {
 		// Studio server is on the host — use host.docker.internal to reach it
 		const studioUrl = `http://host.docker.internal:${port}`
 
+		const hookToken = this.config.hookToken ?? ""
 		const forwardScript = `#!/bin/bash
 # Forward AskUserQuestion hook events to Electric Agent studio.
 # Blocks until the user answers in the web UI.
 BODY="$(cat)"
 RESPONSE=$(curl -s -X POST "${studioUrl}/api/sessions/${this.sessionId}/hook-event" \\
   -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${hookToken}" \\
   -d "\${BODY}" \\
   --max-time 360 \\
   --connect-timeout 5 \\

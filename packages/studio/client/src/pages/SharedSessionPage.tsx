@@ -18,7 +18,7 @@ import { getSessionToken, setSessionToken } from "../lib/session-store"
 import { addJoinedSharedSession, removeJoinedSharedSession } from "../lib/shared-session-store"
 
 export function SharedSessionPage() {
-	const { code } = useParams<{ code: string }>()
+	const { id, code } = useParams<{ id: string; code: string }>()
 	const navigate = useNavigate()
 	const { sessions, refreshJoinedSharedSessions } = useAppContext()
 	const [sharedSessionId, setSharedSessionId] = useState<string | null>(null)
@@ -29,12 +29,12 @@ export function SharedSessionPage() {
 
 	// Join the shared session on mount
 	useEffect(() => {
-		if (!code) return
+		if (!id || !code) return
 		let cancelled = false
 
 		async function join() {
 			try {
-				const result = await joinSharedSession(code as string)
+				const result = await joinSharedSession(id as string, code as string)
 				if (cancelled) return
 				if (result.revoked) {
 					setError("This invite code has been revoked.")
@@ -55,7 +55,7 @@ export function SharedSessionPage() {
 		return () => {
 			cancelled = true
 		}
-	}, [code])
+	}, [id, code])
 
 	const sharedSession = useSharedSession(sharedSessionId)
 
@@ -169,6 +169,7 @@ export function SharedSessionPage() {
 		<>
 			<SharedSessionHeader
 				name={sharedSession.name}
+				id={sharedSessionId}
 				code={sharedSession.code}
 				participants={sharedSession.participants}
 				revoked={sharedSession.revoked}

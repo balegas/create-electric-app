@@ -3,6 +3,7 @@ import { useCallback, useState } from "react"
 
 interface SharedSessionHeaderProps {
 	name: string
+	id: string
 	code: string
 	participants: Participant[]
 	revoked: boolean
@@ -13,6 +14,7 @@ interface SharedSessionHeaderProps {
 
 export function SharedSessionHeader({
 	name,
+	id,
 	code,
 	participants,
 	revoked,
@@ -22,11 +24,12 @@ export function SharedSessionHeader({
 }: SharedSessionHeaderProps) {
 	const [copied, setCopied] = useState(false)
 
+	const joinToken = `${id}:${code}`
 	const handleCopyCode = useCallback(() => {
-		navigator.clipboard.writeText(code)
+		navigator.clipboard.writeText(joinToken)
 		setCopied(true)
 		setTimeout(() => setCopied(false), 2000)
-	}, [code])
+	}, [joinToken])
 
 	return (
 		<div className="shared-session-header">

@@ -97,7 +97,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		: null
 
 	const activeSharedCode = location.pathname.startsWith("/shared/")
-		? location.pathname.split("/shared/")[1]
+		? location.pathname.slice("/shared/".length)
 		: null
 
 	const activeRoomId = location.pathname.startsWith("/room/")
@@ -116,7 +116,13 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 	const handleJoin = useCallback(() => {
 		const trimmed = joinCode.trim()
 		if (!trimmed) return
-		navigate(`/shared/${trimmed}`)
+		// Parse "id:code" format
+		const sep = trimmed.indexOf(":")
+		if (sep === -1) return // invalid format
+		const id = trimmed.slice(0, sep)
+		const code = trimmed.slice(sep + 1)
+		if (!id || !code) return
+		navigate(`/shared/${id}/${code}`)
 		setJoinCode("")
 		setJoinInputOpen(false)
 		onMobileClose?.()
@@ -157,8 +163,14 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 	const handleJoinAgentRoom = useCallback(async () => {
 		const trimmed = joinAgentRoomCode.trim()
 		if (!trimmed) return
+		// Parse "id:code" format
+		const sep = trimmed.indexOf(":")
+		if (sep === -1) return
+		const roomId = trimmed.slice(0, sep)
+		const roomCode = trimmed.slice(sep + 1)
+		if (!roomId || !roomCode) return
 		try {
-			const { id, code, name } = await joinAgentRoom(trimmed)
+			const { id, code, name } = await joinAgentRoom(roomId, roomCode)
 			addAgentRoom({ id, code, name, createdAt: new Date().toISOString() })
 			refreshAgentRooms()
 			setJoinAgentRoomCode("")
@@ -174,10 +186,10 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		const trimmed = createName.trim()
 		if (!trimmed) return
 		try {
-			const { code } = await createSharedSession(trimmed)
+			const { id, code } = await createSharedSession(trimmed)
 			setCreateName("")
 			setCreateInputOpen(false)
-			navigate(`/shared/${code}`)
+			navigate(`/shared/${id}/${code}`)
 			onMobileClose?.()
 		} catch (err) {
 			console.error("Failed to create shared session:", err)
@@ -268,8 +280,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 					return (
 						<div
 							key={s.code}
-							className={`session-item ${activeSharedCode === s.code ? "active" : ""}`}
-							onClick={() => handleNavigate(`/shared/${s.code}`)}
+							className={`session-item ${activeSharedCode === `${s.id}/${s.code}` ? "active" : ""}`}
+							onClick={() => handleNavigate(`/shared/${s.id}/${s.code}`)}
 							title={s.name}
 						>
 							<span
@@ -345,7 +357,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 					<div className="sidebar-join-input">
 						<input
 							type="text"
-							placeholder="Invite code..."
+							placeholder="Paste join token..."
 							value={joinCode}
 							onChange={(e) => setJoinCode(e.target.value)}
 							onKeyDown={(e) => {
@@ -473,7 +485,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 					<div className="sidebar-join-input">
 						<input
 							type="text"
-							placeholder="Invite code..."
+							placeholder="Paste join token..."
 							value={joinAgentRoomCode}
 							onChange={(e) => setJoinAgentRoomCode(e.target.value)}
 							onKeyDown={(e) => {
