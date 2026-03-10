@@ -19,11 +19,9 @@ Patterns NOT covered by external playbooks. Read playbooks for collections, live
 
 ## Drizzle-Zod Integration (CRITICAL)
 
-**Import `z` from `"zod/v4"`** (NOT `"zod"`) — drizzle-zod 0.8.x uses Zod v4 internals. The v4 runtime rejects v3-style overrides with "Invalid element: expected a Zod schema".
+**Import `z` from `"zod/v4"`** (NOT `"zod"`) — drizzle-zod 0.8.x peer-depends on zod >=3.25 which exports v4 as a subpath. The `createSelectSchema` function rejects v3-style overrides with "Invalid element: expected a Zod schema".
 
-**Always override timestamp columns** with `z.union([z.date(), z.string()]).default(() => new Date())` — Electric streams dates as ISO strings, but `createSelectSchema` generates `z.date()` which only accepts Date objects. The `.default()` is critical: it makes timestamps omittable during `collection.insert()` (the DB sets them server-side), while still accepting them when present from Electric sync. Without this, `collection.insert()` throws `SchemaValidationError` on `created_at`/`updated_at`.
-
-**Do NOT use `z.coerce.date()`** — creates ZodEffects that TanStack DB's schema introspection rejects.
+**Always override timestamp columns** using the TanStack DB pattern from `tanstack-db/collections/SKILL.md`:
 
 ```typescript
 // src/db/zod-schemas.ts
@@ -31,17 +29,26 @@ import { createSelectSchema, createInsertSchema } from "drizzle-zod"
 import { z } from "zod/v4"
 import { todos } from "./schema"
 
-const dateOrString = z.union([z.date(), z.string()]).default(() => new Date())
+const dateField = z
+  .union([z.string(), z.date()])
+  .transform((val) => (typeof val === 'string' ? new Date(val) : val))
+  .default(() => new Date())
 
 export const todoSelectSchema = createSelectSchema(todos, {
-  created_at: dateOrString,
-  updated_at: dateOrString,
+  created_at: dateField,
+  updated_at: dateField,
 })
 export const todoInsertSchema = createInsertSchema(todos, {
-  created_at: dateOrString.optional(),
-  updated_at: dateOrString.optional(),
+  created_at: dateField.optional(),
+  updated_at: dateField.optional(),
 })
 ```
+
+This pattern:
+- Accepts both strings (from Electric sync) and Dates (from local code)
+- Transforms strings to Date objects (proper typing, TInput ⊇ TOutput)
+- Defaults timestamps for `collection.insert()` without explicit values
+- Works with `collection.update()` round-trips (Date passes back through union)
 
 **Use `selectSchema` as the collection schema** — it has defaults for timestamps so `collection.insert()` works without them, and validates fully populated rows from Electric sync.
 
@@ -235,10 +242,9 @@ it("survives JSON round-trip", () => {
 
 | WRONG | RIGHT |
 |-------|-------|
-| `import { z } from "zod"` in zod-schemas | `import { z } from "zod/v4"` |
-| `createSelectSchema(todos)` without date overrides | Override ALL timestamps: `{ created_at: z.union([z.date(), z.string()]).default(() => new Date()) }` |
-| `z.union([z.date(), z.string()])` without `.default()` | Add `.default(() => new Date())` — required for `collection.insert()` to work without timestamps |
-| `z.coerce.date()` for timestamps | `z.union([z.date(), z.string()])` |
+| `import { z } from "zod"` in zod-schemas | `import { z } from "zod/v4"` — drizzle-zod 0.8.x rejects v3 overrides |
+| `createSelectSchema(todos)` without date overrides | Override ALL timestamps with `z.union([z.string(), z.date()]).transform(...).default(...)` |
+| `z.date().default(() => new Date())` for timestamps | `z.union([z.string(), z.date()]).transform(val => typeof val === 'string' ? new Date(val) : val).default(() => new Date())` — Electric streams dates as strings |
 | `import { createInsertSchema } from 'drizzle-orm/zod'` | `from 'drizzle-zod'` |
 | `import { drizzle } from 'drizzle-orm'` | `from 'drizzle-orm/postgres-js'` |
 | `import { X } from '@radix-ui/react-icons'` | `from 'lucide-react'` |

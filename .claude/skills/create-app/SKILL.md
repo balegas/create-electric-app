@@ -52,7 +52,8 @@ export const entityName = pgTable("entity_name", {
 ## Implementation Tasks
 
 ### Phase 1: Data Model & Migrations
-- [ ] Read guardrails and playbooks (electric-app-guardrails, schemas, collections, mutations, live-queries)
+- [ ] Discover available skills: run `npx @tanstack/intent list` to see all installed playbook skills and their paths
+- [ ] Read guardrails and key playbooks: electric-app-guardrails, electric-tanstack-integration, tanstack-db, tanstack-db/collections (has timestamp pattern), tanstack-db/schemas
 - [ ] Define all Drizzle table schemas in src/db/schema.ts
 - [ ] Derive Zod schemas in src/db/zod-schemas.ts (drizzle-zod, z from "zod/v4", timestamp overrides)
 - [ ] Run drizzle-kit generate && drizzle-kit migrate
@@ -115,9 +116,16 @@ Conventions:
 
 ### Step 2b: Write Zod Schemas
 Write `src/db/zod-schemas.ts`:
-- Import `z` from `"zod/v4"` (NOT `"zod"`)
+- Import `z` from `"zod/v4"` (NOT `"zod"`) — drizzle-zod 0.8.x rejects v3 schema overrides
 - Use `createSelectSchema` and `createInsertSchema` from `drizzle-zod`
-- Override ALL timestamp columns: `z.union([z.date(), z.string()]).default(() => new Date())`
+- Override ALL timestamp columns using the pattern from `tanstack-db/collections/SKILL.md`:
+  ```typescript
+  const dateField = z
+    .union([z.string(), z.date()])
+    .transform((val) => (typeof val === 'string' ? new Date(val) : val))
+    .default(() => new Date())
+  ```
+- The `.transform()` converts Electric's string timestamps to Date objects
 - The `.default()` is required for `collection.insert()` to work without timestamps
 - Export both select and insert schemas for each entity
 
@@ -254,9 +262,8 @@ After starting, the app is accessible at the preview URL (shown in the UI).
 
 ## Critical Rules (from electric-app-guardrails)
 
-- `z` from `"zod/v4"` — NEVER from `"zod"`
-- ALL timestamp columns get `z.union([z.date(), z.string()]).default(() => new Date())`
-- NEVER use `z.coerce.date()` — creates ZodEffects rejected by TanStack DB
+- `z` from `"zod/v4"` — NEVER from `"zod"` (drizzle-zod 0.8.x rejects v3 overrides)
+- ALL timestamp columns: `z.union([z.string(), z.date()]).transform(val => typeof val === 'string' ? new Date(val) : val).default(() => new Date())`
 - Mutation routes MUST use `parseDates(await request.json())`
 - PUT/PATCH: destructure out `created_at`, `updated_at` before spreading
 - `shapeOptions.url` MUST be absolute URL

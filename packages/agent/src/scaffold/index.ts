@@ -226,7 +226,7 @@ const ADDED_DEPENDENCIES: Record<string, string> = {
 	"drizzle-orm": "0.45.1",
 	"drizzle-zod": "^0.8.3",
 	postgres: "^3.4",
-	zod: "^3.24",
+	zod: "^3.25",
 }
 
 const ADDED_DEV_DEPENDENCIES: Record<string, string> = {

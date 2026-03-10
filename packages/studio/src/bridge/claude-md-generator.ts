@@ -59,6 +59,8 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 	sections.push("")
 	sections.push(GUARDRAILS)
 	sections.push("")
+	sections.push(PLAYBOOK_INSTRUCTIONS)
+	sections.push("")
 	sections.push(INFRASTRUCTURE)
 	sections.push("")
 	sections.push(devServerInstructions(opts.runtime))
@@ -98,7 +100,7 @@ DO NOT use Bash/ls/find to explore the project. DO NOT read files you aren't abo
 const DRIZZLE_WORKFLOW = `## Drizzle Workflow (CRITICAL)
 Always follow this order:
 1. Edit src/db/schema.ts (Drizzle pgTable definitions)
-2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas — ALWAYS import z from "zod/v4" and override ALL timestamp columns with z.union([z.date(), z.string()]).default(() => new Date()) — the .default() is required so collection.insert() works without timestamps)
+2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas — ALWAYS import z from "zod/v4" and override ALL timestamp columns — see playbook tanstack-db/collections/SKILL.md for the correct pattern)
 3. Create collection files in src/db/collections/ (import from ../zod-schemas)
 4. Create API routes (proxy + mutation)
 5. Create UI components`
@@ -126,13 +128,47 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - Only add new dependencies
 
 ### Schema Rules
-- ALL timestamp columns MUST use: z.union([z.date(), z.string()]).default(() => new Date())
-- NEVER use z.coerce.date() — it breaks TanStack DB
+- ALL timestamp columns MUST be overridden — use the union+transform+default pattern from tanstack-db/collections/SKILL.md
 - ALL tables MUST have REPLICA IDENTITY FULL (auto-applied by migration hook)
 - UUID primary keys with defaultRandom()
 - timestamp({ withTimezone: true }) for all dates
 - snake_case for SQL table/column names
 - Foreign keys with onDelete: "cascade" where appropriate`
+
+const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
+Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.
+
+### Available Skills
+Read with the Read tool at these exact paths:
+
+**Electric SQL** (\`node_modules/@electric-sql/playbook/skills/\`):
+- \`electric/SKILL.md\` — core Electric concepts and shape API
+- \`electric-tanstack-integration/SKILL.md\` — how Electric + TanStack DB work together (READ FIRST)
+- \`electric-quickstart/SKILL.md\` — quickstart patterns
+- \`electric-security-check/SKILL.md\` — security best practices
+- \`tanstack-start-quickstart/SKILL.md\` — TanStack Start framework patterns
+- \`deploying-electric/SKILL.md\` — deployment configuration
+- \`electric-go-live/SKILL.md\` — production checklist
+
+**TanStack DB** (\`node_modules/@tanstack/db-playbook/skills/\`):
+- \`tanstack-db/SKILL.md\` — overview: collections, useLiveQuery, mutations
+- \`tanstack-db/collections/SKILL.md\` — collection setup, timestamp schema pattern (CRITICAL for data model)
+- \`tanstack-db/schemas/SKILL.md\` — schema validation, TInput/TOutput
+- \`tanstack-db/mutations/SKILL.md\` — insert, update, delete, optimistic updates
+- \`tanstack-db/live-queries/SKILL.md\` — filtering, joins, aggregations
+- \`tanstack-db/electric/SKILL.md\` — Electric-specific TanStack DB patterns
+
+### Reading Order
+1. \`electric-tanstack-integration/SKILL.md\` — integration overview
+2. \`tanstack-db/SKILL.md\` — collections, queries, mutations API
+3. \`tanstack-db/collections/SKILL.md\` — collection setup with correct timestamp pattern
+4. \`electric/SKILL.md\` — shape API for proxy routes
+5. Other sub-skills as needed for your current phase
+
+### Important
+- ONLY read playbooks relevant to your current phase
+- Sub-skills (\`tanstack-db/collections/\`, \`tanstack-db/schemas/\`, etc.) have deeper detail — read them during implementation phases
+- Note: playbook examples use \`import { z } from "zod"\` but this project requires \`import { z } from "zod/v4"\` because drizzle-zod 0.8.x peer-depends on zod >=3.25 which ships v4 as a subpath export, and \`createSelectSchema\` rejects v3 schema overrides`
 
 function sandboxEnvironment(runtime?: string): string {
 	if (runtime === "sprites") {
