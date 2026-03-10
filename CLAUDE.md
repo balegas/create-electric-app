@@ -28,6 +28,10 @@ You are running inside a cloud micro-VM (Fly.io Sprite). This is NOT a local mac
 - npm global binaries are NOT in PATH by default
 - If you need a globally installed tool, source the profile first: `source /etc/profile.d/npm-global.sh`
 
+## Lint & Formatting (REQUIRED before every commit)
+
+Run `pnpm check:fix` before every commit to fix formatting and lint issues. CI runs `pnpm check` and will fail if code is not formatted correctly (biome enforces tabs, double quotes, no semicolons, organized imports, and lint rules).
+
 ## Changesets (REQUIRED before every commit)
 
 This is a pnpm monorepo with three packages: `@electric-agent/agent`, `@electric-agent/studio`, `@electric-agent/protocol`.

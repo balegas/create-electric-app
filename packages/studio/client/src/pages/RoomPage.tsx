@@ -5,13 +5,14 @@ import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
 import { useAppContext } from "../layouts/AppShell"
 import {
 	addAgentToRoom,
+	addSessionToRoom,
 	closeAgentRoom,
 	getAgentRoomState,
 	type RoomState,
 	sendRoomMessage,
 } from "../lib/api"
 import { getOrCreateParticipant } from "../lib/participant"
-import { addSession, setSessionToken } from "../lib/session-store"
+import { addSession, setSessionToken, updateSession } from "../lib/session-store"
 
 interface OutletCtx {
 	openMobileDrawer: () => void
@@ -42,6 +43,13 @@ export function RoomPage() {
 						loadedRef.current = true
 						setRoomState(state)
 						setError(null)
+						// Sync participant running status to localStorage so sidebar reflects it
+						for (const p of state.participants) {
+							updateSession(p.sessionId, {
+								status: p.running ? "running" : "complete",
+							})
+						}
+						refreshSessions()
 					}
 				})
 				.catch((err) => {
@@ -55,7 +63,7 @@ export function RoomPage() {
 			cancelled = true
 			clearInterval(interval)
 		}
-	}, [roomId])
+	}, [roomId, refreshSessions])
 
 	const handleClose = useCallback(async () => {
 		if (!roomId) return
@@ -135,7 +143,7 @@ function RoomHeader({
 }: {
 	roomId?: string
 	state?: string
-	participants: Array<{ sessionId: string; name: string; role?: string }>
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 	onClose: () => void
 	onAddAgent: () => void
 	openMobileDrawer: () => void
@@ -181,17 +189,21 @@ function RoomHeader({
 			<span className="room-header-participants">
 				{participants.map((p) => {
 					const color = getAvatarColor(p.sessionId)
-					const initial = p.name.charAt(0).toUpperCase()
+					const initials = p.name
+						.split(/[-_ ]+/)
+						.slice(0, 2)
+						.map((w) => w.charAt(0).toUpperCase())
+						.join("")
 					return (
 						<button
 							key={p.sessionId}
 							type="button"
 							className="room-header-avatar"
 							style={{ background: color.bg, color: color.fg }}
-							title={`${p.name}${p.role ? ` (${p.role})` : ""} — click to open session`}
+							title={p.name}
 							onClick={() => navigate(`/session/${p.sessionId}`)}
 						>
-							{initial}
+							{initials}
 						</button>
 					)
 				})}
@@ -221,7 +233,7 @@ function ParticipantLink({
 	participants,
 }: {
 	name: string
-	participants: Array<{ sessionId: string; name: string; role?: string }>
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 }) {
 	const navigate = useNavigate()
 	const participant = participants.find((p) => p.name === name)
@@ -243,13 +255,14 @@ function RoomEventList({
 	participants,
 }: {
 	events: RoomEvent[]
-	participants: Array<{ sessionId: string; name: string; role?: string }>
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
+	const workingAgents = participants.filter((p) => p.running)
 
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-	}, [events.length])
+	}, [events.length, workingAgents.length])
 
 	if (events.length === 0) {
 		return (
@@ -301,6 +314,19 @@ function RoomEventList({
 						return null
 				}
 			})}
+			{workingAgents.length > 0 && (
+				<div className="room-working-indicator">
+					<span className="room-working-dots">
+						<span />
+						<span />
+						<span />
+					</span>
+					<span className="room-working-text">
+						{workingAgents.map((a) => a.name).join(", ")}{" "}
+						{workingAgents.length === 1 ? "is" : "are"} working
+					</span>
+				</div>
+			)}
 			<div ref={bottomRef} />
 		</div>
 	)
@@ -409,51 +435,108 @@ function AddAgentModal({
 	onClose: () => void
 	onAdded: () => void
 }) {
+	const { sessions } = useAppContext()
+	const [mode, setMode] = useState<"new" | "existing">("new")
 	const [name, setName] = useState("")
 	const [role, setRole] = useState("")
 	const [gated, setGated] = useState(false)
 	const [initialPrompt, setInitialPrompt] = useState("")
+	const [selectedSessionId, setSelectedSessionId] = useState("")
 	const [adding, setAdding] = useState(false)
 	const [addError, setAddError] = useState<string | null>(null)
 
+	// Show sessions that are still usable (running or complete — sandbox is still alive)
+	const availableSessions = sessions.filter(
+		(s) => s.status === "running" || s.status === "complete",
+	)
+
 	const handleAdd = useCallback(async () => {
-		if (!name.trim()) return
 		setAdding(true)
 		setAddError(null)
 		try {
-			const result = await addAgentToRoom(roomId, {
-				name: name.trim(),
-				role: role.trim() || undefined,
-				gated,
-				initialPrompt: initialPrompt.trim() || undefined,
-			})
-			// Store the session token so the session is accessible
-			if (result.sessionToken) {
-				setSessionToken(result.sessionId, result.sessionToken)
+			if (mode === "existing") {
+				if (!selectedSessionId || !name.trim()) return
+				await addSessionToRoom(roomId, {
+					sessionId: selectedSessionId,
+					name: name.trim(),
+					initialPrompt: initialPrompt.trim() || undefined,
+				})
+				// Session token already in localStorage — no need to re-store
+			} else {
+				if (!name.trim()) return
+				const result = await addAgentToRoom(roomId, {
+					name: name.trim(),
+					role: role.trim() || undefined,
+					gated,
+					initialPrompt: initialPrompt.trim() || undefined,
+				})
+				if (result.sessionToken) {
+					setSessionToken(result.sessionId, result.sessionToken)
+				}
+				addSession({
+					id: result.sessionId,
+					projectName: name.trim(),
+					sandboxProjectDir: "",
+					description: role.trim() || `Agent in room ${roomId.slice(0, 8)}`,
+					createdAt: new Date().toISOString(),
+					lastActiveAt: new Date().toISOString(),
+					status: "running",
+				})
 			}
-			// Register the session so it appears in the sidebar
-			addSession({
-				id: result.sessionId,
-				projectName: name.trim(),
-				sandboxProjectDir: "",
-				description: role.trim() || `Agent in room ${roomId.slice(0, 8)}`,
-				createdAt: new Date().toISOString(),
-				lastActiveAt: new Date().toISOString(),
-				status: "running",
-			})
 			onAdded()
 		} catch (err) {
 			setAddError(err instanceof Error ? err.message : "Failed to add agent")
 		} finally {
 			setAdding(false)
 		}
-	}, [roomId, name, role, gated, initialPrompt, onAdded])
+	}, [roomId, mode, name, role, gated, initialPrompt, selectedSessionId, onAdded])
+
+	const canSubmit = mode === "existing" ? !!selectedSessionId && !!name.trim() : !!name.trim()
 
 	return (
 		<div className="modal-overlay" onClick={onClose}>
 			<div className="modal-card" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-title">Add Agent to Room</div>
 				<div className="modal-body">
+					<div className="room-form-toggle">
+						<button
+							type="button"
+							className={`room-form-toggle-btn ${mode === "new" ? "active" : ""}`}
+							onClick={() => setMode("new")}
+						>
+							New Agent
+						</button>
+						<button
+							type="button"
+							className={`room-form-toggle-btn ${mode === "existing" ? "active" : ""}`}
+							onClick={() => setMode("existing")}
+						>
+							Existing Session
+						</button>
+					</div>
+					{mode === "existing" && (
+						<label className="room-form-label">
+							Session *
+							<select
+								value={selectedSessionId}
+								onChange={(e) => {
+									setSelectedSessionId(e.target.value)
+									// Auto-fill name from session project name if empty
+									if (!name.trim()) {
+										const session = availableSessions.find((s) => s.id === e.target.value)
+										if (session) setName(session.projectName)
+									}
+								}}
+							>
+								<option value="">Select a session...</option>
+								{availableSessions.map((s) => (
+									<option key={s.id} value={s.id}>
+										{s.projectName} ({s.id.slice(0, 8)})
+									</option>
+								))}
+							</select>
+						</label>
+					)}
 					<label className="room-form-label">
 						Name *
 						<input
@@ -463,17 +546,19 @@ function AddAgentModal({
 							placeholder="e.g. reviewer, coder, architect"
 						/>
 					</label>
-					<label className="room-form-label">
-						Role
-						<select value={role} onChange={(e) => setRole(e.target.value)}>
-							<option value="">No role (generic participant)</option>
-							{BUILT_IN_ROLES.map((r) => (
-								<option key={r.value} value={r.value}>
-									{r.label} — {r.description}
-								</option>
-							))}
-						</select>
-					</label>
+					{mode === "new" && (
+						<label className="room-form-label">
+							Role
+							<select value={role} onChange={(e) => setRole(e.target.value)}>
+								<option value="">No role (generic participant)</option>
+								{BUILT_IN_ROLES.map((r) => (
+									<option key={r.value} value={r.value}>
+										{r.label} — {r.description}
+									</option>
+								))}
+							</select>
+						</label>
+					)}
 					<label className="room-form-label">
 						Initial Prompt
 						<textarea
@@ -497,9 +582,9 @@ function AddAgentModal({
 						type="button"
 						className="modal-btn primary"
 						onClick={handleAdd}
-						disabled={!name.trim() || adding}
+						disabled={!canSubmit || adding}
 					>
-						{adding ? "Adding..." : "Add Agent"}
+						{adding ? "Adding..." : mode === "existing" ? "Join Room" : "Add Agent"}
 					</button>
 				</div>
 			</div>

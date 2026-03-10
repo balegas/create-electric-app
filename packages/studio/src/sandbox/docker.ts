@@ -59,13 +59,15 @@ function generateComposeFile(
 	ghToken?: string,
 ): string {
 	const isCloud = infra.mode === "cloud"
+	const isNone = infra.mode === "none"
 
-	const agentEnv = [
-		`DATABASE_URL=${isCloud ? infra.databaseUrl : "postgresql://postgres:password@postgres:5432/electric"}`,
-		`ELECTRIC_URL=${isCloud ? infra.electricUrl : "http://electric:3000"}`,
-		"VITE_PORT=5173",
-		"SANDBOX_MODE=1",
-	]
+	const agentEnv = ["VITE_PORT=5173", "SANDBOX_MODE=1"]
+	if (!isNone) {
+		agentEnv.push(
+			`DATABASE_URL=${isCloud ? infra.databaseUrl : "postgresql://postgres:password@postgres:5432/electric"}`,
+			`ELECTRIC_URL=${isCloud ? infra.electricUrl : "http://electric:3000"}`,
+		)
+	}
 	if (isCloud) {
 		agentEnv.push(`ELECTRIC_SOURCE_ID=${infra.sourceId}`)
 		agentEnv.push(`ELECTRIC_SECRET=${infra.secret}`)

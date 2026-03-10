@@ -35,20 +35,49 @@ The response includes an **invite code** (8-character alphanumeric) that others 
 
 ## Adding Agents to a Room
 
-Link an agent session to a room:
+There are two ways to add an agent to a room:
+
+### Create a New Agent
+
+Spawns a fresh sandbox and Claude Code session:
 
 ```
-POST /api/shared-sessions/:roomId/sessions
-Authorization: Bearer <roomToken>
+POST /api/rooms/:roomId/agents
 {
-  "sessionId": "agent-session-uuid",
-  "agentName": "Architect",
+  "name": "Architect",
   "role": "coder",
-  "gated": false
+  "gated": false,
+  "initialPrompt": "Review the data model and suggest improvements"
 }
+→ { "sessionId": "uuid", "participantName": "Architect", "sessionToken": "..." }
 ```
 
-When an agent joins, the Room Router sends a **discovery prompt** with:
+This creates a new sandbox, installs the room-messaging and role skills, starts a Claude Code process, and adds it to the room.
+
+### Add an Existing Running Session
+
+Joins an already-running session to the room without creating a new sandbox:
+
+```
+POST /api/rooms/:roomId/sessions
+Authorization: Bearer <sessionToken>
+{
+  "sessionId": "existing-session-uuid",
+  "name": "Coder",
+  "role": "coder",
+  "gated": false,
+  "initialPrompt": "You've been added to a room for architecture review"
+}
+→ { "sessionId": "existing-session-uuid", "participantName": "Coder" }
+```
+
+The caller must present a valid session token for the session being added (proving they own it). This reuses the existing session's sandbox and bridge. The room-messaging and role skill files are injected into the sandbox, and the bridge's output events are wired to the Room Router. The session continues running with its existing context — it is not restarted.
+
+**Use case**: When you have an agent already working on a task and want to bring it into a collaborative room without losing its context or project state.
+
+### What Happens on Join
+
+When an agent joins (either mode), the Room Router sends a **discovery prompt** with:
 - The room's purpose and participant roster
 - Recent message history (for context)
 - The `@room` / `@name` messaging protocol

@@ -352,7 +352,7 @@ export interface RoomState {
 	roomId: string
 	state: "active" | "closed"
 	roundCount: number
-	participants: Array<{ sessionId: string; name: string; role?: string }>
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 }
 
 export async function createAgentRoom(name: string, maxRounds?: number) {
@@ -388,6 +388,23 @@ export function addAgentToRoom(
 			body: { ...config, ...credentialFields() },
 		},
 	)
+}
+
+export function addSessionToRoom(
+	roomId: string,
+	config: {
+		sessionId: string
+		name: string
+		initialPrompt?: string
+	},
+) {
+	// Must prove ownership of the session being added
+	const token = getSessionToken(config.sessionId)
+	return request<{ sessionId: string; participantName: string }>(`/rooms/${roomId}/sessions`, {
+		method: "POST",
+		body: config,
+		headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+	})
 }
 
 export function sendRoomMessage(roomId: string, from: string, body: string, to?: string) {
