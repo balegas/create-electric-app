@@ -94,13 +94,16 @@ Returns { txid } for optimistic update correlation
 ## Key Design Decisions
 
 ### Stateless Authentication
-All tokens are derived via HMAC-SHA256 from a single secret (`DS_SECRET`). No token database. See [Security](./security.md).
+All tokens are derived via HMAC-SHA256 from a single secret (`DS_SECRET`). No token database. Session tokens, room tokens, and hook tokens use different HMAC inputs to prevent cross-purpose use. See [Security](./security.md).
+
+### Credential Isolation
+`DS_SECRET` and Durable Streams credentials never leave the studio server process. Sandboxes authenticate via session tokens to proxy endpoints; clients use SSE proxies for reads and REST proxies for writes. See [Security — Credential Isolation](./security.md#credential-isolation).
 
 ### Sandbox Isolation
 Every session runs in its own sandbox. Generated code never touches the host machine. The sandbox provider abstraction makes it possible to swap between Docker (local) and Sprites (Fly.io cloud) without changing application code. See [Sandboxes & Bridges](./sandboxes-and-bridges.md).
 
 ### Persistent Event Streaming
-Durable Streams provide an append-only event log per session. This enables reconnect catch-up, full replay, and multi-writer support (both server and agent write to the same stream). See [Protocol](./protocol.md).
+Durable Streams provide an append-only event log per session. This enables reconnect catch-up, full replay, and multi-writer support (both server and agent write to the same stream). All access is proxied through the studio server. See [Protocol](./protocol.md).
 
 ### Multi-Agent via Room Router
 Rather than direct agent-to-agent connections, all communication goes through a central Room Router that watches a shared stream, parses message conventions, and delivers messages via bridges. This keeps agents unaware of infrastructure details. See [Multi-Agent Rooms](./multi-agent.md).
