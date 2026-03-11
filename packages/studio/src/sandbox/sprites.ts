@@ -8,6 +8,36 @@ import type {
 	SandboxProvider,
 } from "./types.js"
 
+/** Shell-quote a string for safe interpolation in bash commands. */
+function shellQuote(s: string): string {
+	return `'${s.replace(/'/g, "'\\''")}'`
+}
+
+/** Validate a name contains only safe characters (alphanumeric, hyphens, underscores, dots). */
+function validateName(name: string, label: string): void {
+	if (!/^[a-zA-Z0-9._-]+$/.test(name)) {
+		throw new Error(
+			`Invalid ${label}: must contain only alphanumeric chars, hyphens, underscores, and dots`,
+		)
+	}
+}
+
+/** Validate a git branch name (no shell metacharacters, spaces, or control chars). */
+function validateBranchName(branch: string): void {
+	if (!/^[a-zA-Z0-9._\-/]+$/.test(branch)) {
+		throw new Error(
+			"Invalid branch name: must contain only alphanumeric chars, hyphens, underscores, dots, and slashes",
+		)
+	}
+}
+
+/** Validate a repo URL (must be https:// or git@ protocol, no shell metacharacters). */
+function validateRepoUrl(url: string): void {
+	if (!/^(https?:\/\/[^\s'"`;|&$()]+|git@[^\s'"`;|&$():]+:[^\s'"`;|&$()]+)$/.test(url)) {
+		throw new Error("Invalid repo URL: must be a valid https:// or git@ URL")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // SpritesSandboxProvider — cloud sandboxes via Fly.io Sprites
 // ---------------------------------------------------------------------------
@@ -163,8 +193,9 @@ export class SpritesSandboxProvider implements SandboxProvider {
 			`echo ${b64} | base64 -d > /etc/profile.d/electric-agent.sh`,
 		])
 
+		validateName(projectName, "project name")
 		const projectDir = `/home/agent/workspace/${projectName}`
-		await sprite.exec(`mkdir -p ${projectDir}`)
+		await sprite.execFile("mkdir", ["-p", projectDir])
 
 		// Fetch the public URL from the API — it includes the org slug suffix.
 		// Sprites route this URL to port 8080 by default; VITE_PORT is set to 8080 above.
@@ -236,7 +267,7 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		try {
 			const result = await sprite.execFile("bash", [
 				"-c",
-				`find ${dir} -type f -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/dist/*' -not -path '*/.next/*' -not -path '*/.cache/*' -not -path '*/.electric/*' -not -name 'pnpm-lock.yaml' -not -name 'package-lock.json'`,
+				`find ${shellQuote(dir)} -type f -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/dist/*' -not -path '*/.next/*' -not -path '*/.cache/*' -not -path '*/.electric/*' -not -name 'pnpm-lock.yaml' -not -name 'package-lock.json'`,
 			])
 			const stdout =
 				typeof result.stdout === "string" ? result.stdout : result.stdout.toString("utf-8")
@@ -254,7 +285,7 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		if (!sprite) return null
 
 		try {
-			const result = await sprite.exec(`cat ${filePath}`)
+			const result = await sprite.execFile("cat", [filePath])
 			return typeof result.stdout === "string" ? result.stdout : result.stdout.toString("utf-8")
 		} catch {
 			return null
@@ -304,9 +335,10 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		}
 
 		try {
+			const qDir = shellQuote(projectDir)
 			const initResult = await this.exec(
 				handle,
-				`cd ${projectDir} && test -d .git && echo "GIT_INIT=yes" || echo "GIT_INIT=no"`,
+				`cd ${qDir} && test -d .git && echo "GIT_INIT=yes" || echo "GIT_INIT=no"`,
 			)
 			if (!initResult.includes("GIT_INIT=yes")) {
 				return {
@@ -321,17 +353,17 @@ export class SpritesSandboxProvider implements SandboxProvider {
 			const branch = (
 				await this.exec(
 					handle,
-					`cd ${projectDir} && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""`,
+					`cd ${qDir} && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo ""`,
 				)
 			).trim()
 			const hash = (
-				await this.exec(handle, `cd ${projectDir} && git rev-parse HEAD 2>/dev/null || echo ""`)
+				await this.exec(handle, `cd ${qDir} && git rev-parse HEAD 2>/dev/null || echo ""`)
 			).trim()
 			const message = (
-				await this.exec(handle, `cd ${projectDir} && git log -1 --format=%s 2>/dev/null || echo ""`)
+				await this.exec(handle, `cd ${qDir} && git log -1 --format=%s 2>/dev/null || echo ""`)
 			).trim()
 			const statusOutput = (
-				await this.exec(handle, `cd ${projectDir} && git status --porcelain 2>/dev/null || echo ""`)
+				await this.exec(handle, `cd ${qDir} && git status --porcelain 2>/dev/null || echo ""`)
 			).trim()
 
 			return {
@@ -361,6 +393,11 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		repoUrl: string,
 		opts?: { branch?: string; apiKey?: string; oauthToken?: string; ghToken?: string },
 	): Promise<SandboxHandle> {
+		validateRepoUrl(repoUrl)
+		if (opts?.branch) {
+			validateBranchName(opts.branch)
+		}
+
 		const repoName =
 			repoUrl
 				.split("/")
@@ -375,13 +412,15 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		})
 
 		const targetDir = `/home/agent/workspace/${repoName}`
+		const qUrl = shellQuote(repoUrl)
+		const qDir = shellQuote(targetDir)
 		await this.exec(
 			handle,
-			`gh repo clone "${repoUrl}" "${targetDir}" 2>/dev/null || git clone "${repoUrl}" "${targetDir}"`,
+			`gh repo clone ${qUrl} ${qDir} 2>/dev/null || git clone ${qUrl} ${qDir}`,
 		)
 
 		if (opts?.branch) {
-			await this.exec(handle, `cd ${targetDir} && git checkout ${opts.branch}`)
+			await this.exec(handle, `cd ${qDir} && git checkout ${shellQuote(opts.branch)}`)
 		}
 
 		handle.projectDir = targetDir

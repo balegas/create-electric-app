@@ -34,8 +34,10 @@ import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandb
 import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
 import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
 import {
+	deriveGlobalHookSecret,
 	deriveHookToken,
 	deriveSessionToken,
+	validateGlobalHookSecret,
 	validateHookToken,
 	validateSessionToken,
 } from "./session-auth.js"
@@ -647,6 +649,17 @@ export function createApp(config: ServerConfig) {
 
 	// --- Unified Hook Endpoint (transcript_path correlation) ---
 
+	// Protect the unified hook endpoint with a global hook secret derived from
+	// the DS secret. The hook setup script embeds this secret in the forwarder
+	// so that only local Claude Code instances can post events.
+	app.use("/api/hook", async (c, next) => {
+		const token = extractToken(c)
+		if (!token || !validateGlobalHookSecret(config.streamConfig.secret, token)) {
+			return c.json({ error: "Invalid or missing hook secret" }, 401)
+		}
+		return next()
+	})
+
 	// Single endpoint for all Claude Code hook events. Uses transcript_path
 	// from the hook JSON as the correlation key — stable across resume/compact,
 	// changes on /clear. Replaces the need for client-side session tracking.
@@ -805,6 +818,7 @@ export function createApp(config: ServerConfig) {
 	// Usage: cd <project> && curl -s http://localhost:4400/api/hooks/setup | bash
 	app.get("/api/hooks/setup", (c) => {
 		const port = config.port
+		const hookSecret = deriveGlobalHookSecret(config.streamConfig.secret)
 		const script = `#!/bin/bash
 # Electric Agent — Claude Code hook installer (project-scoped)
 # Installs the hook forwarder into the current project's .claude/ directory.
@@ -825,10 +839,12 @@ cat > "\${FORWARD_SH}" << 'HOOKEOF'
 # Installed by: curl -s http://localhost:EA_PORT/api/hooks/setup | bash
 
 EA_PORT="\${EA_PORT:-EA_PORT_PLACEHOLDER}"
+EA_HOOK_SECRET="\${EA_HOOK_SECRET:-EA_HOOK_SECRET_PLACEHOLDER}"
 BODY="$(cat)"
 
 RESPONSE=$(curl -s -X POST "http://localhost:\${EA_PORT}/api/hook" \\
   -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer \${EA_HOOK_SECRET}" \\
   -d "\${BODY}" \\
   --max-time 360 \\
   --connect-timeout 2 \\
@@ -842,8 +858,9 @@ fi
 exit 0
 HOOKEOF
 
-# Replace placeholder with actual port
+# Replace placeholders with actual values
 sed -i.bak "s/EA_PORT_PLACEHOLDER/${port}/" "\${FORWARD_SH}" && rm -f "\${FORWARD_SH}.bak"
+sed -i.bak "s/EA_HOOK_SECRET_PLACEHOLDER/${hookSecret}/" "\${FORWARD_SH}" && rm -f "\${FORWARD_SH}.bak"
 chmod +x "\${FORWARD_SH}"
 
 # Merge hook config into project-level settings.local.json
@@ -1093,7 +1110,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							await config.sandbox.exec(handle, `cp -r /opt/scaffold-base '${handle.projectDir}'`)
 							await config.sandbox.exec(
 								handle,
-								`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`,
+								`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName.replace(/[^a-z0-9_-]/gi, "-")}"/' package.json`,
 							)
 						} else {
 							// Sprites: run scaffold from globally installed electric-agent
@@ -1781,6 +1798,38 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// --- Room Routes (agent-to-agent messaging) ---
 
+	// Extract room token from X-Room-Token header or ?token= query param.
+	// This is separate from extractToken() (which reads Authorization) so that
+	// Authorization remains available for session tokens on endpoints that need both.
+	function extractRoomToken(c: {
+		req: {
+			header: (name: string) => string | undefined
+			query: (name: string) => string | undefined
+		}
+	}): string | undefined {
+		return c.req.header("X-Room-Token") ?? c.req.query("token") ?? undefined
+	}
+
+	// Protect room-scoped routes via X-Room-Token header
+	app.use("/api/rooms/:id/*", async (c, next) => {
+		const id = c.req.param("id")
+		const token = extractRoomToken(c)
+		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+			return c.json({ error: "Invalid or missing room token" }, 401)
+		}
+		return next()
+	})
+
+	app.use("/api/rooms/:id", async (c, next) => {
+		if (c.req.method !== "GET" && c.req.method !== "DELETE") return next()
+		const id = c.req.param("id")
+		const token = extractRoomToken(c)
+		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+			return c.json({ error: "Invalid or missing room token" }, 401)
+		}
+		return next()
+	})
+
 	// Create a room
 	app.post("/api/rooms", async (c) => {
 		const body = (await c.req.json()) as {
@@ -2078,10 +2127,15 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		const { sessionId } = body
 
-		// Require a valid session token — caller must already own this session
+		// Require a valid session token — caller must already own this session.
+		// Room auth is handled by middleware via X-Room-Token; Authorization
+		// carries the session ownership proof here.
 		const authHeader = c.req.header("Authorization")
-		const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined
-		if (!token || !validateSessionToken(config.streamConfig.secret, sessionId, token)) {
+		const sessionToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined
+		if (
+			!sessionToken ||
+			!validateSessionToken(config.streamConfig.secret, sessionId, sessionToken)
+		) {
 			return c.json({ error: "Invalid or missing session token" }, 401)
 		}
 
@@ -2470,9 +2524,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const parsed = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
 			const token = parsed.claudeAiOauth?.accessToken ?? null
 			if (token) {
-				console.log(
-					`[dev] Loaded OAuth token from keychain: ${token.slice(0, 20)}...${token.slice(-10)}`,
-				)
+				console.log(`[dev] Loaded OAuth token from keychain (length: ${token.length})`)
 			} else {
 				console.log("[dev] No OAuth token found in keychain")
 			}
