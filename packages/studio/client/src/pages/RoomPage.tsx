@@ -81,7 +81,7 @@ export function RoomPage() {
 
 	if (error) {
 		return (
-			<div className="shared-session-error">
+			<div className="room-error">
 				<h2>Cannot load room</h2>
 				<p>{error}</p>
 				<button type="button" className="btn" onClick={() => navigate("/")}>

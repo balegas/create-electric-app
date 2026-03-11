@@ -1,5 +1,6 @@
 ---
 "@electric-agent/studio": minor
+"@electric-agent/protocol": minor
 ---
 
-Unify shared sessions and agent rooms into a single "Rooms" concept. The sidebar now has one "Rooms" section instead of separate "Rooms" and "Agent Rooms" sections. Room headers display the room name and a copy-invite-code button. Legacy `/shared/:id/:code` URLs redirect to `/room/:id`. Client-side localStorage stores are merged with automatic migration of existing entries.
+Unify shared sessions and agent rooms into a single "Rooms" concept. Remove all legacy shared-session code: `/api/shared-sessions/*` routes, SharedSessionPage, SharedSessionHeader, useSharedSession hook, shared-session-store, presence ping system, and related CSS. Rename `SharedSessionEvent` to `RoomEvent` and `shared_session_created` to `room_created` in the protocol. The sidebar now has one "Rooms" section. Room headers display the room name and a copy-invite-code button.

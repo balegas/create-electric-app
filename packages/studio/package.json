@@ -34,10 +34,6 @@
 			"types": "./dist/bridge/index.d.ts",
 			"import": "./dist/bridge/index.js"
 		},
-		"./shared-sessions": {
-			"types": "./dist/shared-sessions.d.ts",
-			"import": "./dist/shared-sessions.js"
-		},
 		"./room-registry": {
 			"types": "./dist/room-registry.d.ts",
 			"import": "./dist/room-registry.js"

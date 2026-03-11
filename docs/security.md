@@ -83,7 +83,7 @@ The `hook:` prefix prevents a session token from being used as a hook token and 
 
 ### Room Endpoints
 
-Rooms (`/api/rooms/*`) currently rely on the studio being deployed behind a trusted network boundary (local or reverse proxy) rather than per-request token auth. The legacy `/api/shared-sessions/*` endpoints are still functional but deprecated — new clients should use `/api/rooms/*`.
+Rooms (`/api/rooms/*`) currently rely on the studio being deployed behind a trusted network boundary (local or reverse proxy) rather than per-request token auth.
 
 | Endpoint | Auth | Notes |
 |----------|:----:|-------|

@@ -3,7 +3,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { DurableStream } from "@durable-streams/client"
-import type { EngineEvent, Participant, SharedSessionEvent } from "@electric-agent/protocol"
+import type { EngineEvent, Participant, RoomEvent } from "@electric-agent/protocol"
 import { ts } from "@electric-agent/protocol"
 import { serve } from "@hono/node-server"
 import { serveStatic } from "@hono/node-server/serve-static"
@@ -26,6 +26,7 @@ import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
+import { generateInviteCode } from "./invite-code.js"
 import { resolveProjectDir } from "./project-utils.js"
 import type { RoomRegistry } from "./room-registry.js"
 import { type RoomParticipant, RoomRouter } from "./room-router.js"
@@ -39,10 +40,8 @@ import {
 	validateSessionToken,
 } from "./session-auth.js"
 import type { SessionInfo } from "./sessions.js"
-import { generateInviteCode } from "./shared-sessions.js"
 import {
 	getRoomStreamConnectionInfo,
-	getSharedStreamConnectionInfo,
 	getStreamConnectionInfo,
 	type StreamConfig,
 	type StreamConnectionInfo,
@@ -67,9 +66,6 @@ interface ServerConfig {
 /** Active session bridges — one per running session */
 const bridges = new Map<string, SessionBridge>()
 
-/** In-memory room presence: roomId → participantId → { displayName, lastPing } */
-const roomPresence = new Map<string, Map<string, { displayName: string; lastPing: number }>>()
-
 /** Active room routers — one per room with agent-to-agent messaging */
 const roomRouters = new Map<string, RoomRouter>()
 
@@ -85,11 +81,6 @@ function parseRepoNameFromUrl(url: string | null): string | null {
 /** Get stream connection info for a session (URL + auth headers) */
 function sessionStream(config: ServerConfig, sessionId: string): StreamConnectionInfo {
 	return getStreamConnectionInfo(sessionId, config.streamConfig)
-}
-
-/** Get stream connection info for a shared session */
-function sharedSessionStream(config: ServerConfig, sharedSessionId: string): StreamConnectionInfo {
-	return getSharedStreamConnectionInfo(sharedSessionId, config.streamConfig)
 }
 
 /** Get stream connection info for a room */
@@ -1788,323 +1779,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ ok: true })
 	})
 
-	// --- Shared Sessions ---
-
-	// Protect /api/shared-sessions/:id/* (all sub-routes)
-	// Exempt: "join" (Hono matches join/:code as :id/*)
-	const sharedSessionExemptIds = new Set(["join"])
-
-	app.use("/api/shared-sessions/:id/*", async (c, next) => {
-		const id = c.req.param("id")
-		if (sharedSessionExemptIds.has(id)) return next()
-
-		const token = extractToken(c)
-		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
-			return c.json({ error: "Invalid or missing room token" }, 401)
-		}
-		return next()
-	})
-
-	// Create a shared session
-	app.post("/api/shared-sessions", async (c) => {
-		const body = (await c.req.json()) as {
-			name: string
-			participant: Participant
-		}
-		if (!body.name || !body.participant?.id || !body.participant?.displayName) {
-			return c.json({ error: "name and participant (id, displayName) are required" }, 400)
-		}
-
-		const id = crypto.randomUUID()
-		const code = generateInviteCode()
-
-		// Create the shared session durable stream
-		const conn = sharedSessionStream(config, id)
-		try {
-			await DurableStream.create({
-				url: conn.url,
-				headers: conn.headers,
-				contentType: "application/json",
-			})
-		} catch (err) {
-			console.error(`[shared-session] Failed to create durable stream:`, err)
-			return c.json({ error: "Failed to create shared session stream" }, 500)
-		}
-
-		// Write shared_session_created event
-		const stream = new DurableStream({
-			url: conn.url,
-			headers: conn.headers,
-			contentType: "application/json",
-		})
-		const createdEvent: SharedSessionEvent = {
-			type: "shared_session_created",
-			name: body.name,
-			code,
-			createdBy: body.participant,
-			ts: ts(),
-		}
-		await stream.append(JSON.stringify(createdEvent))
-
-		// Write participant_joined for the creator
-		const joinedEvent: SharedSessionEvent = {
-			type: "participant_joined",
-			participant: body.participant,
-			ts: ts(),
-		}
-		await stream.append(JSON.stringify(joinedEvent))
-
-		// Save to room registry
-		await config.rooms.addRoom({
-			id,
-			code,
-			name: body.name,
-			createdAt: new Date().toISOString(),
-			revoked: false,
-		})
-
-		const roomToken = deriveSessionToken(config.streamConfig.secret, id)
-		console.log(`[shared-session] Created: id=${id} code=${code}`)
-		return c.json({ id, code, roomToken }, 201)
-	})
-
-	// Resolve invite (id + code) → shared session ID + room token
-	app.get("/api/shared-sessions/join/:id/:code", (c) => {
-		const id = c.req.param("id")
-		const code = c.req.param("code")
-		const entry = config.rooms.getRoom(id)
-		if (!entry || entry.code !== code) return c.json({ error: "Shared session not found" }, 404)
-		const roomToken = deriveSessionToken(config.streamConfig.secret, entry.id)
-		return c.json({ id: entry.id, code: entry.code, revoked: entry.revoked, roomToken })
-	})
-
-	// Join a shared session as participant
-	app.post("/api/shared-sessions/:id/join", async (c) => {
-		const id = c.req.param("id")
-		const entry = config.rooms.getRoom(id)
-		if (!entry) return c.json({ error: "Shared session not found" }, 404)
-		if (entry.revoked) return c.json({ error: "Invite code has been revoked" }, 403)
-
-		const body = (await c.req.json()) as { participant: Participant }
-		if (!body.participant?.id || !body.participant?.displayName) {
-			return c.json({ error: "participant (id, displayName) is required" }, 400)
-		}
-
-		const conn = sharedSessionStream(config, id)
-		const stream = new DurableStream({
-			url: conn.url,
-			headers: conn.headers,
-			contentType: "application/json",
-		})
-		const event: SharedSessionEvent = {
-			type: "participant_joined",
-			participant: body.participant,
-			ts: ts(),
-		}
-		await stream.append(JSON.stringify(event))
-
-		return c.json({ ok: true })
-	})
-
-	// Leave a shared session
-	app.post("/api/shared-sessions/:id/leave", async (c) => {
-		const id = c.req.param("id")
-		const body = (await c.req.json()) as { participantId: string }
-		if (!body.participantId) {
-			return c.json({ error: "participantId is required" }, 400)
-		}
-
-		const conn = sharedSessionStream(config, id)
-		const stream = new DurableStream({
-			url: conn.url,
-			headers: conn.headers,
-			contentType: "application/json",
-		})
-		const event: SharedSessionEvent = {
-			type: "participant_left",
-			participantId: body.participantId,
-			ts: ts(),
-		}
-		await stream.append(JSON.stringify(event))
-
-		return c.json({ ok: true })
-	})
-
-	// Heartbeat ping for room presence (in-memory, not persisted to stream)
-	app.post("/api/shared-sessions/:id/ping", async (c) => {
-		const id = c.req.param("id")
-		const body = (await c.req.json()) as { participantId: string; displayName: string }
-		if (!body.participantId) {
-			return c.json({ error: "participantId is required" }, 400)
-		}
-
-		let room = roomPresence.get(id)
-		if (!room) {
-			room = new Map()
-			roomPresence.set(id, room)
-		}
-		room.set(body.participantId, {
-			displayName: body.displayName || body.participantId.slice(0, 8),
-			lastPing: Date.now(),
-		})
-
-		return c.json({ ok: true })
-	})
-
-	// Get active participants (pinged within last 90 seconds)
-	app.get("/api/shared-sessions/:id/presence", (c) => {
-		const id = c.req.param("id")
-		const room = roomPresence.get(id)
-		const STALE_MS = 90_000
-		const now = Date.now()
-		const active: Participant[] = []
-
-		if (room) {
-			for (const [pid, info] of room) {
-				if (now - info.lastPing < STALE_MS) {
-					active.push({ id: pid, displayName: info.displayName })
-				} else {
-					room.delete(pid)
-				}
-			}
-		}
-
-		return c.json({ participants: active })
-	})
-
-	// Link a session to a shared session (room)
-	// The client sends session metadata since sessions are private (localStorage).
-	app.post("/api/shared-sessions/:id/sessions", async (c) => {
-		const id = c.req.param("id")
-		const body = (await c.req.json()) as {
-			sessionId: string
-			sessionName: string
-			sessionDescription: string
-			linkedBy: string
-		}
-		if (!body.sessionId || !body.linkedBy) {
-			return c.json({ error: "sessionId and linkedBy are required" }, 400)
-		}
-
-		const conn = sharedSessionStream(config, id)
-		const stream = new DurableStream({
-			url: conn.url,
-			headers: conn.headers,
-			contentType: "application/json",
-		})
-		const event: SharedSessionEvent = {
-			type: "session_linked",
-			sessionId: body.sessionId,
-			sessionName: body.sessionName || "",
-			sessionDescription: body.sessionDescription || "",
-			linkedBy: body.linkedBy,
-			ts: ts(),
-		}
-		await stream.append(JSON.stringify(event))
-
-		return c.json({ ok: true })
-	})
-
-	// Get a session token for a linked session (allows room participants to read session streams)
-	app.get("/api/shared-sessions/:id/sessions/:sessionId/token", (c) => {
-		const sessionId = c.req.param("sessionId")
-		const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
-		return c.json({ sessionToken })
-	})
-
-	// Unlink a session from a shared session
-	app.delete("/api/shared-sessions/:id/sessions/:sessionId", async (c) => {
-		const id = c.req.param("id")
-		const sessionId = c.req.param("sessionId")
-
-		const conn = sharedSessionStream(config, id)
-		const stream = new DurableStream({
-			url: conn.url,
-			headers: conn.headers,
-			contentType: "application/json",
-		})
-		const event: SharedSessionEvent = {
-			type: "session_unlinked",
-			sessionId,
-			ts: ts(),
-		}
-		await stream.append(JSON.stringify(event))
-
-		return c.json({ ok: true })
-	})
-
-	// SSE proxy for shared session events
-	app.get("/api/shared-sessions/:id/events", async (c) => {
-		const id = c.req.param("id")
-		const entry = config.rooms.getRoom(id)
-		if (!entry) return c.json({ error: "Shared session not found" }, 404)
-
-		const connection = sharedSessionStream(config, id)
-		const lastEventId = c.req.header("Last-Event-ID") || c.req.query("offset") || "-1"
-
-		const reader = new DurableStream({
-			url: connection.url,
-			headers: connection.headers,
-			contentType: "application/json",
-		})
-
-		const { readable, writable } = new TransformStream()
-		const writer = writable.getWriter()
-		const encoder = new TextEncoder()
-		let cancelled = false
-
-		const response = await reader.stream<Record<string, unknown>>({
-			offset: lastEventId,
-			live: true,
-		})
-
-		const cancel = response.subscribeJson<Record<string, unknown>>((batch) => {
-			if (cancelled) return
-			for (const item of batch.items) {
-				const data = JSON.stringify(item)
-				writer.write(encoder.encode(`id:${batch.offset}\ndata:${data}\n\n`)).catch(() => {
-					cancelled = true
-				})
-			}
-		})
-
-		c.req.raw.signal.addEventListener("abort", () => {
-			cancelled = true
-			cancel()
-			writer.close().catch(() => {})
-		})
-
-		return new Response(readable, {
-			headers: {
-				"Content-Type": "text/event-stream",
-				"Cache-Control": "no-cache",
-				Connection: "keep-alive",
-				"Access-Control-Allow-Origin": "*",
-			},
-		})
-	})
-
-	// Revoke a shared session's invite code
-	app.post("/api/shared-sessions/:id/revoke", async (c) => {
-		const id = c.req.param("id")
-		const revoked = await config.rooms.revokeRoom(id)
-		if (!revoked) return c.json({ error: "Shared session not found" }, 404)
-
-		const conn = sharedSessionStream(config, id)
-		const stream = new DurableStream({
-			url: conn.url,
-			headers: conn.headers,
-			contentType: "application/json",
-		})
-		const event: SharedSessionEvent = {
-			type: "code_revoked",
-			ts: ts(),
-		}
-		await stream.append(JSON.stringify(event))
-
-		return c.json({ ok: true })
-	})
-
 	// --- Room Routes (agent-to-agent messaging) ---
 
 	// Create a room
@@ -2588,7 +2262,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			headers: conn.headers,
 			contentType: "application/json",
 		})
-		const event: SharedSessionEvent = {
+		const event: RoomEvent = {
 			type: "room_closed",
 			closedBy: "human",
 			summary: "Room closed by user",

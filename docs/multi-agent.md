@@ -142,10 +142,9 @@ All room activity is streamed as `EngineEvent` types (see [Protocol](./protocol.
 
 | Event | When |
 |-------|------|
-| `shared_session_created` | Room created (legacy event name) |
+| `room_created` | Room created |
 | `participant_joined` | Agent or user joined |
 | `participant_left` | Agent or user left |
-| `session_linked` | Agent session linked to room |
 | `agent_message` | Message routed through room |
 | `outbound_message_gate` | Gated message awaiting approval |
 | `room_closed` | Conversation ended |

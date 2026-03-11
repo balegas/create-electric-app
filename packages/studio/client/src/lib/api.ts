@@ -1,6 +1,6 @@
 import { getApiKey, getGhToken, getOauthToken } from "./credentials"
 import { getOrCreateParticipant } from "./participant"
-import { getRoomToken, getSessionToken, setRoomToken, setSessionToken } from "./session-store"
+import { getSessionToken, setSessionToken } from "./session-store"
 
 const API_BASE = "/api"
 
@@ -34,15 +34,6 @@ function extractSessionId(path: string): string | undefined {
 	return match?.[1]
 }
 
-/** Extract shared session ID from API paths like /shared-sessions/:id/... */
-function extractSharedSessionId(path: string): string | undefined {
-	const match = path.match(/^\/shared-sessions\/([^/]+)/)
-	if (!match) return undefined
-	// Don't match the "join" path (it's the code-lookup route, not a room ID)
-	if (match[1] === "join") return undefined
-	return match[1]
-}
-
 async function request<T>(
 	path: string,
 	opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
@@ -54,15 +45,6 @@ async function request<T>(
 	const sessionId = extractSessionId(path)
 	if (sessionId) {
 		const token = getSessionToken(sessionId)
-		if (token) {
-			headers.Authorization = `Bearer ${token}`
-		}
-	}
-
-	// Attach room token for shared-session-scoped requests
-	const sharedSessionId = extractSharedSessionId(path)
-	if (sharedSessionId) {
-		const token = getRoomToken(sharedSessionId)
 		if (token) {
 			headers.Authorization = `Bearer ${token}`
 		}
@@ -255,98 +237,7 @@ export async function resumeFromGithub(repoUrl: string, branch?: string) {
 	return result
 }
 
-// --- Shared Sessions (Rooms) ---
-
-export async function createSharedSession(name: string) {
-	const participant = getOrCreateParticipant()
-	const result = await request<{ id: string; code: string; roomToken: string }>(
-		"/shared-sessions",
-		{
-			method: "POST",
-			body: { name, participant },
-		},
-	)
-	if (result.roomToken) {
-		setRoomToken(result.id, result.roomToken)
-	}
-	return result
-}
-
-export async function joinSharedSession(id: string, code: string) {
-	const result = await request<{ id: string; code: string; revoked: boolean; roomToken: string }>(
-		`/shared-sessions/join/${id}/${code}`,
-	)
-	if (result.roomToken) {
-		setRoomToken(result.id, result.roomToken)
-	}
-	return result
-}
-
-export function joinAsParticipant(sharedSessionId: string) {
-	const participant = getOrCreateParticipant()
-	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/join`, {
-		method: "POST",
-		body: { participant },
-	})
-}
-
-export function leaveSharedSession(sharedSessionId: string) {
-	const participant = getOrCreateParticipant()
-	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/leave`, {
-		method: "POST",
-		body: { participantId: participant.id },
-	})
-}
-
-export function pingRoom(sharedSessionId: string) {
-	const participant = getOrCreateParticipant()
-	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/ping`, {
-		method: "POST",
-		body: { participantId: participant.id, displayName: participant.displayName },
-	})
-}
-
-export function getRoomPresence(sharedSessionId: string) {
-	return request<{ participants: { id: string; displayName: string }[] }>(
-		`/shared-sessions/${sharedSessionId}/presence`,
-	)
-}
-
-export function linkSession(
-	sharedSessionId: string,
-	sessionId: string,
-	sessionName: string,
-	sessionDescription: string,
-) {
-	const participant = getOrCreateParticipant()
-	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/sessions`, {
-		method: "POST",
-		body: {
-			sessionId,
-			sessionName,
-			sessionDescription,
-			linkedBy: participant.displayName,
-		},
-	})
-}
-
-export function unlinkSession(sharedSessionId: string, sessionId: string) {
-	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/sessions/${sessionId}`, {
-		method: "DELETE",
-	})
-}
-
-export function getLinkedSessionToken(roomId: string, sessionId: string) {
-	return request<{ sessionToken: string }>(`/shared-sessions/${roomId}/sessions/${sessionId}/token`)
-}
-
-export function revokeSharedSession(sharedSessionId: string) {
-	return request<{ ok: boolean }>(`/shared-sessions/${sharedSessionId}/revoke`, {
-		method: "POST",
-	})
-}
-
-// --- Agent Rooms ---
+// --- Rooms ---
 
 export interface RoomState {
 	roomId: string

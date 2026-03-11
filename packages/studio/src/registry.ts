@@ -1,7 +1,17 @@
 import { DurableStream } from "@durable-streams/client"
 import type { SessionInfo } from "./sessions.js"
-import type { SharedSessionEntry } from "./shared-sessions.js"
 import { getRegistryConnectionInfo, type StreamConfig } from "./streams.js"
+
+// --- Room Entry (persisted in registry stream) ---
+
+export interface RoomEntry {
+	id: string
+	/** 8-char random invite code (e.g. "ABCD-1234") */
+	code: string
+	name?: string
+	createdAt: string
+	revoked: boolean
+}
 
 // --- Registry Event Types (internal to studio) ---
 
@@ -10,7 +20,7 @@ type RegistryEvent =
 	| { type: "session_updated"; sessionId: string; update: Partial<SessionInfo>; ts: string }
 	| { type: "session_deleted"; sessionId: string; ts: string }
 	| { type: "session_mapped"; transcriptPath: string; sessionId: string; ts: string }
-	| { type: "room_created"; room: SharedSessionEntry; ts: string }
+	| { type: "room_created"; room: RoomEntry; ts: string }
 	| { type: "room_revoked"; roomId: string; ts: string }
 
 /**
@@ -22,8 +32,8 @@ type RegistryEvent =
 export class Registry {
 	private sessions = new Map<string, SessionInfo>()
 	private transcriptToSession = new Map<string, string>()
-	private rooms = new Map<string, SharedSessionEntry>()
-	private roomsByCode = new Map<string, SharedSessionEntry>()
+	private rooms = new Map<string, RoomEntry>()
+	private roomsByCode = new Map<string, RoomEntry>()
 	private stream: DurableStream
 
 	private constructor(stream: DurableStream) {
@@ -209,9 +219,9 @@ export class Registry {
 		})
 	}
 
-	// --- Room (Shared Session) CRUD ---
+	// --- Room CRUD ---
 
-	async addRoom(entry: SharedSessionEntry): Promise<void> {
+	async addRoom(entry: RoomEntry): Promise<void> {
 		await this.append({
 			type: "room_created",
 			room: entry,
@@ -219,11 +229,11 @@ export class Registry {
 		})
 	}
 
-	getRoom(id: string): SharedSessionEntry | undefined {
+	getRoom(id: string): RoomEntry | undefined {
 		return this.rooms.get(id)
 	}
 
-	getRoomByCode(code: string): SharedSessionEntry | undefined {
+	getRoomByCode(code: string): RoomEntry | undefined {
 		return this.roomsByCode.get(code)
 	}
 

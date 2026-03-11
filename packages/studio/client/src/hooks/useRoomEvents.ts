@@ -1,4 +1,4 @@
-import type { SharedSessionEvent } from "@electric-agent/protocol"
+import type { RoomEvent as ProtocolRoomEvent } from "@electric-agent/protocol"
 import { useEffect, useRef, useState } from "react"
 
 export interface RoomMessage {
@@ -70,7 +70,7 @@ export function useRoomEvents(roomId: string | null) {
 					lastEventIdRef.current = e.lastEventId
 				}
 				try {
-					const event = JSON.parse(e.data) as SharedSessionEvent
+					const event = JSON.parse(e.data) as ProtocolRoomEvent
 					setEvents((prev) => [...prev, event as unknown as RoomEvent])
 				} catch {
 					// Ignore malformed events
