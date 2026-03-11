@@ -78,15 +78,3 @@ export function getRoomStreamConnectionInfo(
 		},
 	}
 }
-
-/**
- * Env vars to pass to a sandbox so it can connect to the same stream.
- */
-export function getStreamEnvVars(sessionId: string, config: StreamConfig): Record<string, string> {
-	return {
-		DS_URL: config.url,
-		DS_SERVICE_ID: config.serviceId,
-		DS_SECRET: config.secret,
-		SESSION_ID: sessionId,
-	}
-}

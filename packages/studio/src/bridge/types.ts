@@ -16,18 +16,6 @@ export interface SessionBridge {
 	readonly sessionId: string
 
 	/**
-	 * Full stream URL for client SSE subscription.
-	 * The React client subscribes to this for real-time event display.
-	 */
-	readonly streamUrl: string
-
-	/**
-	 * Headers required for stream access (e.g., Authorization).
-	 * Needed by the React client for SSE subscription.
-	 */
-	readonly streamHeaders: Record<string, string>
-
-	/**
 	 * Emit a server-originated event to the stream.
 	 * These are visible to UI subscribers (e.g., user_message, gate_resolved).
 	 */

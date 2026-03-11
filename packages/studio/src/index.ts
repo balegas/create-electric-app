@@ -26,5 +26,4 @@ export {
 	getRoomStreamConnectionInfo,
 	getStreamConfig,
 	getStreamConnectionInfo,
-	getStreamEnvVars,
 } from "./streams.js"
