@@ -49,33 +49,52 @@ pnpm run build:sandbox    # builds electric-agent-sandbox Docker image
 - Only port 8080 is exposed externally.
 - Communicates via SSH + stream-json.
 
+### Sandbox Credentials
+
+Sandboxes receive only the credentials they need to run the agent:
+
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` | Claude API access |
+| `GH_TOKEN` | GitHub operations |
+| `DATABASE_URL` | Postgres connection |
+| `ELECTRIC_URL` / `ELECTRIC_SECRET` / `ELECTRIC_SOURCE_ID` | Electric sync service |
+
+Sandboxes do **not** receive Durable Streams credentials (`DS_SECRET`, `DS_URL`, `DS_SERVICE_ID`). All stream access is proxied through the studio server. See [Security](./security.md#credential-isolation).
+
 ## Bridge Modes
 
-Bridges connect the server to the agent process running inside the sandbox. The bridge mode determines how events flow:
+Bridges connect the server to the agent process running inside the sandbox. All bridges run **server-side** — they are part of the studio server process, not the sandbox. The bridge mode determines how events flow:
 
 | Mode | Bridge Class | How It Works |
 |------|-------------|-------------|
-| `stream` | `HostedStreamBridge` | Agent reads/writes Durable Streams directly via DS env vars. No stdin/stdout piping. |
-| `claude-code` | `ClaudeCodeDockerBridge` / `ClaudeCodeSpritesBridge` | Spawns `claude` CLI with stream-json I/O inside the sandbox. |
+| `stream` | `HostedStreamBridge` | Both server and agent read/write the same Durable Stream. No stdin/stdout piping. |
+| `claude-code` | `ClaudeCodeDockerBridge` / `ClaudeCodeSpritesBridge` | Spawns `claude` CLI with stream-json I/O inside the sandbox. Bridge parses stdout and writes events to the Durable Stream. |
 
 ### SessionBridge Interface
 
 ```typescript
 interface SessionBridge {
-  start(): Promise<void>
-  close(): Promise<void>
-  interrupt(): Promise<void>
+  readonly sessionId: string
 
-  emit(event: EngineEvent): void          // Server → Agent
-  sendCommand(command: string): void       // User iteration → Agent
-  sendGateResponse(response: object): void // Gate resolution → Agent
-  onAgentEvent(callback): void             // Agent → UI streaming
+  start(): Promise<void>
+  close(): void
+  interrupt(): void
+  isRunning(): boolean
+
+  emit(event: EngineEvent): Promise<void>          // Server → Stream
+  sendCommand(cmd: Record<string, unknown>): Promise<void>  // User iteration → Agent
+  sendGateResponse(gate: string, value: Record<string, unknown>): Promise<void>  // Gate resolution → Agent
+  onAgentEvent(cb: (event: EngineEvent) => void): void      // Agent → UI streaming
+  onComplete(cb: (success: boolean) => void): void           // Session end notification
 }
 ```
 
+DS credentials (stream URL, auth headers) are internal to each bridge implementation. They are not exposed on the `SessionBridge` interface.
+
 ### HostedStreamBridge (`stream`)
 
-The agent writes directly to the Durable Stream. The server subscribes to the same stream and proxies events to the browser. This is the simplest mode — no stdin/stdout piping.
+Both the server and the agent write directly to the same Durable Stream. The server subscribes to the stream and proxies events to the browser via SSE. This is the simplest mode — no stdin/stdout piping.
 
 ```
 Agent ──writes──→ Durable Stream ←──reads── Server ──SSE──→ Browser
@@ -122,13 +141,15 @@ Server                          Sandbox
 
 ## Environment Variables
 
-### Required
+### Required (Server Only)
 
 | Variable | Purpose |
 |----------|---------|
 | `DS_URL` | Durable Streams API URL |
 | `DS_SERVICE_ID` | Durable Streams service ID |
 | `DS_SECRET` | Durable Streams JWT secret (also used for token derivation) |
+
+These credentials stay exclusively in the studio server process. They are never passed to sandboxes.
 
 ### Provider-Specific
 

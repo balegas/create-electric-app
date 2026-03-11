@@ -131,4 +131,14 @@ Each session's event log is backed by a [Durable Stream](https://github.com/dura
 - **Full session replay**: Opening an old session replays all events from the start.
 - **Multi-writer**: Both the server and the agent write to the same stream (distinguished by a `source` field).
 
-Connection info is derived from `DS_URL`, `DS_SERVICE_ID`, and `DS_SECRET` environment variables. The SSE proxy hides these credentials from the browser — clients only see `/api/sessions/:id/events`.
+### Proxy Architecture
+
+Durable Streams credentials (`DS_URL`, `DS_SERVICE_ID`, `DS_SECRET`) stay exclusively in the studio server process. All external access goes through authenticated proxy endpoints:
+
+| Proxy Endpoint | Direction | Auth |
+|----------------|-----------|------|
+| `GET /api/sessions/:id/events` | Read (SSE) | Session token via `?token=` |
+| `POST /api/sessions/:id/stream/append` | Write | Session token via `Authorization` header |
+| `GET /api/rooms/:id/events` | Read (SSE) | Room token via `?token=` |
+
+Clients and sandboxes never communicate with Durable Streams directly. See [Security](./security.md#credential-isolation).
