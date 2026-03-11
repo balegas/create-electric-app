@@ -8,7 +8,6 @@ import { ts } from "@electric-agent/protocol"
 import { serve } from "@hono/node-server"
 import { serveStatic } from "@hono/node-server/serve-static"
 import { Hono } from "hono"
-import { cors } from "hono/cors"
 import { ActiveSessions } from "./active-sessions.js"
 import {
 	addAgentSchema,
@@ -378,9 +377,6 @@ function mapHookToEngineEvent(body: Record<string, unknown>): EngineEvent | null
 
 export function createApp(config: ServerConfig) {
 	const app = new Hono()
-
-	// CORS for local development
-	app.use("*", cors({ origin: "*" }))
 
 	// --- API Routes ---
 
