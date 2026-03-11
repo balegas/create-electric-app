@@ -1,6 +1,6 @@
 import { getApiKey, getGhToken, getOauthToken } from "./credentials"
 import { getOrCreateParticipant } from "./participant"
-import { getSessionToken, setSessionToken } from "./session-store"
+import { getRoomToken, getSessionToken, setRoomToken, setSessionToken } from "./session-store"
 
 const API_BASE = "/api"
 
@@ -34,6 +34,15 @@ function extractSessionId(path: string): string | undefined {
 	return match?.[1]
 }
 
+/** Extract room ID from API paths like /rooms/:id/... */
+function extractRoomId(path: string): string | undefined {
+	const match = path.match(/^\/rooms\/([^/]+)/)
+	if (!match) return undefined
+	// Don't match the "join" path (it's the code-lookup route, not a room ID)
+	if (match[1] === "join") return undefined
+	return match[1]
+}
+
 async function request<T>(
 	path: string,
 	opts?: { method?: string; body?: unknown; headers?: Record<string, string> },
@@ -45,6 +54,15 @@ async function request<T>(
 	const sessionId = extractSessionId(path)
 	if (sessionId) {
 		const token = getSessionToken(sessionId)
+		if (token) {
+			headers.Authorization = `Bearer ${token}`
+		}
+	}
+
+	// Attach room token for room-scoped requests
+	const roomId = extractRoomId(path)
+	if (roomId && !headers.Authorization) {
+		const token = getRoomToken(roomId)
 		if (token) {
 			headers.Authorization = `Bearer ${token}`
 		}
@@ -247,16 +265,24 @@ export interface RoomState {
 }
 
 export async function createAgentRoom(name: string, maxRounds?: number) {
-	return request<{ roomId: string; code: string; roomToken: string }>("/rooms", {
+	const result = await request<{ roomId: string; code: string; roomToken: string }>("/rooms", {
 		method: "POST",
 		body: { name, maxRounds },
 	})
+	if (result.roomToken) {
+		setRoomToken(result.roomId, result.roomToken)
+	}
+	return result
 }
 
 export async function joinAgentRoom(id: string, code: string) {
-	return request<{ id: string; code: string; name: string; roomToken: string }>(
+	const result = await request<{ id: string; code: string; name: string; roomToken: string }>(
 		`/rooms/join/${id}/${code}`,
 	)
+	if (result.roomToken) {
+		setRoomToken(result.id, result.roomToken)
+	}
+	return result
 }
 
 export function getAgentRoomState(roomId: string) {

@@ -1,5 +1,6 @@
 import type { RoomEvent as ProtocolRoomEvent } from "@electric-agent/protocol"
 import { useEffect, useRef, useState } from "react"
+import { getRoomToken } from "../lib/session-store"
 
 export interface RoomMessage {
 	type: "agent_message"
@@ -50,6 +51,8 @@ export function useRoomEvents(roomId: string | null) {
 			}
 
 			const params = new URLSearchParams()
+			const roomTokenValue = getRoomToken(roomId)
+			if (roomTokenValue) params.set("token", roomTokenValue)
 			if (lastEventIdRef.current !== "-1") {
 				params.set("offset", lastEventIdRef.current)
 			}

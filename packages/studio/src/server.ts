@@ -1781,6 +1781,26 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// --- Room Routes (agent-to-agent messaging) ---
 
+	// Protect room-scoped routes (same pattern as sessions / shared-sessions)
+	app.use("/api/rooms/:id/*", async (c, next) => {
+		const id = c.req.param("id")
+		const token = extractToken(c)
+		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+			return c.json({ error: "Invalid or missing room token" }, 401)
+		}
+		return next()
+	})
+
+	app.use("/api/rooms/:id", async (c, next) => {
+		if (c.req.method !== "GET" && c.req.method !== "DELETE") return next()
+		const id = c.req.param("id")
+		const token = extractToken(c)
+		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+			return c.json({ error: "Invalid or missing room token" }, 401)
+		}
+		return next()
+	})
+
 	// Create a room
 	app.post("/api/rooms", async (c) => {
 		const body = (await c.req.json()) as {
