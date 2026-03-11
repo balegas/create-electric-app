@@ -31,7 +31,7 @@ Client: Store in localStorage                Validates: timingSafeEqual(expected
 
 ## Room Token Authentication
 
-Shared sessions (rooms) use the same HMAC mechanism, keyed on the room ID:
+Rooms use the same HMAC mechanism, keyed on the room ID:
 
 ```
 Token = HMAC-SHA256(DS_SECRET, roomId)  →  64-char hex string
@@ -43,7 +43,7 @@ The invite code serves as initial authentication — knowing the code grants the
         Creator                          Joiner (via invite code)
         ───────                          ────────────────────────
 
-Server: roomId = UUID                   GET /api/shared-sessions/join/:id/:code
+Server: roomId = UUID                   GET /api/rooms/join/:id/:code
         roomToken = HMAC(DS_SECRET,       → validates id + code match
                          roomId)          → returns { id, roomToken }
         Return { id, code, roomToken }
@@ -83,25 +83,12 @@ The `hook:` prefix prevents a session token from being used as a hook token and 
 
 ### Room Endpoints
 
-| Endpoint | Auth | Notes |
-|----------|:----:|-------|
-| `POST /api/shared-sessions` | No | Creation — returns `roomToken` |
-| `GET /api/shared-sessions/join/:id/:code` | No | Invite code lookup — returns `roomToken` |
-| `POST /api/shared-sessions/:id/join` | Yes | Join as participant |
-| `POST /api/shared-sessions/:id/leave` | Yes | Leave room |
-| `POST /api/shared-sessions/:id/sessions` | Yes | Link an agent session |
-| `DELETE /api/shared-sessions/:id/sessions/:sid` | Yes | Unlink an agent session |
-| `GET /api/shared-sessions/:id/events` | Yes | SSE stream (`?token=` query param) |
-| `POST /api/shared-sessions/:id/revoke` | Yes | Revoke invite code |
-
-### Agent Room Endpoints
-
-Agent rooms (`/api/rooms/*`) are a separate system from shared sessions. They currently rely on the studio being deployed behind a trusted network boundary (local or reverse proxy) rather than per-request token auth.
+Rooms (`/api/rooms/*`) currently rely on the studio being deployed behind a trusted network boundary (local or reverse proxy) rather than per-request token auth. The legacy `/api/shared-sessions/*` endpoints are still functional but deprecated — new clients should use `/api/rooms/*`.
 
 | Endpoint | Auth | Notes |
 |----------|:----:|-------|
-| `POST /api/rooms` | No | Create room |
-| `GET /api/rooms/join/:id/:code` | No | Invite code lookup |
+| `POST /api/rooms` | No | Create room — returns `roomToken` |
+| `GET /api/rooms/join/:id/:code` | No | Invite code lookup — returns `roomToken` |
 | `GET /api/rooms/:id` | No | Get room state |
 | `POST /api/rooms/:id/agents` | No | Create new agent in room — returns `sessionToken` |
 | `POST /api/rooms/:id/sessions` | Session token | Add existing session to room — caller must prove ownership |
@@ -110,7 +97,7 @@ Agent rooms (`/api/rooms/*`) are a separate system from shared sessions. They cu
 | `GET /api/rooms/:id/events` | No | SSE stream of room events |
 | `POST /api/rooms/:id/close` | No | Close room |
 
-**Trust boundary note**: Most agent room endpoints are unauthenticated — they rely on the studio running behind a trusted network boundary. The exception is `POST /api/rooms/:id/sessions`, which requires the caller to present a valid session token (via `Authorization: Bearer <token>`) for the session being added. This prevents privilege escalation: without owning the session token, an attacker cannot hijack an existing session by adding it to a room. The response does not return the session token — the caller must already have it.
+**Trust boundary note**: Most room endpoints are unauthenticated — they rely on the studio running behind a trusted network boundary. The exception is `POST /api/rooms/:id/sessions`, which requires the caller to present a valid session token (via `Authorization: Bearer <token>`) for the session being added. This prevents privilege escalation: without owning the session token, an attacker cannot hijack an existing session by adding it to a room. The response does not return the session token — the caller must already have it.
 
 ### Hook Endpoints
 

@@ -24,11 +24,11 @@ Agent 3 (sandbox C)  ──┘                              ├→ Gated? → wa
 Rooms are created via the web UI or API:
 
 ```
-POST /api/shared-sessions
+POST /api/rooms
 {
   "name": "Architecture Review"
 }
-→ { "id": "uuid", "code": "A1B2C3D4", "roomToken": "..." }
+→ { "roomId": "uuid", "code": "A1B2C3D4", "roomToken": "..." }
 ```
 
 The response includes an **invite code** (8-character alphanumeric) that others use to join.
@@ -142,7 +142,7 @@ All room activity is streamed as `EngineEvent` types (see [Protocol](./protocol.
 
 | Event | When |
 |-------|------|
-| `shared_session_created` | Room created |
+| `shared_session_created` | Room created (legacy event name) |
 | `participant_joined` | Agent or user joined |
 | `participant_left` | Agent or user left |
 | `session_linked` | Agent session linked to room |
