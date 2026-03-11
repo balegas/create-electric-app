@@ -76,6 +76,12 @@ interface ServerConfig {
 	streamConfig: StreamConfig
 	/** Bridge mode — always "claude-code" */
 	bridgeMode: BridgeMode
+	/**
+	 * Enable dev-only endpoints (e.g. macOS Keychain credential reading).
+	 * Set via `devMode: true` in startWebServer opts or `STUDIO_DEV_MODE=1` env var.
+	 * SECURITY: Never enable in production — the keychain endpoint exposes OAuth tokens.
+	 */
+	devMode: boolean
 }
 
 /** Active session bridges — one per running session */
@@ -2524,29 +2530,32 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 	})
 
-	// Read Claude credentials from macOS Keychain (dev convenience)
-	app.get("/api/credentials/keychain", (c) => {
-		if (process.platform !== "darwin") {
-			return c.json({ apiKey: null })
-		}
-		try {
-			const raw = execFileSync(
-				"security",
-				["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-				{ encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] },
-			).trim()
-			const parsed = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
-			const token = parsed.claudeAiOauth?.accessToken ?? null
-			if (token) {
-				console.log(`[dev] Loaded OAuth token from keychain (length: ${token.length})`)
-			} else {
-				console.log("[dev] No OAuth token found in keychain")
+	// Read Claude credentials from macOS Keychain (dev convenience).
+	// Disabled by default — enable via devMode: true or STUDIO_DEV_MODE=1.
+	if (config.devMode) {
+		app.get("/api/credentials/keychain", (c) => {
+			if (process.platform !== "darwin") {
+				return c.json({ apiKey: null })
 			}
-			return c.json({ oauthToken: token })
-		} catch {
-			return c.json({ oauthToken: null })
-		}
-	})
+			try {
+				const raw = execFileSync(
+					"security",
+					["find-generic-password", "-s", "Claude Code-credentials", "-w"],
+					{ encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] },
+				).trim()
+				const parsed = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
+				const token = parsed.claudeAiOauth?.accessToken ?? null
+				if (token) {
+					console.log(`[dev] Loaded OAuth token from keychain (length: ${token.length})`)
+				} else {
+					console.log("[dev] No OAuth token found in keychain")
+				}
+				return c.json({ oauthToken: token })
+			} catch {
+				return c.json({ oauthToken: null })
+			}
+		})
+	}
 
 	// Resume a project from a GitHub repo
 	app.post("/api/sessions/resume", async (c) => {
@@ -2831,7 +2840,17 @@ export async function startWebServer(opts: {
 	sandbox: SandboxProvider
 	streamConfig: StreamConfig
 	bridgeMode?: BridgeMode
+	/**
+	 * Enable dev-only endpoints (e.g. macOS Keychain credential reading).
+	 * Can also be enabled via the `STUDIO_DEV_MODE=1` environment variable.
+	 * SECURITY: Never enable in production — the keychain endpoint exposes OAuth tokens.
+	 */
+	devMode?: boolean
 }): Promise<void> {
+	const devMode = opts.devMode ?? process.env.STUDIO_DEV_MODE === "1"
+	if (devMode) {
+		console.log("[studio] Dev mode enabled — keychain endpoint active")
+	}
 	const config: ServerConfig = {
 		port: opts.port ?? 4400,
 		dataDir: opts.dataDir ?? path.resolve(process.cwd(), ".electric-agent"),
@@ -2840,6 +2859,7 @@ export async function startWebServer(opts: {
 		sandbox: opts.sandbox,
 		streamConfig: opts.streamConfig,
 		bridgeMode: opts.bridgeMode ?? "claude-code",
+		devMode,
 	}
 
 	fs.mkdirSync(config.dataDir, { recursive: true })
