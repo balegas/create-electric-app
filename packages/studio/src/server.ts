@@ -2418,13 +2418,30 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	// Used by sandbox agents to write events back to the session stream.
 	app.post("/api/sessions/:id/stream/append", async (c) => {
 		const sessionId = c.req.param("id")
-		const connection = sessionStream(config, sessionId)
+
+		const contentType = c.req.header("content-type") ?? ""
+		if (!contentType.includes("application/json")) {
+			return c.json({ error: "Content-Type must be application/json" }, 415)
+		}
 
 		const body = await c.req.text()
 		if (!body) {
 			return c.json({ error: "Request body is required" }, 400)
 		}
 
+		// Guard against oversized payloads (64 KB limit)
+		if (body.length > 65_536) {
+			return c.json({ error: "Payload too large" }, 413)
+		}
+
+		// Validate JSON before forwarding to the stream
+		try {
+			JSON.parse(body)
+		} catch {
+			return c.json({ error: "Invalid JSON body" }, 400)
+		}
+
+		const connection = sessionStream(config, sessionId)
 		try {
 			const writer = new DurableStream({
 				url: connection.url,
