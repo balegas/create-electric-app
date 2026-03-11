@@ -20,3 +20,14 @@ export function validateHookToken(secret: string, sessionId: string, token: stri
 	if (expected.length !== token.length) return false
 	return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(token, "hex"))
 }
+
+/** Derive a global hook secret for authenticating the unified /api/hook endpoint. */
+export function deriveGlobalHookSecret(secret: string): string {
+	return crypto.createHmac("sha256", secret).update("global-hook").digest("hex")
+}
+
+export function validateGlobalHookSecret(secret: string, token: string): boolean {
+	const expected = deriveGlobalHookSecret(secret)
+	if (expected.length !== token.length) return false
+	return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(token, "hex"))
+}
