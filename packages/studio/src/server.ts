@@ -10,6 +10,17 @@ import { serveStatic } from "@hono/node-server/serve-static"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { ActiveSessions } from "./active-sessions.js"
+import {
+	addAgentSchema,
+	addSessionToRoomSchema,
+	createRoomSchema,
+	createSandboxSchema,
+	createSessionSchema,
+	iterateRoomSessionSchema,
+	iterateSessionSchema,
+	resumeSessionSchema,
+	sendRoomMessageSchema,
+} from "./api-schemas.js"
 import { ClaudeCodeDockerBridge, type ClaudeCodeDockerConfig } from "./bridge/claude-code-docker.js"
 import {
 	ClaudeCodeSpritesBridge,
@@ -36,9 +47,11 @@ import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./san
 import {
 	deriveGlobalHookSecret,
 	deriveHookToken,
+	deriveRoomToken,
 	deriveSessionToken,
 	validateGlobalHookSecret,
 	validateHookToken,
+	validateRoomToken,
 	validateSessionToken,
 } from "./session-auth.js"
 import type { SessionInfo } from "./sessions.js"
@@ -48,6 +61,7 @@ import {
 	type StreamConfig,
 	type StreamConnectionInfo,
 } from "./streams.js"
+import { isResponse, validateBody } from "./validate.js"
 
 type BridgeMode = "claude-code"
 
@@ -903,19 +917,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// Start new project
 	app.post("/api/sessions", async (c) => {
-		const body = (await c.req.json()) as {
-			description: string
-			name?: string
-			baseDir?: string
-			freeform?: boolean
-			apiKey?: string
-			oauthToken?: string
-			ghToken?: string
-		}
-
-		if (!body.description) {
-			return c.json({ error: "description is required" }, 400)
-		}
+		const body = await validateBody(c, createSessionSchema)
+		if (isResponse(body)) return body
 
 		const sessionId = crypto.randomUUID()
 		const inferredName =
@@ -1347,10 +1350,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const session = config.sessions.get(sessionId)
 		if (!session) return c.json({ error: "Session not found" }, 404)
 
-		const body = (await c.req.json()) as { request: string }
-		if (!body.request) {
-			return c.json({ error: "request is required" }, 400)
-		}
+		const body = await validateBody(c, iterateSessionSchema)
+		if (isResponse(body)) return body
 
 		// Intercept operational commands (start/stop/restart the app/server)
 		const normalised = body.request
@@ -1757,11 +1758,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// Create a standalone sandbox (not tied to session creation flow)
 	app.post("/api/sandboxes", async (c) => {
-		const body = (await c.req.json()) as {
-			sessionId?: string
-			projectName?: string
-			infra?: InfraConfig
-		}
+		const body = await validateBody(c, createSandboxSchema)
+		if (isResponse(body)) return body
 
 		const sessionId = body.sessionId ?? crypto.randomUUID()
 		try {
@@ -1814,7 +1812,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	app.use("/api/rooms/:id/*", async (c, next) => {
 		const id = c.req.param("id")
 		const token = extractRoomToken(c)
-		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+		if (!token || !validateRoomToken(config.streamConfig.secret, id, token)) {
 			return c.json({ error: "Invalid or missing room token" }, 401)
 		}
 		return next()
@@ -1824,7 +1822,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		if (c.req.method !== "GET" && c.req.method !== "DELETE") return next()
 		const id = c.req.param("id")
 		const token = extractRoomToken(c)
-		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+		if (!token || !validateRoomToken(config.streamConfig.secret, id, token)) {
 			return c.json({ error: "Invalid or missing room token" }, 401)
 		}
 		return next()
@@ -1832,13 +1830,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// Create a room
 	app.post("/api/rooms", async (c) => {
-		const body = (await c.req.json()) as {
-			name: string
-			maxRounds?: number
-		}
-		if (!body.name) {
-			return c.json({ error: "name is required" }, 400)
-		}
+		const body = await validateBody(c, createRoomSchema)
+		if (isResponse(body)) return body
 
 		const roomId = crypto.randomUUID()
 
@@ -1872,7 +1865,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			revoked: false,
 		})
 
-		const roomToken = deriveSessionToken(config.streamConfig.secret, roomId)
+		const roomToken = deriveRoomToken(config.streamConfig.secret, roomId)
 		console.log(`[room] Created: id=${roomId} name=${body.name} code=${code}`)
 		return c.json({ roomId, code, roomToken }, 201)
 	})
@@ -1885,7 +1878,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		if (!room || room.code !== code) return c.json({ error: "Room not found" }, 404)
 		if (room.revoked) return c.json({ error: "Room has been revoked" }, 410)
 
-		const roomToken = deriveSessionToken(config.streamConfig.secret, room.id)
+		const roomToken = deriveRoomToken(config.streamConfig.secret, room.id)
 		return c.json({ id: room.id, code: room.code, name: room.name, roomToken })
 	})
 
@@ -1914,15 +1907,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const router = roomRouters.get(roomId)
 		if (!router) return c.json({ error: "Room not found" }, 404)
 
-		const body = (await c.req.json()) as {
-			name?: string
-			role?: string
-			gated?: boolean
-			initialPrompt?: string
-			apiKey?: string
-			oauthToken?: string
-			ghToken?: string
-		}
+		const body = await validateBody(c, addAgentSchema)
+		if (isResponse(body)) return body
 
 		const sessionId = crypto.randomUUID()
 		const randomSuffix = sessionId.slice(0, 6)
@@ -2115,14 +2101,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const router = roomRouters.get(roomId)
 		if (!router) return c.json({ error: "Room not found" }, 404)
 
-		const body = (await c.req.json()) as {
-			sessionId: string
-			name: string
-			initialPrompt?: string
-		}
-		if (!body.sessionId || !body.name) {
-			return c.json({ error: "sessionId and name are required" }, 400)
-		}
+		const body = await validateBody(c, addSessionToRoomSchema)
+		if (isResponse(body)) return body
 
 		const { sessionId } = body
 
@@ -2220,10 +2200,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const participant = router.participants.find((p) => p.sessionId === sessionId)
 		if (!participant) return c.json({ error: "Session not found in this room" }, 404)
 
-		const body = (await c.req.json()) as { request: string }
-		if (!body.request) {
-			return c.json({ error: "request is required" }, 400)
-		}
+		const body = await validateBody(c, iterateRoomSessionSchema)
+		if (isResponse(body)) return body
 
 		await participant.bridge.sendCommand({
 			command: "iterate",
@@ -2238,14 +2216,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const router = roomRouters.get(roomId)
 		if (!router) return c.json({ error: "Room not found" }, 404)
 
-		const body = (await c.req.json()) as {
-			from: string
-			body: string
-			to?: string
-		}
-		if (!body.from || !body.body) {
-			return c.json({ error: "from and body are required" }, 400)
-		}
+		const body = await validateBody(c, sendRoomMessageSchema)
+		if (isResponse(body)) return body
 
 		await router.sendMessage(body.from, body.body, body.to)
 		return c.json({ ok: true })
@@ -2507,7 +2479,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		if (!handle || !sandboxDir) {
 			return c.json({ error: "Container not available" }, 404)
 		}
-		if (!filePath.startsWith(sandboxDir)) {
+		const resolvedPath = path.resolve(filePath)
+		const resolvedDir = path.resolve(sandboxDir) + path.sep
+		if (!resolvedPath.startsWith(resolvedDir) && resolvedPath !== path.resolve(sandboxDir)) {
 			return c.json({ error: "Path outside project directory" }, 403)
 		}
 		const content = await config.sandbox.readFile(handle, filePath)
@@ -2580,16 +2554,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// Resume a project from a GitHub repo
 	app.post("/api/sessions/resume", async (c) => {
-		const body = (await c.req.json()) as {
-			repoUrl: string
-			branch?: string
-			apiKey?: string
-			oauthToken?: string
-			ghToken?: string
-		}
-		if (!body.repoUrl) {
-			return c.json({ error: "repoUrl is required" }, 400)
-		}
+		const body = await validateBody(c, resumeSessionSchema)
+		if (isResponse(body)) return body
 
 		const sessionId = crypto.randomUUID()
 		const repoName =

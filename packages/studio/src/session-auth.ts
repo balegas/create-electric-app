@@ -21,6 +21,17 @@ export function validateHookToken(secret: string, sessionId: string, token: stri
 	return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(token, "hex"))
 }
 
+/** Derive a purpose-scoped token for room authentication. */
+export function deriveRoomToken(secret: string, roomId: string): string {
+	return crypto.createHmac("sha256", secret).update(`room:${roomId}`).digest("hex")
+}
+
+export function validateRoomToken(secret: string, roomId: string, token: string): boolean {
+	const expected = deriveRoomToken(secret, roomId)
+	if (expected.length !== token.length) return false
+	return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(token, "hex"))
+}
+
 /** Derive a global hook secret for authenticating the unified /api/hook endpoint. */
 export function deriveGlobalHookSecret(secret: string): string {
 	return crypto.createHmac("sha256", secret).update("global-hook").digest("hex")
