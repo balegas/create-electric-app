@@ -28,7 +28,7 @@ Several critical and high issues from the previous audit have been **resolved**:
 | DS_SECRET isolation | `ds-proxy-secret-isolation.md` | **FIXED** — `getStreamEnvVars` removed, proxy pattern added |
 | Shared sessions removed | Code removal | **FIXED** — No shared-sessions endpoints remain |
 
-This audit identifies **3 critical**, **4 high**, and **7 medium** severity issues that remain open or are newly discovered.
+This audit identifies **3 critical**, **4 high**, and **9 medium** severity issues that remain open or are newly discovered.
 
 ---
 
@@ -46,13 +46,15 @@ This audit identifies **3 critical**, **4 high**, and **7 medium** severity issu
 7. [Keychain Endpoint Leaks OAuth Token Without Auth](#7-high-keychain-endpoint-leaks-oauth-token-without-auth)
 
 ### Medium
-8. [File Path Traversal Check Is Bypassable](#8-medium-file-path-traversal-check-is-bypassable)
-9. [No Expiry on Session/Room Tokens](#9-medium-no-expiry-on-sessionroom-tokens)
-10. [`/api/provision-electric` Is Unauthenticated](#10-medium-apiprovision-electric-is-unauthenticated)
-11. [Room Message `from` Field Is Not Cryptographically Verified](#11-medium-room-message-from-field-is-not-cryptographically-verified)
-12. [Missing HTTP Security Headers](#12-medium-missing-http-security-headers)
-13. [Credentials Stored in localStorage (XSS Amplifier)](#13-medium-credentials-stored-in-localstorage-xss-amplifier)
-14. [Sandbox Network Policy Allows All Outbound Traffic](#14-medium-sandbox-network-policy-allows-all-outbound-traffic)
+8. [Room Token / Session Token Confusion](#8-medium-room-token--session-token-confusion)
+9. [File Path Traversal Check Is Bypassable](#9-medium-file-path-traversal-check-is-bypassable)
+10. [No Expiry on Session/Room Tokens](#10-medium-no-expiry-on-sessionroom-tokens)
+11. [`/api/provision-electric` Is Unauthenticated](#11-medium-apiprovision-electric-is-unauthenticated)
+12. [Room Message `from` Field Is Not Cryptographically Verified](#12-medium-room-message-from-field-is-not-cryptographically-verified)
+13. [Missing HTTP Security Headers](#13-medium-missing-http-security-headers)
+14. [Credentials Stored in localStorage (XSS Amplifier)](#14-medium-credentials-stored-in-localstorage-xss-amplifier)
+15. [Sandbox Network Policy Allows All Outbound Traffic](#15-medium-sandbox-network-policy-allows-all-outbound-traffic)
+16. [Docker Sandbox Missing Input Validation on Repo URL](#16-medium-docker-sandbox-missing-input-validation-on-repo-url)
 
 ---
 
@@ -283,7 +285,44 @@ app.get("/api/credentials/keychain", (c) => {
 
 ---
 
-### 8. MEDIUM: File Path Traversal Check Is Bypassable
+### 8. MEDIUM: Room Token / Session Token Confusion
+
+**Files:** `packages/studio/src/server.ts:1817,1875`, `packages/studio/src/session-auth.ts:3-4`
+
+**Description:**
+Room tokens are derived using the **same function** as session tokens:
+
+```typescript
+// Room creation (server.ts:1875)
+const roomToken = deriveSessionToken(config.streamConfig.secret, roomId)
+
+// Room validation (server.ts:1817)
+if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
+```
+
+Both compute `HMAC-SHA256(DS_SECRET, id)` with no type prefix. This means:
+- A session token for UUID `X` is **cryptographically identical** to a room token for UUID `X`
+- If a room ID happens to collide with a session ID (both are UUIDs, so unlikely but not impossible), tokens are interchangeable
+
+Compare with how hook tokens correctly use a prefix:
+```typescript
+// hook tokens — correctly scoped
+return crypto.createHmac("sha256", secret).update(`hook:${sessionId}`).digest("hex")
+```
+
+**Impact:** Token confusion attack — a session token could potentially be used as a room token and vice versa. While UUID collision is unlikely, the lack of type differentiation is a design flaw that violates the principle of least privilege.
+
+**Recommendation:**
+Add a `room:` prefix to room token derivation:
+```typescript
+export function deriveRoomToken(secret: string, roomId: string): string {
+    return crypto.createHmac("sha256", secret).update(`room:${roomId}`).digest("hex")
+}
+```
+
+---
+
+### 9. MEDIUM: File Path Traversal Check Is Bypassable
 
 **File:** `packages/studio/src/server.ts:2510`
 
@@ -307,7 +346,7 @@ if (!resolved.startsWith(path.resolve(sandboxDir) + path.sep)) {
 
 ---
 
-### 9. MEDIUM: No Expiry on Session/Room Tokens
+### 10. MEDIUM: No Expiry on Session/Room Tokens
 
 **File:** `packages/studio/src/session-auth.ts`
 
@@ -325,7 +364,7 @@ export function deriveSessionToken(secret: string, sessionId: string): string {
 
 ---
 
-### 10. MEDIUM: `/api/provision-electric` Is Unauthenticated
+### 11. MEDIUM: `/api/provision-electric` Is Unauthenticated
 
 **File:** `packages/studio/src/server.ts:393-409`
 
@@ -337,7 +376,7 @@ export function deriveSessionToken(secret: string, sessionId: string): string {
 
 ---
 
-### 11. MEDIUM: Room Message `from` Field Is Not Cryptographically Verified
+### 12. MEDIUM: Room Message `from` Field Is Not Cryptographically Verified
 
 **File:** `packages/studio/src/room-router.ts:152-163`
 
@@ -365,7 +404,7 @@ async sendMessage(from: string, body: string, to?: string): Promise<void> {
 
 ---
 
-### 12. MEDIUM: Missing HTTP Security Headers
+### 13. MEDIUM: Missing HTTP Security Headers
 
 **File:** `packages/studio/src/server.ts`
 
@@ -380,7 +419,7 @@ The server does not set standard security headers:
 
 ---
 
-### 13. MEDIUM: Credentials Stored in localStorage (XSS Amplifier)
+### 14. MEDIUM: Credentials Stored in localStorage (XSS Amplifier)
 
 **File:** `packages/studio/client/src/lib/credentials.ts`
 
@@ -398,7 +437,7 @@ API keys and OAuth tokens stored at:
 
 ---
 
-### 14. MEDIUM: Sandbox Network Policy Allows All Outbound Traffic
+### 15. MEDIUM: Sandbox Network Policy Allows All Outbound Traffic
 
 **File:** `packages/studio/src/sandbox/sprites.ts:96-111`
 
@@ -422,6 +461,35 @@ private async setNetworkPolicyAllowAll(spriteName: string): Promise<void> {
 - Restrict outbound to only necessary domains: `api.anthropic.com`, `github.com`, `api.github.com`, `registry.npmjs.org`, etc.
 - Block access to the studio server's internal IP/hostname from sandboxes
 - Use a network-level firewall if the sandbox runtime supports it
+
+---
+
+### 16. MEDIUM: Docker Sandbox Missing Input Validation on Repo URL
+
+**File:** `packages/studio/src/sandbox/docker.ts:510-535`
+
+**Description:**
+The Docker sandbox provider's `createFromRepo` method does **not** validate `repoUrl` or `branch` before constructing shell commands, unlike the Sprites provider which uses `validateRepoUrl()` and `validateBranchName()`:
+
+```typescript
+// docker.ts — NO validation
+async createFromRepo(sessionId, repoUrl, opts) {
+    execInContainer(state,
+        `gh repo clone "${repoUrl}" "${targetDir}" 2>/dev/null || git clone "${repoUrl}" "${targetDir}"`)
+}
+
+// sprites.ts — HAS validation
+async createFromRepo(sessionId, repoUrl, opts) {
+    validateRepoUrl(repoUrl)       // ✓
+    if (opts?.branch) validateBranchName(opts.branch)  // ✓
+}
+```
+
+**Impact:** While the Docker provider uses double-quoted shell interpolation (providing some protection), a malicious `repoUrl` with shell metacharacters could still potentially escape the quoted context.
+
+**Recommendation:**
+- Apply the same `validateRepoUrl()` and `validateBranchName()` calls in the Docker provider
+- Or better: validate at the server layer before dispatching to any sandbox provider
 
 ---
 
@@ -500,17 +568,19 @@ The following security aspects are **well-implemented**:
 
 ### Phase 2 — Before GA
 7. **Credential proxy** — Route Claude/GitHub API calls through studio server so sandboxes never hold raw keys (finding #2)
-8. **Restrict sandbox network** — Replace `domain: "*"` with allowlisted domains (finding #14)
-9. **Server-side `from` enforcement** — Set message sender identity server-side (finding #11)
+8. **Restrict sandbox network** — Replace `domain: "*"` with allowlisted domains (finding #15)
+9. **Server-side `from` enforcement** — Set message sender identity server-side (finding #12)
 10. **Auth session creation** — Protect `POST /api/sessions` and `/api/sessions/resume` (finding #3)
-11. **Auth `/api/provision-electric`** — Add auth or throttling (finding #10)
-12. **Add security headers** — CSP, X-Content-Type-Options, X-Frame-Options, HSTS (finding #12)
+11. **Auth `/api/provision-electric`** — Add auth or throttling (finding #11)
+12. **Add security headers** — CSP, X-Content-Type-Options, X-Frame-Options, HSTS (finding #13)
+13. **Scope room tokens** — Add `room:` prefix to room token HMAC to prevent token confusion (finding #8)
+14. **Docker input validation** — Apply `validateRepoUrl`/`validateBranchName` in Docker provider (finding #16)
 
 ### Phase 3 — Hardening
-13. **Scoped DS credentials** — Per-room/per-session JWTs at the Durable Streams layer (finding #1)
-14. **Token expiry** — Add TTL to session/room tokens (finding #9)
-15. **Audit logging** — Log security events (auth failures, room modifications, credential access)
-16. **Replace localStorage** — Server-side session model with httpOnly cookies (finding #13)
+15. **Scoped DS credentials** — Per-room/per-session JWTs at the Durable Streams layer (finding #1)
+16. **Token expiry** — Add TTL to session/room tokens (finding #10)
+17. **Audit logging** — Log security events (auth failures, room modifications, credential access)
+18. **Replace localStorage** — Server-side session model with httpOnly cookies (finding #14)
 
 ---
 
