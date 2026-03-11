@@ -28,7 +28,7 @@ Several critical and high issues from the previous audit have been **resolved**:
 | DS_SECRET isolation | `ds-proxy-secret-isolation.md` | **FIXED** — `getStreamEnvVars` removed, proxy pattern added |
 | Shared sessions removed | Code removal | **FIXED** — No shared-sessions endpoints remain |
 
-This audit identifies **3 critical**, **4 high**, and **9 medium** severity issues that remain open or are newly discovered.
+This audit identifies **3 critical**, **4 high**, and **10 medium** severity issues that remain open or are newly discovered.
 
 ---
 
@@ -55,6 +55,7 @@ This audit identifies **3 critical**, **4 high**, and **9 medium** severity issu
 14. [Credentials Stored in localStorage (XSS Amplifier)](#14-medium-credentials-stored-in-localstorage-xss-amplifier)
 15. [Sandbox Network Policy Allows All Outbound Traffic](#15-medium-sandbox-network-policy-allows-all-outbound-traffic)
 16. [Docker Sandbox Missing Input Validation on Repo URL](#16-medium-docker-sandbox-missing-input-validation-on-repo-url)
+17. [Session/Room Tokens Exposed in SSE Query Strings](#17-medium-sessionroom-tokens-exposed-in-sse-query-strings)
 
 ---
 
@@ -490,6 +491,33 @@ async createFromRepo(sessionId, repoUrl, opts) {
 **Recommendation:**
 - Apply the same `validateRepoUrl()` and `validateBranchName()` calls in the Docker provider
 - Or better: validate at the server layer before dispatching to any sandbox provider
+
+---
+
+### 17. MEDIUM: Session/Room Tokens Exposed in SSE Query Strings
+
+**Files:** `packages/studio/src/server.ts:2334,2255`, `docs/security.md:106`
+
+**Description:**
+The EventSource API (SSE) does not support custom headers. Session and room tokens are passed as query parameters:
+
+```
+GET /api/sessions/:id/events?token=<session-token>
+GET /api/rooms/:id/events?token=<room-token>
+```
+
+**Impact:**
+- Tokens appear in **server access logs** (nginx, CloudFlare, AWS ALB)
+- Tokens may leak via **HTTP Referer headers** if users navigate away
+- Tokens are visible in **browser history** and to **browser extensions**
+- Load balancer and proxy logs retain the full URL including the token
+
+**Mitigating factor:** This is a known limitation of the EventSource API. The `docs/security.md` acknowledges this design choice.
+
+**Recommendation:**
+- Use `fetch()` with streaming response and custom headers instead of `EventSource`
+- If EventSource is required, use short-lived tokens specifically for SSE endpoints
+- Ensure server/proxy logs redact query parameters containing tokens
 
 ---
 
