@@ -59,12 +59,12 @@ async function request<T>(
 		}
 	}
 
-	// Attach room token for room-scoped requests
+	// Attach room token for room-scoped requests via dedicated header
 	const roomId = extractRoomId(path)
-	if (roomId && !headers.Authorization) {
+	if (roomId) {
 		const token = getRoomToken(roomId)
 		if (token) {
-			headers.Authorization = `Bearer ${token}`
+			headers["X-Room-Token"] = token
 		}
 	}
 

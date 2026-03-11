@@ -1798,10 +1798,22 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// --- Room Routes (agent-to-agent messaging) ---
 
-	// Protect room-scoped routes (same pattern as sessions / shared-sessions)
+	// Extract room token from X-Room-Token header or ?token= query param.
+	// This is separate from extractToken() (which reads Authorization) so that
+	// Authorization remains available for session tokens on endpoints that need both.
+	function extractRoomToken(c: {
+		req: {
+			header: (name: string) => string | undefined
+			query: (name: string) => string | undefined
+		}
+	}): string | undefined {
+		return c.req.header("X-Room-Token") ?? c.req.query("token") ?? undefined
+	}
+
+	// Protect room-scoped routes via X-Room-Token header
 	app.use("/api/rooms/:id/*", async (c, next) => {
 		const id = c.req.param("id")
-		const token = extractToken(c)
+		const token = extractRoomToken(c)
 		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
 			return c.json({ error: "Invalid or missing room token" }, 401)
 		}
@@ -1811,7 +1823,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	app.use("/api/rooms/:id", async (c, next) => {
 		if (c.req.method !== "GET" && c.req.method !== "DELETE") return next()
 		const id = c.req.param("id")
-		const token = extractToken(c)
+		const token = extractRoomToken(c)
 		if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
 			return c.json({ error: "Invalid or missing room token" }, 401)
 		}
@@ -2115,10 +2127,15 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		const { sessionId } = body
 
-		// Require a valid session token — caller must already own this session
+		// Require a valid session token — caller must already own this session.
+		// Room auth is handled by middleware via X-Room-Token; Authorization
+		// carries the session ownership proof here.
 		const authHeader = c.req.header("Authorization")
-		const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined
-		if (!token || !validateSessionToken(config.streamConfig.secret, sessionId, token)) {
+		const sessionToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined
+		if (
+			!sessionToken ||
+			!validateSessionToken(config.streamConfig.secret, sessionId, sessionToken)
+		) {
 			return c.json({ error: "Invalid or missing session token" }, 401)
 		}
 
