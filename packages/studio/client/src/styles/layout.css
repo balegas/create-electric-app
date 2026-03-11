@@ -715,7 +715,7 @@
 	width: 4px;
 	height: 4px;
 	border-radius: 50%;
-	background: var(--cyan);
+	background: var(--purple);
 	animation: working-bounce 1.2s ease-in-out infinite;
 }
 
@@ -759,6 +759,28 @@
 
 .room-target-select:disabled {
 	opacity: 0.5;
+}
+
+.room-send-error {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	padding: 6px 12px;
+	background: color-mix(in srgb, var(--red) 15%, transparent);
+	border: 1px solid var(--red);
+	border-radius: 6px;
+	color: var(--red);
+	font-size: 13px;
+}
+
+.room-send-error button {
+	background: none;
+	border: none;
+	color: var(--red);
+	cursor: pointer;
+	font-size: 16px;
+	padding: 0 4px;
 }
 
 /* DM section */

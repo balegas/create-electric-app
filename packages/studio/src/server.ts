@@ -1915,7 +1915,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		if (!router) return c.json({ error: "Room not found" }, 404)
 
 		const body = (await c.req.json()) as {
-			name: string
+			name?: string
 			role?: string
 			gated?: boolean
 			initialPrompt?: string
@@ -1923,14 +1923,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			oauthToken?: string
 			ghToken?: string
 		}
-		if (!body.name) {
-			return c.json({ error: "name is required" }, 400)
-		}
 
 		const sessionId = crypto.randomUUID()
-		const projectName = `room-${body.name}-${sessionId.slice(0, 8)}`
+		const randomSuffix = sessionId.slice(0, 6)
+		const agentName = body.name?.trim() || `agent-${randomSuffix}`
+		const projectName = `room-${agentName}-${sessionId.slice(0, 8)}`
 
-		console.log(`[room:${roomId}] Adding agent: name=${body.name} session=${sessionId}`)
+		console.log(`[room:${roomId}] Adding agent: name=${agentName} session=${sessionId}`)
 
 		// Create the session's durable stream
 		const conn = sessionStream(config, sessionId)
@@ -1954,7 +1953,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			id: sessionId,
 			projectName,
 			sandboxProjectDir,
-			description: `Room agent: ${body.name} (${body.role ?? "participant"})`,
+			description: `Room agent: ${agentName} (${body.role ?? "participant"})`,
 			createdAt: new Date().toISOString(),
 			lastActiveAt: new Date().toISOString(),
 			status: "running",
@@ -1972,7 +1971,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			await bridge.emit({
 				type: "log",
 				level: "build",
-				message: `Creating sandbox for room agent "${body.name}"...`,
+				message: `Creating sandbox for room agent "${agentName}"...`,
 				ts: ts(),
 			})
 
@@ -2033,7 +2032,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				const rolePromptSuffix = roleSkill
 					? `\nRead .claude/skills/role/SKILL.md for your role guidelines before proceeding.`
 					: ""
-				const agentPrompt = `You are "${body.name}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.${rolePromptSuffix}`
+				const agentPrompt = `You are "${agentName}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.${rolePromptSuffix}`
 
 				// Create Claude Code bridge (with role-specific tool permissions)
 				const agentHookToken = deriveHookToken(config.streamConfig.secret, sessionId)
@@ -2044,7 +2043,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								cwd: handle.projectDir,
 								studioUrl: resolveStudioUrl(config.port),
 								hookToken: agentHookToken,
-								agentName: body.name,
+								agentName: agentName,
 								...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
 							}
 						: {
@@ -2052,7 +2051,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								cwd: handle.projectDir,
 								studioPort: config.port,
 								hookToken: agentHookToken,
-								agentName: body.name,
+								agentName: agentName,
 								...(roleSkill?.allowedTools && { allowedTools: roleSkill.allowedTools }),
 							}
 				const ccBridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
@@ -2081,7 +2080,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				await bridge.emit({
 					type: "log",
 					level: "done",
-					message: `Sandbox ready for "${body.name}"`,
+					message: `Sandbox ready for "${agentName}"`,
 					ts: ts(),
 				})
 
@@ -2090,7 +2089,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				// Add participant to room router
 				const participant: RoomParticipant = {
 					sessionId,
-					name: body.name,
+					name: agentName,
 					role: body.role,
 					bridge: ccBridge,
 				}
@@ -2107,7 +2106,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			}
 		})()
 
-		return c.json({ sessionId, participantName: body.name, sessionToken }, 201)
+		return c.json({ sessionId, participantName: agentName, sessionToken }, 201)
 	})
 
 	// Add an existing running session to a room

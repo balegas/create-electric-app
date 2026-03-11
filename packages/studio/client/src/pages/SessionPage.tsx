@@ -140,13 +140,17 @@ export function SessionPage() {
 	const appPort = appStatus?.port
 	const previewUrl = appStatus?.previewUrl
 
+	const [sendError, setSendError] = useState<string | null>(null)
+
 	const handleIterate = useCallback(
 		async (request: string) => {
 			if (!effectiveId) return
+			setSendError(null)
 			try {
 				await sendIterate(effectiveId, request)
 			} catch (err) {
-				console.error("Failed to send iteration:", err)
+				const msg = err instanceof Error ? err.message : "Failed to send message"
+				setSendError(msg)
 			}
 		},
 		[effectiveId],
@@ -327,6 +331,14 @@ export function SessionPage() {
 						isComplete={isComplete}
 						onGateResolved={markGateResolved}
 					/>
+				)}
+				{sendError && (
+					<div className="room-send-error">
+						{sendError}
+						<button type="button" onClick={() => setSendError(null)}>
+							&times;
+						</button>
+					</div>
 				)}
 				<PromptInput
 					onSubmit={handleIterate}

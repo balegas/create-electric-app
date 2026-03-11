@@ -159,16 +159,16 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 			<div className="sidebar-sessions">
 				<div className="sidebar-section-label">Sessions</div>
 
-				<div className="session-item" onClick={() => handleNavigate("/")} title="New App">
+				<div className="session-item" onClick={() => handleNavigate("/")} title="New Electric App">
 					<span className="session-avatar new-project-avatar">+</span>
 					<div className="session-item-details">
-						<div className="session-item-name">New App</div>
+						<div className="session-item-name">New Electric App</div>
 					</div>
 				</div>
 				<div
 					className="session-item"
 					onClick={() => handleNavigate("/?mode=session")}
-					title="New Session"
+					title="Claude Session"
 				>
 					<span className="session-avatar new-project-avatar">
 						<svg
@@ -181,13 +181,13 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 							width="14"
 							height="14"
 						>
-							<title>New Session</title>
+							<title>Claude Session</title>
 							<path d="M13 2.5l-9.5 9.5-1 3 3-1 9.5-9.5-2-2z" />
 							<path d="M10.5 5l2 2" />
 						</svg>
 					</span>
 					<div className="session-item-details">
-						<div className="session-item-name">New Session</div>
+						<div className="session-item-name">Claude Session</div>
 					</div>
 				</div>
 				{pendingProject && (

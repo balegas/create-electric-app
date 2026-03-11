@@ -431,6 +431,8 @@ export class RoomRouter {
 			"Place your @room message at the END of your response, after completing any work.",
 			"If you have nothing to say, finish without @room — your turn ends silently.",
 			"To request human input: @room GATE: <question>",
+			"",
+			"IMPORTANT: You just joined this room — greet the other participants with a brief @room message introducing yourself.",
 		)
 
 		return lines.join("\n")

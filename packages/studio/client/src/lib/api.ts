@@ -292,7 +292,7 @@ export function getAgentRoomState(roomId: string) {
 export function addAgentToRoom(
 	roomId: string,
 	config: {
-		name: string
+		name?: string
 		role?: string
 		gated?: boolean
 		initialPrompt?: string

@@ -57,8 +57,15 @@ export function RoomPage() {
 					}
 				})
 				.catch((err) => {
-					// Only show error if we never loaded successfully
-					if (!cancelled && !loadedRef.current) setError(err.message)
+					if (!cancelled) {
+						const msg = err instanceof Error ? err.message : String(err)
+						// Always show "not found" errors even if we loaded before
+						if (msg.includes("not found") || msg.includes("Not Found")) {
+							setError(msg)
+						} else if (!loadedRef.current) {
+							setError(msg)
+						}
+					}
 				})
 		}
 		fetchState()
@@ -376,12 +383,14 @@ function RoomInput({
 }) {
 	const [text, setText] = useState("")
 	const [target, setTarget] = useState<string>("broadcast")
+	const [sendError, setSendError] = useState<string | null>(null)
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
 
 	const handleSubmit = useCallback(async () => {
 		const trimmed = text.trim()
 		if (!trimmed || !roomId) return
 		setSending(true)
+		setSendError(null)
 		try {
 			const participant = getOrCreateParticipant()
 			const to = target === "broadcast" ? undefined : target
@@ -391,7 +400,8 @@ function RoomInput({
 				textareaRef.current.style.height = "auto"
 			}
 		} catch (err) {
-			console.error("Failed to send message:", err)
+			const msg = err instanceof Error ? err.message : "Failed to send message"
+			setSendError(msg)
 		} finally {
 			setSending(false)
 		}
@@ -407,6 +417,14 @@ function RoomInput({
 
 	return (
 		<div className="prompt-bar room-prompt-bar">
+			{sendError && (
+				<div className="room-send-error">
+					{sendError}
+					<button type="button" onClick={() => setSendError(null)}>
+						&times;
+					</button>
+				</div>
+			)}
 			<select
 				className="room-target-select"
 				value={target}
@@ -466,7 +484,6 @@ function AddAgentModal({
 }) {
 	const { sessions } = useAppContext()
 	const [mode, setMode] = useState<"new" | "existing">("new")
-	const [name, setName] = useState("")
 	const [role, setRole] = useState("")
 	const [gated, setGated] = useState(false)
 	const [initialPrompt, setInitialPrompt] = useState("")
@@ -484,17 +501,16 @@ function AddAgentModal({
 		setAddError(null)
 		try {
 			if (mode === "existing") {
-				if (!selectedSessionId || !name.trim()) return
+				if (!selectedSessionId) return
+				const session = availableSessions.find((s) => s.id === selectedSessionId)
+				const displayName = session?.projectName ?? selectedSessionId.slice(0, 8)
 				await addSessionToRoom(roomId, {
 					sessionId: selectedSessionId,
-					name: name.trim(),
+					name: displayName,
 					initialPrompt: initialPrompt.trim() || undefined,
 				})
-				// Session token already in localStorage — no need to re-store
 			} else {
-				if (!name.trim()) return
 				const result = await addAgentToRoom(roomId, {
-					name: name.trim(),
 					role: role.trim() || undefined,
 					gated,
 					initialPrompt: initialPrompt.trim() || undefined,
@@ -504,7 +520,7 @@ function AddAgentModal({
 				}
 				addSession({
 					id: result.sessionId,
-					projectName: name.trim(),
+					projectName: result.participantName,
 					sandboxProjectDir: "",
 					description: role.trim() || `Agent in room ${roomId.slice(0, 8)}`,
 					createdAt: new Date().toISOString(),
@@ -518,9 +534,9 @@ function AddAgentModal({
 		} finally {
 			setAdding(false)
 		}
-	}, [roomId, mode, name, role, gated, initialPrompt, selectedSessionId, onAdded])
+	}, [roomId, mode, role, gated, initialPrompt, selectedSessionId, availableSessions, onAdded])
 
-	const canSubmit = mode === "existing" ? !!selectedSessionId && !!name.trim() : !!name.trim()
+	const canSubmit = mode === "existing" ? !!selectedSessionId : true
 
 	return (
 		<div className="modal-overlay" onClick={onClose}>
@@ -543,19 +559,12 @@ function AddAgentModal({
 							Existing Session
 						</button>
 					</div>
-					{mode === "existing" && (
+					{mode === "existing" ? (
 						<label className="room-form-label">
 							Session *
 							<select
 								value={selectedSessionId}
-								onChange={(e) => {
-									setSelectedSessionId(e.target.value)
-									// Auto-fill name from session project name if empty
-									if (!name.trim()) {
-										const session = availableSessions.find((s) => s.id === e.target.value)
-										if (session) setName(session.projectName)
-									}
-								}}
+								onChange={(e) => setSelectedSessionId(e.target.value)}
 							>
 								<option value="">Select a session...</option>
 								{availableSessions.map((s) => (
@@ -565,42 +574,38 @@ function AddAgentModal({
 								))}
 							</select>
 						</label>
+					) : (
+						<>
+							<label className="room-form-label">
+								Role
+								<select value={role} onChange={(e) => setRole(e.target.value)}>
+									<option value="">No role (generic participant)</option>
+									{BUILT_IN_ROLES.map((r) => (
+										<option key={r.value} value={r.value}>
+											{r.label} — {r.description}
+										</option>
+									))}
+								</select>
+							</label>
+							<label className="room-form-label">
+								Initial Prompt
+								<textarea
+									value={initialPrompt}
+									onChange={(e) => setInitialPrompt(e.target.value)}
+									placeholder="Optional message to send after agent joins"
+									rows={3}
+								/>
+							</label>
+							<label className="room-form-checkbox">
+								<input
+									type="checkbox"
+									checked={gated}
+									onChange={(e) => setGated(e.target.checked)}
+								/>
+								Gated (require approval for outbound messages)
+							</label>
+						</>
 					)}
-					<label className="room-form-label">
-						Name *
-						<input
-							type="text"
-							value={name}
-							onChange={(e) => setName(e.target.value)}
-							placeholder="e.g. reviewer, coder, architect"
-						/>
-					</label>
-					{mode === "new" && (
-						<label className="room-form-label">
-							Role
-							<select value={role} onChange={(e) => setRole(e.target.value)}>
-								<option value="">No role (generic participant)</option>
-								{BUILT_IN_ROLES.map((r) => (
-									<option key={r.value} value={r.value}>
-										{r.label} — {r.description}
-									</option>
-								))}
-							</select>
-						</label>
-					)}
-					<label className="room-form-label">
-						Initial Prompt
-						<textarea
-							value={initialPrompt}
-							onChange={(e) => setInitialPrompt(e.target.value)}
-							placeholder="Optional message to send after agent joins"
-							rows={3}
-						/>
-					</label>
-					<label className="room-form-checkbox">
-						<input type="checkbox" checked={gated} onChange={(e) => setGated(e.target.checked)} />
-						Gated (require approval for outbound messages)
-					</label>
 					{addError && <p className="room-form-error">{addError}</p>}
 				</div>
 				<div className="modal-actions">
