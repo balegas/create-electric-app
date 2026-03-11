@@ -13,8 +13,8 @@ import type { AgentEvent, SessionBridge, StreamMessage } from "./types.js"
 
 export class HostedStreamBridge implements SessionBridge {
 	readonly sessionId: string
-	readonly streamUrl: string
-	readonly streamHeaders: Record<string, string>
+	private readonly streamUrl: string
+	private readonly streamHeaders: Record<string, string>
 
 	private writer: DurableStream
 	private agentEventCallbacks: Array<(event: EngineEvent) => void> = []

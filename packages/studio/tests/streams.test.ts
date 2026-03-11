@@ -6,7 +6,7 @@ import { DurableStream } from "@durable-streams/client"
 import type { EngineEvent } from "@electric-agent/protocol"
 import { HostedStreamBridge } from "../src/bridge/hosted.js"
 import type { StreamMessage } from "../src/bridge/types.js"
-import { getStreamConfig, getStreamConnectionInfo, getStreamEnvVars } from "../src/streams.js"
+import { getStreamConfig, getStreamConnectionInfo } from "../src/streams.js"
 import { localStreamServer } from "./local-stream-server.js"
 
 // ---------------------------------------------------------------------------
@@ -72,14 +72,10 @@ describe("streams — config", () => {
 		assert.equal(conn.headers.Authorization, "Bearer s3cret")
 	})
 
-	it("getStreamEnvVars builds env map", () => {
-		const config = { url: "https://example.com", serviceId: "svc-1", secret: "s3cret" }
-		const vars = getStreamEnvVars("my-session", config)
-
-		assert.equal(vars.DS_URL, "https://example.com")
-		assert.equal(vars.DS_SERVICE_ID, "svc-1")
-		assert.equal(vars.DS_SECRET, "s3cret")
-		assert.equal(vars.SESSION_ID, "my-session")
+	it("getStreamEnvVars was removed — DS_SECRET must not leave server process", async () => {
+		// Verify getStreamEnvVars is no longer exported (security: #122)
+		const streams = await import("../src/streams.js")
+		assert.equal("getStreamEnvVars" in streams, false)
 	})
 })
 

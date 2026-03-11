@@ -29,7 +29,10 @@ export interface LocalStreamServer {
 	config: StreamConfig
 	/** Build connection info for a session */
 	connection(sessionId: string): StreamConnectionInfo
-	/** Build env vars for a sandbox */
+	/**
+	 * Build env vars for a test container (test-only, NOT for production).
+	 * In production, DS_SECRET never leaves the server process.
+	 */
 	envVars(sessionId: string): Record<string, string>
 	/** Whether we're using a local server (true) or hosted (false) */
 	isLocal: boolean

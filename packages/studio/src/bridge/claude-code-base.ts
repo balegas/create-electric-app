@@ -59,8 +59,8 @@ export const DEFAULT_ALLOWED_TOOLS = [
 
 export abstract class ClaudeCodeBaseBridge implements SessionBridge {
 	readonly sessionId: string
-	readonly streamUrl: string
-	readonly streamHeaders: Record<string, string>
+	protected readonly streamUrl: string
+	protected readonly streamHeaders: Record<string, string>
 
 	protected writer: DurableStream
 	protected parser: StreamJsonParser = createStreamJsonParser()

@@ -5,11 +5,8 @@ import { execSync } from "node:child_process"
 import { before, describe, it } from "node:test"
 import type { EngineEvent } from "@electric-agent/protocol"
 import { HostedStreamBridge } from "@electric-agent/studio/bridge"
-import {
-	getStreamConfig,
-	getStreamConnectionInfo,
-	getStreamEnvVars,
-} from "@electric-agent/studio/streams"
+import type { StreamConfig } from "@electric-agent/studio/streams"
+import { getStreamConfig, getStreamConnectionInfo } from "@electric-agent/studio/streams"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -17,6 +14,19 @@ import {
 
 function uniqueSessionId(): string {
 	return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * Test-only: build env vars for a sandbox container that connects directly to DS.
+ * In production, DS_SECRET never leaves the server — sandboxes use the studio API proxy.
+ */
+function testStreamEnvVars(sessionId: string, config: StreamConfig): Record<string, string> {
+	return {
+		DS_URL: config.url,
+		DS_SERVICE_ID: config.serviceId,
+		DS_SECRET: config.secret,
+		SESSION_ID: sessionId,
+	}
 }
 
 function isDockerAvailable(): boolean {
@@ -101,7 +111,7 @@ describe("e2e-docker — test sandbox via stream bridge", { skip: skipReason ?? 
 			const config = streamConfig
 			const sessionId = uniqueSessionId()
 			const conn = getStreamConnectionInfo(sessionId, config)
-			const streamEnv = getStreamEnvVars(sessionId, config)
+			const streamEnv = testStreamEnvVars(sessionId, config)
 
 			// Create the stream
 			await ensureStream(conn.url, conn.headers)
@@ -175,7 +185,7 @@ describe("e2e-docker — test sandbox via stream bridge", { skip: skipReason ?? 
 		const config = streamConfig
 		const sessionId = uniqueSessionId()
 		const conn = getStreamConnectionInfo(sessionId, config)
-		const streamEnv = getStreamEnvVars(sessionId, config)
+		const streamEnv = testStreamEnvVars(sessionId, config)
 
 		await ensureStream(conn.url, conn.headers)
 
