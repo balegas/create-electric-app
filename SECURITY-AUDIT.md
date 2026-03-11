@@ -14,7 +14,7 @@ The Electric Agent Studio is a multi-agent orchestration platform where sandboxe
 - **Sandbox isolation** via Sprites VMs or Docker containers
 - **Client-side credential storage** (keys passed per-request, not persisted server-side)
 
-This audit identified **5 critical**, **4 high**, and **6 medium** severity issues.
+This audit identified **5 critical**, **6 high**, and **9 medium** severity issues.
 
 ---
 
@@ -29,12 +29,17 @@ This audit identified **5 critical**, **4 high**, and **6 medium** severity issu
 7. [HIGH: Session Token Minting for Any Linked Session](#7-high-session-token-minting-for-any-linked-session)
 8. [HIGH: CORS `origin: "*"` on All Routes](#8-high-cors-origin--on-all-routes)
 9. [HIGH: Command Injection via Project Name / Repo URL](#9-high-command-injection-via-project-name--repo-url)
-10. [MEDIUM: `/api/provision-electric` Is Unauthenticated](#10-medium-apiprovision-electric-is-unauthenticated)
-11. [MEDIUM: Room Message Routing Has No Cryptographic Enforcement](#11-medium-room-message-routing-has-no-cryptographic-enforcement)
-12. [MEDIUM: DS Secret Passed to Every Sandbox](#12-medium-ds-secret-passed-to-every-sandbox)
-13. [MEDIUM: No Expiry on Session Tokens](#13-medium-no-expiry-on-session-tokens)
-14. [MEDIUM: Keychain Endpoint Leaks OAuth Tokens](#14-medium-keychain-endpoint-leaks-oauth-tokens)
-15. [MEDIUM: Error Messages May Leak Internal State](#15-medium-error-messages-may-leak-internal-state)
+10. [HIGH: XSS via `dangerouslySetInnerHTML`](#10-high-xss-via-dangerouslysetinnerhtml)
+11. [HIGH: Missing Input Validation on API Bodies](#11-high-missing-input-validation-on-api-bodies)
+12. [MEDIUM: `/api/provision-electric` Is Unauthenticated](#12-medium-apiprovision-electric-is-unauthenticated)
+13. [MEDIUM: Room Message Routing Has No Cryptographic Enforcement](#13-medium-room-message-routing-has-no-cryptographic-enforcement)
+14. [MEDIUM: DS Secret Passed to Every Sandbox](#14-medium-ds-secret-passed-to-every-sandbox)
+15. [MEDIUM: No Expiry on Session Tokens](#15-medium-no-expiry-on-session-tokens)
+16. [MEDIUM: Keychain Endpoint Leaks OAuth Tokens](#16-medium-keychain-endpoint-leaks-oauth-tokens)
+17. [MEDIUM: Error Messages May Leak Internal State](#17-medium-error-messages-may-leak-internal-state)
+18. [MEDIUM: File Path Traversal Check Is Bypassable](#18-medium-file-path-traversal-check-is-bypassable)
+19. [MEDIUM: Missing HTTP Security Headers](#19-medium-missing-http-security-headers)
+20. [MEDIUM: Credentials Stored in localStorage (XSS Amplifier)](#20-medium-credentials-stored-in-localstorage-xss-amplifier)
 
 ---
 
@@ -303,7 +308,71 @@ await this.exec(handle, `cd ${targetDir} && git checkout ${opts.branch}`)
 
 ---
 
-### 10. MEDIUM: `/api/provision-electric` Is Unauthenticated
+### 10. HIGH: XSS via `dangerouslySetInnerHTML`
+
+**Files:** `packages/studio/client/src/components/Markdown.tsx:15`, `packages/studio/client/src/components/ToolExecution.tsx:62`
+
+**Description:**
+Both components use `dangerouslySetInnerHTML` with output from the `sugar-high` syntax highlighting library:
+
+```typescript
+// Markdown.tsx
+const html = highlight(code)
+return <code dangerouslySetInnerHTML={{ __html: html }} />
+
+// ToolExecution.tsx
+const html = highlight(content) + (truncated ? "\n... (truncated)" : "")
+return <pre dangerouslySetInnerHTML={{ __html: html }} />
+```
+
+The `content` flowing into these components comes from agent output (tool responses, assistant messages), which could contain crafted payloads if an agent is compromised via prompt injection.
+
+**Impact:** If `sugar-high` has a parsing vulnerability or doesn't fully escape special characters, an attacker could inject arbitrary HTML/JavaScript. The `ToolExecution.tsx` case also concatenates a string directly to the highlighted HTML output.
+
+**Recommendation:**
+- Sanitize the output of `sugar-high` with a library like DOMPurify before setting innerHTML
+- Or use a safer rendering approach that doesn't require `dangerouslySetInnerHTML`
+- At minimum, audit `sugar-high`'s escaping guarantees
+
+---
+
+### 11. HIGH: Missing Input Validation on API Bodies
+
+**Files:** Throughout `packages/studio/src/server.ts`
+
+**Description:**
+Request bodies are cast to TypeScript types but never validated at runtime:
+
+```typescript
+// Line 480 — no validation
+const body = (await c.req.json().catch(() => ({}))) as { description?: string }
+
+// Line 521 — cast without validation
+const body = (await c.req.json()) as Record<string, unknown>
+
+// Line 898 — accepts apiKey, oauthToken, ghToken with no format validation
+const body = (await c.req.json()) as {
+    description: string
+    apiKey?: string
+    oauthToken?: string
+    ghToken?: string
+}
+```
+
+TypeScript type assertions provide zero runtime protection. Malformed payloads (wrong types, missing fields, oversized strings, unexpected nested objects) are passed directly to business logic.
+
+**Impact:**
+- Unexpected data types could cause runtime crashes or unexpected behavior
+- Oversized payloads could cause memory issues
+- Malformed fields could trigger edge cases in downstream code
+
+**Recommendation:**
+- Use Zod schemas (already a project dependency) to validate all API request bodies
+- Reject requests that don't match expected shape with 400 errors
+
+---
+
+### 12. MEDIUM: `/api/provision-electric` Is Unauthenticated
 
 **File:** `packages/studio/src/server.ts:400-416`
 
@@ -318,7 +387,7 @@ The endpoint provisions real Electric Cloud resources (database + sync service) 
 
 ---
 
-### 11. MEDIUM: Room Message Routing Has No Cryptographic Enforcement
+### 13. MEDIUM: Room Message Routing Has No Cryptographic Enforcement
 
 **File:** `packages/studio/src/room-router.ts`
 
@@ -341,7 +410,7 @@ However:
 
 ---
 
-### 12. MEDIUM: DS Secret Passed to Every Sandbox
+### 14. MEDIUM: DS Secret Passed to Every Sandbox
 
 **File:** `packages/studio/src/streams.ts:100-107`
 
@@ -367,7 +436,7 @@ Although this function exists, it appears to not currently be called in the spri
 
 ---
 
-### 13. MEDIUM: No Expiry on Session Tokens
+### 15. MEDIUM: No Expiry on Session Tokens
 
 **File:** `packages/studio/src/session-auth.ts`
 
@@ -388,7 +457,7 @@ export function deriveSessionToken(secret: string, sessionId: string): string {
 
 ---
 
-### 14. MEDIUM: Keychain Endpoint Leaks OAuth Tokens
+### 16. MEDIUM: Keychain Endpoint Leaks OAuth Tokens
 
 **File:** `packages/studio/src/server.ts:2786-2809`
 
@@ -406,7 +475,7 @@ export function deriveSessionToken(secret: string, sessionId: string): string {
 
 ---
 
-### 15. MEDIUM: Error Messages May Leak Internal State
+### 17. MEDIUM: Error Messages May Leak Internal State
 
 **Files:** Various locations in `server.ts`
 
@@ -422,6 +491,91 @@ return c.json({ error: message }, 500)
 **Recommendation:**
 - Return generic error messages to clients
 - Log detailed errors server-side only
+
+---
+
+### 18. MEDIUM: File Path Traversal Check Is Bypassable
+
+**File:** `packages/studio/src/server.ts:2738`
+
+**Description:**
+The file-content endpoint uses a `startsWith` check for path validation:
+
+```typescript
+if (!filePath.startsWith(sandboxDir)) {
+    return c.json({ error: "Path outside project directory" }, 403)
+}
+```
+
+If `sandboxDir = "/home/agent/workspace/myapp"`, then `"/home/agent/workspace/myapp-evil/../../../etc/passwd"` passes the `startsWith` check but resolves to a path outside the project directory.
+
+**Impact:** An attacker with a valid session token could read files outside the project directory within the sandbox (e.g., `/etc/profile.d/electric-agent.sh` which contains API keys).
+
+**Recommendation:**
+- Use `path.resolve()` to normalize the path before comparison
+- Use `path.relative()` and verify the result doesn't start with `..`
+
+---
+
+### 19. MEDIUM: Missing HTTP Security Headers
+
+**File:** `packages/studio/src/server.ts`
+
+**Description:**
+The server does not set standard security headers:
+- No `Content-Security-Policy`
+- No `X-Content-Type-Options: nosniff`
+- No `X-Frame-Options`
+- No `Strict-Transport-Security` (HSTS)
+
+**Impact:** Increases attack surface for XSS, clickjacking, and MIME type sniffing attacks.
+
+**Recommendation:**
+- Add Hono middleware to set security headers on all responses
+- At minimum add `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`
+
+---
+
+### 20. MEDIUM: Credentials Stored in localStorage (XSS Amplifier)
+
+**File:** `packages/studio/client/src/lib/credentials.ts:8-27`
+
+**Description:**
+API keys and OAuth tokens are stored in browser `localStorage`:
+
+```typescript
+const ANTHROPIC_KEY = "electric-agent:anthropic-api-key"
+export function getApiKey(): string | null {
+    return localStorage.getItem(ANTHROPIC_KEY)
+}
+```
+
+While this is a common pattern and the keys never leave the browser except during session creation, `localStorage` is accessible to any JavaScript running on the page.
+
+**Impact:** If any XSS vulnerability exists (see finding #10), an attacker's script can read all stored API keys and OAuth tokens. This makes XSS vulnerabilities significantly more damaging.
+
+**Recommendation:**
+- Consider using `sessionStorage` (cleared on tab close) for short-lived sessions
+- Implement strong CSP headers to mitigate XSS
+- For production, consider a server-side session model where the server holds credentials and the client only has an httpOnly session cookie
+
+---
+
+## Positive Security Findings
+
+The following security aspects are **well-implemented**:
+
+| Aspect | Details |
+|---|---|
+| **Timing-safe token comparison** | `session-auth.ts` uses `crypto.timingSafeEqual()` — prevents timing attacks |
+| **HMAC-SHA256 token derivation** | Stateless, deterministic, cryptographically sound |
+| **Purpose-scoped hook tokens** | Hook tokens use `hook:` prefix, preventing token confusion attacks |
+| **Electric Cloud creds server-side** | `ELECTRIC_SOURCE_ID`/`ELECTRIC_SECRET` are injected by the proxy, never sent to the browser |
+| **No raw SQL** | Drizzle ORM prevents SQL injection in generated apps |
+| **No `eval()` or `Function()`** | No dynamic code execution patterns found |
+| **Secure random generation** | Uses `crypto.randomUUID()` and `crypto.randomBytes()` throughout |
+| **Shell argument escaping in bridge** | `claude-code-sprites.ts:81` properly escapes single quotes in CLI args |
+| **Comprehensive auth tests** | 35 tests in `session-auth.test.ts` covering token validation, cross-session rejection |
 
 ---
 
@@ -474,17 +628,22 @@ Per the user's requirement: **"no agent can talk directly to another agent witho
 2. **Add auth to `/api/hook`** — Require a shared secret or signed payload
 3. **Add auth to sandbox endpoints** — Admin-level authentication for `/api/sandboxes/*`
 4. **Fix CORS** — Restrict to known origins
-5. **Stop logging credentials** — Remove the partial OAuth token log
+5. **Stop logging credentials** — Remove the partial OAuth token log at `server.ts:2799`
+6. **Add input validation** — Use Zod schemas on all API request bodies
+7. **Fix XSS** — Sanitize `dangerouslySetInnerHTML` inputs in Markdown.tsx and ToolExecution.tsx
 
 ### Phase 2 (Short-term — before GA)
 1. **Scope DS credentials** — Use per-room/per-session JWTs instead of the master DS_SECRET
-2. **Validate session linkage** — Check that session ID is linked before minting tokens
-3. **Sanitize shell inputs** — Use `execFile` with argument arrays everywhere
+2. **Validate session linkage** — Check that session ID is linked before minting tokens at `/api/shared-sessions/:id/sessions/:sessionId/token`
+3. **Sanitize shell inputs** — Use `execFile` with argument arrays everywhere; validate `branch`, `repoUrl`, `projectName`
 4. **Credential proxy** — Avoid writing raw API keys to sandbox filesystems
+5. **Fix path traversal** — Use `path.resolve()` + `path.relative()` in file-content endpoint
+6. **Add security headers** — CSP, X-Content-Type-Options, X-Frame-Options, HSTS
 
 ### Phase 3 (Medium-term — hardening)
 1. **Token expiry** — Add TTL to session/room tokens
 2. **Message signing** — Cryptographically sign room messages
-3. **Network policy** — Restrict sandbox outbound to only necessary endpoints
+3. **Network policy** — Restrict sandbox outbound to only necessary endpoints (not `domain: "*"`)
 4. **Audit logging** — Log security-relevant events (auth failures, room modifications)
 5. **Remove `/api/credentials/keychain`** in production
+6. **Consider server-side credential session** — Replace localStorage API key storage with httpOnly cookie session
