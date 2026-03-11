@@ -12,7 +12,6 @@ import {
 	setOauthToken,
 } from "../lib/credentials"
 import { getSessions, removeSession as removeSessionFromStore } from "../lib/session-store"
-import { getJoinedSharedSessions, type JoinedSharedSession } from "../lib/shared-session-store"
 
 export type AuthSource = "api-key" | "oauth" | "keychain" | null
 
@@ -32,8 +31,6 @@ interface AppContextValue {
 	handleNewProject: (description: string, freeform?: boolean) => void
 	handleDeleteSession: (sessionId: string) => Promise<void>
 	loading: boolean
-	joinedSharedSessions: JoinedSharedSession[]
-	refreshJoinedSharedSessions: () => void
 	agentRooms: AgentRoomEntry[]
 	refreshAgentRooms: () => void
 }
@@ -65,9 +62,6 @@ export function AppShell() {
 	const [showSettings, setShowSettings] = useState(false)
 	const [loading] = useState(false)
 	const [pendingProject, setPendingProject] = useState<PendingProject | null>(null)
-	const [joinedSharedSessions, setJoinedSharedSessions] = useState<JoinedSharedSession[]>(() =>
-		getJoinedSharedSessions(),
-	)
 	const [agentRooms, setAgentRooms] = useState<AgentRoomEntry[]>(() => getAgentRooms())
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		() => localStorage.getItem("sidebarCollapsed") === "true",
@@ -87,10 +81,6 @@ export function AppShell() {
 
 	const navigate = useNavigate()
 	const location = useLocation()
-
-	const refreshJoinedSharedSessions = useCallback(() => {
-		setJoinedSharedSessions(getJoinedSharedSessions())
-	}, [])
 
 	const refreshAgentRooms = useCallback(() => {
 		setAgentRooms(getAgentRooms())
@@ -211,8 +201,6 @@ export function AppShell() {
 		handleNewProject,
 		handleDeleteSession,
 		loading,
-		joinedSharedSessions,
-		refreshJoinedSharedSessions,
 		agentRooms,
 		refreshAgentRooms,
 	}

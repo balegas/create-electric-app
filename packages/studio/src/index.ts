@@ -1,6 +1,8 @@
 export { ActiveSessions } from "./active-sessions.js"
 export { createGate, rejectAllGates, resolveGate } from "./gate.js"
+export { generateInviteCode } from "./invite-code.js"
 export { resolveProjectDir } from "./project-utils.js"
+export type { RoomEntry } from "./registry.js"
 export type { RoomInfo } from "./room-registry.js"
 export { RoomRegistry } from "./room-registry.js"
 export { createApp, startWebServer } from "./server.js"
@@ -19,10 +21,9 @@ export {
 	readSessionIndex,
 	updateSessionInfo,
 } from "./sessions.js"
-export { generateInviteCode } from "./shared-sessions.js"
 export type { StreamConfig, StreamConnectionInfo } from "./streams.js"
 export {
-	getSharedStreamConnectionInfo,
+	getRoomStreamConnectionInfo,
 	getStreamConfig,
 	getStreamConnectionInfo,
 	getStreamEnvVars,

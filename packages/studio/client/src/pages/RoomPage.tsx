@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { getAvatarColor } from "../components/SessionListItem"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
 import { useAppContext } from "../layouts/AppShell"
+import { getAgentRooms } from "../lib/agent-room-store"
 import {
 	addAgentToRoom,
 	addSessionToRoom,
@@ -30,6 +31,9 @@ export function RoomPage() {
 	const loadedRef = useRef(false)
 
 	const { events, isClosed } = useRoomEvents(roomId ?? null)
+
+	// Look up invite code from the local room store
+	const roomEntry = roomId ? getAgentRooms().find((r) => r.id === roomId) : undefined
 
 	// Fetch room state on mount + periodically
 	useEffect(() => {
@@ -77,7 +81,7 @@ export function RoomPage() {
 
 	if (error) {
 		return (
-			<div className="shared-session-error">
+			<div className="room-error">
 				<h2>Cannot load room</h2>
 				<p>{error}</p>
 				<button type="button" className="btn" onClick={() => navigate("/")}>
@@ -94,6 +98,8 @@ export function RoomPage() {
 		<>
 			<RoomHeader
 				roomId={roomId}
+				roomName={roomEntry?.name}
+				roomCode={roomEntry?.code}
 				state={effectiveState}
 				participants={participants}
 				onClose={handleClose}
@@ -135,6 +141,8 @@ export function RoomPage() {
 
 function RoomHeader({
 	roomId,
+	roomName,
+	roomCode,
 	state,
 	participants,
 	onClose,
@@ -142,6 +150,8 @@ function RoomHeader({
 	openMobileDrawer,
 }: {
 	roomId?: string
+	roomName?: string
+	roomCode?: string
 	state?: string
 	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 	onClose: () => void
@@ -149,6 +159,16 @@ function RoomHeader({
 	openMobileDrawer: () => void
 }) {
 	const navigate = useNavigate()
+	const [copied, setCopied] = useState(false)
+
+	const handleCopyCode = useCallback(() => {
+		if (!roomId || !roomCode) return
+		const joinToken = `${roomId}:${roomCode}`
+		navigator.clipboard.writeText(joinToken)
+		setCopied(true)
+		setTimeout(() => setCopied(false), 2000)
+	}, [roomId, roomCode])
+
 	return (
 		<div className="session-header">
 			<button
@@ -173,7 +193,7 @@ function RoomHeader({
 				</svg>
 			</button>
 
-			<span className="session-header-name">Room {roomId?.slice(0, 8)}</span>
+			<span className="session-header-name">{roomName || `Room ${roomId?.slice(0, 8)}`}</span>
 
 			{state === "active" && (
 				<span className="session-header-status" style={{ color: "var(--green)" }}>
@@ -208,6 +228,15 @@ function RoomHeader({
 					)
 				})}
 			</span>
+
+			{roomCode && (
+				<>
+					<span className="invite-code-label">Join code:</span>
+					<button type="button" className="invite-code-btn" onClick={handleCopyCode}>
+						{copied ? "Copied!" : roomCode}
+					</button>
+				</>
+			)}
 
 			<span className="session-header-actions-group">
 				<button

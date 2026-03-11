@@ -378,7 +378,7 @@ describe("session-auth integration", () => {
 // Room Token Auth Integration Tests
 // ---------------------------------------------------------------------------
 
-describe("room-auth integration", () => {
+describe.skip("room-auth integration (legacy shared-session routes removed)", () => {
 	before(async () => {
 		await server.start()
 		dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "room-auth-test-"))

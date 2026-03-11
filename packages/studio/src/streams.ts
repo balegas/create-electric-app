@@ -53,21 +53,6 @@ export function getStreamConnectionInfo(
 }
 
 /**
- * Build connection info for a shared session stream.
- */
-export function getSharedStreamConnectionInfo(
-	sharedSessionId: string,
-	config: StreamConfig,
-): StreamConnectionInfo {
-	return {
-		url: `${config.url}/v1/stream/${config.serviceId}/shared/${sharedSessionId}`,
-		headers: {
-			Authorization: `Bearer ${config.secret}`,
-		},
-	}
-}
-
-/**
  * Build connection info for the registry stream (session + room metadata).
  */
 export function getRegistryConnectionInfo(config: StreamConfig): StreamConnectionInfo {

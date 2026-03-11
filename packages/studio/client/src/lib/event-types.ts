@@ -2,7 +2,7 @@ export type {
 	EngineEvent,
 	LogLevel,
 	Participant,
-	SharedSessionEvent,
+	RoomEvent,
 } from "@electric-agent/protocol"
 
 import type { EngineEvent, LogLevel } from "@electric-agent/protocol"

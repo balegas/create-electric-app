@@ -79,14 +79,13 @@ Gates are events where the system pauses and waits for user input before continu
 |------|-------------|
 | `user_prompt` | Incoming message from a user or room participant. |
 
-### Shared Session / Room Events
+### Room Events
 
 | Type | Description |
 |------|-------------|
-| `shared_session_created` | A room was created with an invite code. |
+| `room_created` | A room was created with an invite code. |
 | `participant_joined` | A user or agent joined the room. |
 | `participant_left` | A user or agent left the room. |
-| `session_linked` | An agent session was linked to the room. |
 | `agent_message` | A message routed through the room (broadcast or direct). |
 | `room_closed` | The room conversation ended (via `DONE:` signal or max rounds). |
 

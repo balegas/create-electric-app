@@ -8,7 +8,7 @@
 
 import crypto from "node:crypto"
 import { DurableStream } from "@durable-streams/client"
-import type { SharedSessionEvent } from "@electric-agent/protocol"
+import type { RoomEvent } from "@electric-agent/protocol"
 import { ts } from "@electric-agent/protocol"
 import { parseRoomMessage } from "./bridge/message-parser.js"
 import type { SessionBridge } from "./bridge/types.js"
@@ -89,7 +89,7 @@ export class RoomRouter {
 		const { roster, recentMessages } = await this.readStreamHistory()
 
 		// Emit participant_joined to room stream
-		const joinEvent: SharedSessionEvent = {
+		const joinEvent: RoomEvent = {
 			type: "participant_joined",
 			participant: { id: participant.sessionId, displayName: participant.name },
 			ts: ts(),
@@ -127,7 +127,7 @@ export class RoomRouter {
 
 		this._participants.delete(sessionId)
 
-		const leaveEvent: SharedSessionEvent = {
+		const leaveEvent: RoomEvent = {
 			type: "participant_left",
 			participantId: sessionId,
 			ts: ts(),
@@ -152,7 +152,7 @@ export class RoomRouter {
 	async sendMessage(from: string, body: string, to?: string): Promise<void> {
 		if (this._state === "closed") return
 
-		const event: SharedSessionEvent = {
+		const event: RoomEvent = {
 			type: "agent_message",
 			from,
 			...(to ? { to } : {}),

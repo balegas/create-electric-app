@@ -1,4 +1,4 @@
-const STORAGE_KEY = "electric-agent:agent-rooms"
+const STORAGE_KEY = "electric-agent:rooms"
 
 export interface AgentRoomEntry {
 	id: string
