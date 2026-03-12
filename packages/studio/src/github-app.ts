@@ -9,8 +9,7 @@ export function createGitHubAppJWT(appId: string, privateKey: string): string {
 		exp: now + 600, // 10 minutes
 	}
 
-	const enc = (obj: unknown) =>
-		Buffer.from(JSON.stringify(obj)).toString("base64url")
+	const enc = (obj: unknown) => Buffer.from(JSON.stringify(obj)).toString("base64url")
 	const unsigned = `${enc(header)}.${enc(payload)}`
 
 	const sign = crypto.createSign("RSA-SHA256")

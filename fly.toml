@@ -8,6 +8,11 @@ primary_region = "ord"
   NODE_ENV = "production"
   PORT = "8080"
   SANDBOX_RUNTIME = "sprites"
+  MAX_TOTAL_SESSIONS = "50"
+  MAX_SESSIONS_PER_IP_PER_HOUR = "5"
+  MAX_SESSION_COST_USD = "5"
+  # GitHub App secrets (GITHUB_APP_ID, GITHUB_INSTALLATION_ID, GITHUB_PRIVATE_KEY)
+  # are set via `fly secrets set` — not listed here
 
 [http_service]
   internal_port = 8080

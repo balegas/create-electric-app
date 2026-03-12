@@ -171,6 +171,36 @@ These are read by:
 
 You do NOT need to set up database connections or configure Electric. Just define your schema, run migrations, and write your app.
 
+## Operating Modes
+
+### Prod Mode (NODE_ENV=production, STUDIO_DEV_MODE unset)
+- Claude API key: pre-configured via ANTHROPIC_API_KEY env var on server
+- GitHub: repos created in `electric-apps` org via GitHub App (credential helper in sandbox)
+- Rate limiting: MAX_TOTAL_SESSIONS + MAX_SESSIONS_PER_IP_PER_HOUR + MAX_SESSION_COST_USD
+- UI: no credential fields, no "Start from repo"
+- POST /api/sessions/resume: returns 403
+- POST /api/sessions/:id/github-token: returns installation token for sandbox git operations
+
+### Dev Mode (STUDIO_DEV_MODE=1)
+- User provides own Claude API key and GitHub token
+- Full UI with all credential fields
+- No rate limiting
+- Can start from existing repos
+
+### Environment Variables (Prod)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| MAX_TOTAL_SESSIONS | Max concurrent active sessions | 50 |
+| MAX_SESSIONS_PER_IP_PER_HOUR | Per-IP session rate limit | 5 |
+| MAX_SESSION_COST_USD | Per-session cost budget | 5 |
+
+### Fly Secrets (Prod — GitHub App)
+| Secret | Description |
+|--------|-------------|
+| GITHUB_APP_ID | GitHub App numeric ID |
+| GITHUB_INSTALLATION_ID | Installation ID for electric-apps org |
+| GITHUB_PRIVATE_KEY | PEM private key for JWT signing |
+
 ## Dev Server & Migrations
 ### Dev Server (CRITICAL — use pnpm scripts ONLY)
 - `pnpm dev:start` — start the Vite dev server in the background

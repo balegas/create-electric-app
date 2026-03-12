@@ -285,12 +285,7 @@ fi`
 		])
 
 		// Override the default gh credential helper set during bootstrap
-		await sprite.execFile("git", [
-			"config",
-			"--global",
-			"credential.helper",
-			"electric",
-		])
+		await sprite.execFile("git", ["config", "--global", "credential.helper", "electric"])
 
 		console.log(`[sprites] Credential helper installed for session ${sessionId}`)
 	}
