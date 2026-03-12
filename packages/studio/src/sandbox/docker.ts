@@ -260,7 +260,79 @@ export class DockerSandboxProvider implements SandboxProvider {
 		this.activeContainers.set(sessionId, handle)
 		this.internalState.set(sessionId, state)
 
+		// In prod mode, install git credential helper that fetches tokens from studio server
+		if (opts?.prodMode) {
+			// Docker containers can't reach localhost — rewrite to host.docker.internal
+			const studioUrl = opts.prodMode.studioUrl.replace(
+				/localhost|127\.0\.0\.1/,
+				"host.docker.internal",
+			)
+			this.installCredentialHelper(state, sessionId, opts.prodMode.sessionToken, studioUrl)
+		}
+
 		return handle
+	}
+
+	private installCredentialHelper(
+		state: DockerInternalState,
+		sessionId: string,
+		sessionToken: string,
+		studioUrl: string,
+	): void {
+		const script = `#!/bin/bash
+# git-credential-electric: fetches GitHub tokens from studio server
+if [ "$1" != "get" ]; then exit 0; fi
+
+input=$(cat)
+host=$(echo "$input" | grep "^host=" | cut -d= -f2)
+if [ "$host" != "github.com" ]; then exit 0; fi
+
+response=$(curl -s -w "\\\\n%{http_code}" -X POST \\
+  -H "Authorization: Bearer \${SESSION_TOKEN}" \\
+  "\${STUDIO_URL}/api/sessions/\${SESSION_ID}/github-token")
+
+http_code=$(echo "$response" | tail -1)
+body_text=$(echo "$response" | sed '\\$d')
+
+if [ "$http_code" != "200" ]; then
+  echo "git-credential-electric: failed to fetch token (HTTP $http_code)" >&2
+  exit 1
+fi
+
+token=$(echo "$body_text" | jq -r '.token')
+if [ -n "$token" ] && [ "$token" != "null" ]; then
+  echo "protocol=https"
+  echo "host=github.com"
+  echo "username=x-access-token"
+  echo "password=\${token}"
+else
+  echo "git-credential-electric: invalid token response" >&2
+  exit 1
+fi`
+
+		// Write credential helper script via base64 to avoid quoting issues
+		const scriptB64 = Buffer.from(script).toString("base64")
+		execInContainer(
+			state,
+			`echo ${scriptB64} | base64 -d > /usr/local/bin/git-credential-electric && chmod +x /usr/local/bin/git-credential-electric`,
+		)
+
+		// Write session env vars for the credential helper
+		const envScript = [
+			`export SESSION_TOKEN="${sessionToken}"`,
+			`export SESSION_ID="${sessionId}"`,
+			`export STUDIO_URL="${studioUrl}"`,
+		].join("\n")
+		const envB64 = Buffer.from(envScript).toString("base64")
+		execInContainer(
+			state,
+			`echo ${envB64} | base64 -d >> /etc/profile.d/electric-agent.sh 2>/dev/null || echo ${envB64} | base64 -d > /tmp/credential-env.sh`,
+		)
+
+		// Configure git to use our credential helper
+		execInContainer(state, `git config --global credential.helper electric`)
+
+		console.log(`[docker] Credential helper installed for session ${sessionId}`)
 	}
 
 	async destroy(handle: SandboxHandle): Promise<void> {
