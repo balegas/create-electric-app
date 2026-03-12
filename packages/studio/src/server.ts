@@ -282,42 +282,6 @@ function closeBridge(sessionId: string): void {
 }
 
 /**
- * Detect git operations from natural language prompts.
- * Returns structured gitOp fields if matched, null otherwise.
- */
-function detectGitOp(
-	request: string,
-): { gitOp: string; gitMessage?: string; gitPrTitle?: string; gitPrBody?: string } | null {
-	const lower = request.toLowerCase().trim()
-
-	// Commit: "commit", "commit the code", "commit changes", "commit with message ..."
-	if (/^(git\s+)?commit\b/.test(lower) || /^save\s+(my\s+)?(changes|progress|work)\b/.test(lower)) {
-		// Extract commit message after "commit" keyword, or after "message:" / "msg:"
-		const msgMatch = request.match(
-			/(?:commit\s+(?:with\s+(?:message\s+)?)?|message:\s*|msg:\s*)["']?(.+?)["']?\s*$/i,
-		)
-		const message = msgMatch?.[1]?.replace(/^(the\s+)?(code|changes)\s*/i, "").trim()
-		return { gitOp: "commit", gitMessage: message || undefined }
-	}
-
-	// Push: "push", "push to github", "push to remote", "git push"
-	if (/^(git\s+)?push\b/.test(lower)) {
-		return { gitOp: "push" }
-	}
-
-	// Create PR: "create pr", "open pr", "make pr", "create pull request"
-	if (/^(create|open|make)\s+(a\s+)?(pr|pull\s*request)\b/.test(lower)) {
-		// Try to extract title after the PR keyword
-		const titleMatch = request.match(
-			/(?:pr|pull\s*request)\s+(?:(?:titled?|called|named)\s+)?["']?(.+?)["']?\s*$/i,
-		)
-		return { gitOp: "create-pr", gitPrTitle: titleMatch?.[1] || undefined }
-	}
-
-	return null
-}
-
-/**
  * Map a Claude Code hook event JSON payload to an EngineEvent.
  *
  * After Phase 1 renames, the mapping is nearly 1:1. Claude Code passes
@@ -1446,73 +1410,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, iterateSessionSchema)
 		if (isResponse(body)) return body
 
-		// Intercept operational commands (start/stop/restart the app/server)
-		const normalised = body.request
-			.toLowerCase()
-			.replace(/[^a-z ]/g, "")
-			.trim()
-		const appOrServer = /\b(app|server|dev server|dev|vite)\b/
-		const isStartCmd = /^(start|run|launch|boot)\b/.test(normalised) && appOrServer.test(normalised)
-		const isStopCmd =
-			/^(stop|kill|shutdown|shut down)\b/.test(normalised) && appOrServer.test(normalised)
-		const isRestartCmd = /^restart\b/.test(normalised) && appOrServer.test(normalised)
-
-		if (isStartCmd || isStopCmd || isRestartCmd) {
-			const bridge = getOrCreateBridge(config, sessionId)
-			await bridge.emit({ type: "user_prompt", message: body.request, ts: ts() })
-
-			try {
-				const handle = config.sandbox.get(sessionId)
-				if (isStopCmd) {
-					if (handle && config.sandbox.isAlive(handle)) await config.sandbox.stopApp(handle)
-					await bridge.emit({ type: "log", level: "done", message: "App stopped", ts: ts() })
-				} else {
-					if (!handle || !config.sandbox.isAlive(handle)) {
-						return c.json({ error: "Container is not running" }, 400)
-					}
-					if (isRestartCmd) await config.sandbox.stopApp(handle)
-					await config.sandbox.startApp(handle)
-					await bridge.emit({
-						type: "log",
-						level: "done",
-						message: "App started",
-						ts: ts(),
-					})
-					await bridge.emit({
-						type: "app_status",
-						status: "running",
-						port: session.appPort,
-						previewUrl: session.previewUrl,
-						ts: ts(),
-					})
-				}
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : "Operation failed"
-				await bridge.emit({ type: "log", level: "error", message: msg, ts: ts() })
-			}
-			return c.json({ ok: true })
-		}
-
-		// Intercept git commands (commit, push, create PR)
-		const gitOp = detectGitOp(body.request)
-		if (gitOp) {
-			const bridge = getOrCreateBridge(config, sessionId)
-			await bridge.emit({ type: "user_prompt", message: body.request, ts: ts() })
-
-			const handle = config.sandbox.get(sessionId)
-			if (!handle || !config.sandbox.isAlive(handle)) {
-				return c.json({ error: "Container is not running" }, 400)
-			}
-
-			// Send git requests as user messages via Claude Code bridge
-			await bridge.sendCommand({
-				command: "iterate",
-				request: body.request,
-			})
-
-			return c.json({ ok: true })
-		}
-
 		const handle = config.sandbox.get(sessionId)
 		if (!handle || !config.sandbox.isAlive(handle)) {
 			return c.json({ error: "Container is not running" }, 400)
@@ -1963,8 +1860,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ roomId, code, roomToken }, 201)
 	})
 
-	// Join an agent room by id + invite code
-	app.get("/api/rooms/join/:id/:code", (c) => {
+	// Join an agent room by id + invite code (outside /api/rooms/:id to avoid auth middleware)
+	app.get("/api/join-room/:id/:code", (c) => {
 		const id = c.req.param("id")
 		const code = c.req.param("code")
 		const room = config.rooms.getRoom(id)

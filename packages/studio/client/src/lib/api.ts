@@ -38,8 +38,6 @@ function extractSessionId(path: string): string | undefined {
 function extractRoomId(path: string): string | undefined {
 	const match = path.match(/^\/rooms\/([^/]+)/)
 	if (!match) return undefined
-	// Don't match the "join" path (it's the code-lookup route, not a room ID)
-	if (match[1] === "join") return undefined
 	return match[1]
 }
 
@@ -287,7 +285,7 @@ export async function createAgentRoom(name: string, maxRounds?: number) {
 
 export async function joinAgentRoom(id: string, code: string) {
 	const result = await request<{ id: string; code: string; name: string; roomToken: string }>(
-		`/rooms/join/${id}/${code}`,
+		`/join-room/${id}/${code}`,
 	)
 	if (result.roomToken) {
 		setRoomToken(result.id, result.roomToken)

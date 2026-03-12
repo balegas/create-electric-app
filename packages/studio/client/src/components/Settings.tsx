@@ -20,6 +20,7 @@ interface SettingsProps {
 	onKeySaved: () => void
 	onClose: () => void
 	onCopyLog?: () => void
+	devMode?: boolean
 }
 
 export function Settings({
@@ -28,6 +29,7 @@ export function Settings({
 	onKeySaved,
 	onClose,
 	onCopyLog,
+	devMode,
 }: SettingsProps) {
 	const keyInputId = useId()
 	const ghInputId = useId()
@@ -223,7 +225,7 @@ export function Settings({
 
 				{/* Agent mode */}
 				<div className="settings-divider" />
-				{onCopyLog && (
+				{devMode && onCopyLog && (
 					<>
 						<div className="settings-divider" />
 						<div className="settings-section-label">Debug</div>
