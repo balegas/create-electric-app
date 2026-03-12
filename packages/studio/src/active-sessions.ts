@@ -37,6 +37,11 @@ export class ActiveSessions {
 		return this.sessions.has(id)
 	}
 
+	/** Return the number of active sessions. */
+	size(): number {
+		return this.sessions.size
+	}
+
 	// --- Transcript → Session Mapping (for Claude Code hook integration) ---
 
 	/**

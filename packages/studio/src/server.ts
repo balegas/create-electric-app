@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
+import { getInstallationToken } from "./github-app.js"
 import { DurableStream } from "@durable-streams/client"
 import type { EngineEvent, Participant, RoomEvent } from "@electric-agent/protocol"
 import { ts } from "@electric-agent/protocol"
@@ -141,8 +142,18 @@ function resolveStudioUrl(port: number): string {
 // ---------------------------------------------------------------------------
 
 const MAX_SESSIONS_PER_IP_PER_HOUR = Number(process.env.MAX_SESSIONS_PER_IP_PER_HOUR) || 5
+const MAX_TOTAL_SESSIONS = Number(process.env.MAX_TOTAL_SESSIONS || 50)
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 const sessionCreationsByIp = new Map<string, number[]>()
+
+// GitHub App config (prod mode — repo creation in electric-apps org)
+const GITHUB_APP_ID = process.env.GITHUB_APP_ID
+const GITHUB_INSTALLATION_ID = process.env.GITHUB_INSTALLATION_ID
+const GITHUB_PRIVATE_KEY = process.env.GITHUB_PRIVATE_KEY?.replace(/\\n/g, "\n")
+
+// Rate limiting for GitHub token endpoint
+const githubTokenRequestsBySession = new Map<string, number[]>()
+const MAX_GITHUB_TOKENS_PER_SESSION_PER_HOUR = 10
 
 function extractClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
 	return (
@@ -164,6 +175,22 @@ function checkSessionRateLimit(ip: string): boolean {
 	}
 	timestamps.push(now)
 	sessionCreationsByIp.set(ip, timestamps)
+	return true
+}
+
+function checkGlobalSessionCap(sessions: ActiveSessions): boolean {
+	return sessions.size() >= MAX_TOTAL_SESSIONS
+}
+
+function checkGithubTokenRateLimit(sessionId: string): boolean {
+	const now = Date.now()
+	const requests = githubTokenRequestsBySession.get(sessionId) ?? []
+	const recent = requests.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+	if (recent.length >= MAX_GITHUB_TOKENS_PER_SESSION_PER_HOUR) {
+		return false
+	}
+	recent.push(now)
+	githubTokenRequestsBySession.set(sessionId, recent)
 	return true
 }
 
@@ -443,7 +470,10 @@ export function createApp(config: ServerConfig) {
 
 	// Public config — exposes non-sensitive flags to the client
 	app.get("/api/config", (c) => {
-		return c.json({ devMode: config.devMode })
+		return c.json({
+			devMode: config.devMode,
+			maxSessionCostUsd: config.devMode ? undefined : MAX_SESSION_COST_USD,
+		})
 	})
 
 	// Provision Electric Cloud resources via the Claim API
@@ -963,6 +993,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createSessionSchema)
 		if (isResponse(body)) return body
 
+		// In prod mode, use server-side API key; ignore user-provided credentials
+		const apiKey = config.devMode ? body.apiKey : process.env.ANTHROPIC_API_KEY
+		const oauthToken = config.devMode ? body.oauthToken : undefined
+		const ghToken = config.devMode ? body.ghToken : undefined
+
 		// Block freeform sessions in production mode
 		if (body.freeform && !config.devMode) {
 			return c.json({ error: "Freeform sessions are not available" }, 403)
@@ -973,6 +1008,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const ip = extractClientIp(c)
 			if (!checkSessionRateLimit(ip)) {
 				return c.json({ error: "Too many sessions. Please try again later." }, 429)
+			}
+			if (checkGlobalSessionCap(config.sessions)) {
+				return c.json({ error: "Service at capacity, please try again later" }, 503)
 			}
 		}
 
@@ -1025,11 +1063,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Freeform sessions skip the infra config gate — no Electric/DB setup needed
 		let ghAccounts: { login: string; type: "user" | "org" }[] = []
 		if (!body.freeform) {
-			// Gather GitHub accounts for the merged setup gate
-			// Only check if the client provided a token — never fall back to server-side GH_TOKEN
-			if (body.ghToken && isGhAuthenticated(body.ghToken)) {
+			// Gather GitHub accounts for the merged setup gate (dev mode only)
+			if (config.devMode && ghToken && isGhAuthenticated(ghToken)) {
 				try {
-					ghAccounts = ghListAccounts(body.ghToken)
+					ghAccounts = ghListAccounts(ghToken)
 				} catch {
 					// gh not available — no repo setup
 				}
@@ -1129,9 +1166,15 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const handle = await config.sandbox.create(sessionId, {
 				projectName,
 				infra,
-				apiKey: body.apiKey,
-				oauthToken: body.oauthToken,
-				ghToken: body.ghToken,
+				apiKey,
+				oauthToken,
+				ghToken,
+				...(!config.devMode && {
+					prodMode: {
+						sessionToken: deriveSessionToken(config.streamConfig.secret, sessionId),
+						studioUrl: resolveStudioUrl(config.port),
+					},
+				}),
 			})
 			console.log(
 				`[session:${sessionId}] Sandbox created: projectDir=${handle.projectDir} port=${handle.port} previewUrl=${handle.previewUrl ?? "none"}`,
@@ -1429,6 +1472,36 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		})
 
 		return c.json({ ok: true })
+	})
+
+	// Generate a GitHub installation token for the sandbox (prod mode only)
+	app.post("/api/sessions/:id/github-token", async (c) => {
+		const sessionId = c.req.param("id")
+
+		if (config.devMode) {
+			return c.json({ error: "Not available in dev mode" }, 403)
+		}
+
+		if (!GITHUB_APP_ID || !GITHUB_INSTALLATION_ID || !GITHUB_PRIVATE_KEY) {
+			return c.json({ error: "GitHub App not configured" }, 500)
+		}
+
+		if (!checkGithubTokenRateLimit(sessionId)) {
+			return c.json({ error: "Too many token requests" }, 429)
+		}
+
+		try {
+			const result = await getInstallationToken(
+				GITHUB_APP_ID,
+				GITHUB_INSTALLATION_ID,
+				GITHUB_PRIVATE_KEY,
+			)
+			return c.json(result)
+		} catch (err) {
+			const message = err instanceof Error ? err.message : "Unknown error"
+			console.error(`GitHub token error for session ${sessionId}:`, message)
+			return c.json({ error: "Failed to generate GitHub token" }, 500)
+		}
 	})
 
 	// Respond to a gate (approval, clarification, continue, revision)
@@ -1900,6 +1973,20 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, addAgentSchema)
 		if (isResponse(body)) return body
 
+		// Rate-limit and gate credentials in production mode
+		if (!config.devMode) {
+			const ip = extractClientIp(c)
+			if (!checkSessionRateLimit(ip)) {
+				return c.json({ error: "Too many sessions. Please try again later." }, 429)
+			}
+			if (checkGlobalSessionCap(config.sessions)) {
+				return c.json({ error: "Service at capacity, please try again later" }, 503)
+			}
+		}
+		const apiKey = config.devMode ? body.apiKey : process.env.ANTHROPIC_API_KEY
+		const oauthToken = config.devMode ? body.oauthToken : undefined
+		const ghToken = config.devMode ? body.ghToken : undefined
+
 		const sessionId = crypto.randomUUID()
 		const randomSuffix = sessionId.slice(0, 6)
 		const agentName = body.name?.trim() || `agent-${randomSuffix}`
@@ -1955,9 +2042,15 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				const handle = await config.sandbox.create(sessionId, {
 					projectName,
 					infra: { mode: "local" },
-					apiKey: body.apiKey,
-					oauthToken: body.oauthToken,
-					ghToken: body.ghToken,
+					apiKey,
+					oauthToken,
+					ghToken,
+					...(!config.devMode && {
+						prodMode: {
+							sessionToken: deriveSessionToken(config.streamConfig.secret, sessionId),
+							studioUrl: resolveStudioUrl(config.port),
+						},
+					}),
 				})
 
 				config.sessions.update(sessionId, {
@@ -2483,6 +2576,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// List GitHub accounts (personal + orgs) — requires client-provided token
 	app.get("/api/github/accounts", (c) => {
+		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const token = c.req.header("X-GH-Token")
 		if (!token) return c.json({ accounts: [] })
 		try {
@@ -2493,8 +2587,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 	})
 
-	// List GitHub repos for the authenticated user — requires client-provided token
+	// List GitHub repos for the authenticated user — requires client-provided token (dev mode only)
 	app.get("/api/github/repos", (c) => {
+		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const token = c.req.header("X-GH-Token")
 		if (!token) return c.json({ repos: [] })
 		try {
@@ -2506,6 +2601,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	})
 
 	app.get("/api/github/repos/:owner/:repo/branches", (c) => {
+		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const owner = c.req.param("owner")
 		const repo = c.req.param("repo")
 		const token = c.req.header("X-GH-Token")
@@ -2545,18 +2641,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		})
 	}
 
-	// Resume a project from a GitHub repo
+	// Resume a project from a GitHub repo (dev mode only)
 	app.post("/api/sessions/resume", async (c) => {
+		if (!config.devMode) {
+			return c.json({ error: "Resume from repo not available" }, 403)
+		}
+
 		const body = await validateBody(c, resumeSessionSchema)
 		if (isResponse(body)) return body
-
-		// Rate-limit session creation in production mode
-		if (!config.devMode) {
-			const ip = extractClientIp(c)
-			if (!checkSessionRateLimit(ip)) {
-				return c.json({ error: "Too many sessions. Please try again later." }, 429)
-			}
-		}
 
 		const sessionId = crypto.randomUUID()
 		const repoName =

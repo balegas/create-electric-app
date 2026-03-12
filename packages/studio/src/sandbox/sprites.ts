@@ -193,6 +193,16 @@ export class SpritesSandboxProvider implements SandboxProvider {
 			`echo ${b64} | base64 -d > /etc/profile.d/electric-agent.sh`,
 		])
 
+		// In prod mode, install git credential helper that fetches tokens from studio server
+		if (opts?.prodMode) {
+			await this.installCredentialHelper(
+				sprite,
+				sessionId,
+				opts.prodMode.sessionToken,
+				opts.prodMode.studioUrl,
+			)
+		}
+
 		validateName(projectName, "project name")
 		const projectDir = `/home/agent/workspace/${projectName}`
 		await sprite.execFile("mkdir", ["-p", projectDir])
@@ -216,6 +226,73 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		console.log("[sprites] Sprite ready (agent will be started by bridge)")
 
 		return handle
+	}
+
+	private async installCredentialHelper(
+		sprite: Sprite,
+		sessionId: string,
+		sessionToken: string,
+		studioUrl: string,
+	): Promise<void> {
+		const script = `#!/bin/bash
+# git-credential-electric: fetches GitHub tokens from studio server
+if [ "$1" != "get" ]; then exit 0; fi
+
+input=$(cat)
+host=$(echo "$input" | grep "^host=" | cut -d= -f2)
+if [ "$host" != "github.com" ]; then exit 0; fi
+
+response=$(curl -s -w "\\n%{http_code}" -X POST \\
+  -H "Authorization: Bearer \${SESSION_TOKEN}" \\
+  "\${STUDIO_URL}/api/sessions/\${SESSION_ID}/github-token")
+
+http_code=$(echo "$response" | tail -1)
+body_text=$(echo "$response" | sed '\\$d')
+
+if [ "$http_code" != "200" ]; then
+  echo "git-credential-electric: failed to fetch token (HTTP $http_code)" >&2
+  exit 1
+fi
+
+token=$(echo "$body_text" | jq -r '.token')
+if [ -n "$token" ] && [ "$token" != "null" ]; then
+  echo "protocol=https"
+  echo "host=github.com"
+  echo "username=x-access-token"
+  echo "password=\${token}"
+else
+  echo "git-credential-electric: invalid token response" >&2
+  exit 1
+fi`
+
+		// Write credential helper script
+		const scriptB64 = Buffer.from(script).toString("base64")
+		await sprite.execFile("bash", [
+			"-c",
+			`echo ${scriptB64} | base64 -d > /usr/local/bin/git-credential-electric && chmod +x /usr/local/bin/git-credential-electric`,
+		])
+
+		// Append session env vars for the credential helper
+		const envScript = [
+			`export SESSION_TOKEN="${sessionToken}"`,
+			`export SESSION_ID="${sessionId}"`,
+			`export STUDIO_URL="${studioUrl}"`,
+		].join("\n")
+		const envB64 = Buffer.from(envScript).toString("base64")
+		await sprite.execFile("bash", [
+			"-c",
+			`echo ${envB64} | base64 -d >> /etc/profile.d/electric-agent.sh`,
+		])
+
+		// Override the default gh credential helper set during bootstrap
+		await sprite.execFile("git", [
+			"config",
+			"--global",
+			"credential.helper",
+			"electric",
+		])
+
+		console.log(`[sprites] Credential helper installed for session ${sessionId}`)
 	}
 
 	async destroy(handle: SandboxHandle): Promise<void> {

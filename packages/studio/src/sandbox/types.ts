@@ -58,6 +58,11 @@ export interface CreateSandboxOpts {
 	ghToken?: string
 	projectName?: string
 	infra?: InfraConfig
+	/** Prod mode: install git credential helper that fetches tokens from studio server */
+	prodMode?: {
+		sessionToken: string
+		studioUrl: string
+	}
 }
 
 // ---------------------------------------------------------------------------
