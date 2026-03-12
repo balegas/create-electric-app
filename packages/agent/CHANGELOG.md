@@ -1,5 +1,36 @@
 # @electric-agent/agent
 
+## 1.4.0
+
+### Minor Changes
+
+- 27da189: Lean create-app skill: delegate implementation details to playbook skills
+
+  The create-app skill was rewritten to be an orchestration layer rather than a prescriptive code template. Implementation details (collection setup, mutations, live queries, API routes) are now delegated to playbook skills shipped with npm dependencies (`@electric-sql/client`, `@tanstack/db`, `@tanstack/react-db`), discovered dynamically via `npx @tanstack/intent list`.
+
+  Key changes:
+
+  - Added Phase 2 "Discover & Learn" that runs `npx @tanstack/intent list` after plan approval
+  - Removed code templates that duplicated playbook content (52% smaller skill)
+  - Fixed wrong hardcoded playbook paths in CLAUDE.md (`@electric-sql/playbook/` → dynamic discovery)
+  - Reduced CLAUDE.md/skill duplication (drizzle workflow, SSR rules, playbook paths)
+  - Kept scaffold-specific gotchas not covered by playbooks (zod/v4, protected files, import rules)
+  - Added `scripts/setup-local-sandbox.sh` for local testing of the agent pipeline
+
+### Patch Changes
+
+- 5dab3fe: Update TanStack DB dependency versions in scaffold: @tanstack/db 0.5.31→0.5.32, @tanstack/react-db 0.1.75→0.1.76, @tanstack/electric-db-collection 0.2.39→0.2.40.
+- Updated dependencies [93f5982]
+- Updated dependencies [b4056bd]
+- Updated dependencies [27da189]
+- Updated dependencies [4cfbddf]
+- Updated dependencies [806c25a]
+- Updated dependencies [249eea5]
+- Updated dependencies [806c25a]
+- Updated dependencies [3f5e22a]
+  - @electric-agent/studio@1.12.0
+  - @electric-agent/protocol@1.8.0
+
 ## 1.3.0
 
 ### Minor Changes

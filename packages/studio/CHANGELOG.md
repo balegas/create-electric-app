@@ -1,5 +1,52 @@
 # @electric-agent/studio
 
+## 1.12.0
+
+### Minor Changes
+
+- b4056bd: Security: proxy Durable Streams so DS_SECRET never leaves the server process.
+
+  - Remove `getStreamEnvVars()` from public API (DS_SECRET was exposed to callers)
+  - Remove `streamUrl`/`streamHeaders` from `SessionBridge` interface and bridge class fields (credentials no longer stored as class state)
+  - Add `/api/sessions/:id/stream/append` proxy endpoint with Content-Type, size limit (64KB), and JSON validation
+  - Bridges pass DS credentials only to DurableStream constructor — no field retention
+
+- 27da189: Lean create-app skill: delegate implementation details to playbook skills
+
+  The create-app skill was rewritten to be an orchestration layer rather than a prescriptive code template. Implementation details (collection setup, mutations, live queries, API routes) are now delegated to playbook skills shipped with npm dependencies (`@electric-sql/client`, `@tanstack/db`, `@tanstack/react-db`), discovered dynamically via `npx @tanstack/intent list`.
+
+  Key changes:
+
+  - Added Phase 2 "Discover & Learn" that runs `npx @tanstack/intent list` after plan approval
+  - Removed code templates that duplicated playbook content (52% smaller skill)
+  - Fixed wrong hardcoded playbook paths in CLAUDE.md (`@electric-sql/playbook/` → dynamic discovery)
+  - Reduced CLAUDE.md/skill duplication (drizzle workflow, SSR rules, playbook paths)
+  - Kept scaffold-specific gotchas not covered by playbooks (zod/v4, protected files, import rules)
+  - Added `scripts/setup-local-sandbox.sh` for local testing of the agent pipeline
+
+- 4cfbddf: Add production mode restrictions to prevent abuse during public events.
+
+  - Disable freeform sessions in production mode (!devMode)
+  - Remove WebSearch from allowed tools in production
+  - Add production guardrails to generated CLAUDE.md
+  - Enforce per-session cost budget ($5 default, configurable via MAX_SESSION_COST_USD)
+  - Add per-IP rate limiting on session creation (5/hour default, configurable via MAX_SESSIONS_PER_IP_PER_HOUR)
+  - Hardcode model to claude-sonnet-4-6 in production
+  - Add budget_exceeded protocol event with client-side display
+  - Expose /api/config endpoint for client feature flags
+
+- 3f5e22a: Unify shared sessions and agent rooms into a single "Rooms" concept. Remove all legacy shared-session code: `/api/shared-sessions/*` routes, SharedSessionPage, SharedSessionHeader, useSharedSession hook, shared-session-store, presence ping system, and related CSS. Rename `SharedSessionEvent` to `RoomEvent` and `shared_session_created` to `room_created` in the protocol. The sidebar now has one "Rooms" section. Room headers display the room name and a copy-invite-code button.
+
+### Patch Changes
+
+- 93f5982: Disable `/api/credentials/keychain` endpoint by default. It now requires explicit opt-in via `devMode: true` or `STUDIO_DEV_MODE=1` env var to prevent exposing OAuth tokens in non-development environments.
+- 806c25a: Add authentication middleware for room routes to prevent unauthenticated access to room state, messages, agents, and SSE events.
+- 249eea5: Room UX improvements: purple working indicator, auto-generated agent names, greeting on join, simplified add-agent form, error display for not-found sessions/rooms, and sidebar label renames.
+- 806c25a: Fix command injection vulnerabilities in sprites sandbox, add authentication to /api/hook endpoint, and remove OAuth token logging.
+- Updated dependencies [4cfbddf]
+- Updated dependencies [3f5e22a]
+  - @electric-agent/protocol@1.8.0
+
 ## 1.11.0
 
 ### Minor Changes

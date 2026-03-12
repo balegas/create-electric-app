@@ -1,5 +1,22 @@
 # @electric-agent/protocol
 
+## 1.8.0
+
+### Minor Changes
+
+- 4cfbddf: Add production mode restrictions to prevent abuse during public events.
+
+  - Disable freeform sessions in production mode (!devMode)
+  - Remove WebSearch from allowed tools in production
+  - Add production guardrails to generated CLAUDE.md
+  - Enforce per-session cost budget ($5 default, configurable via MAX_SESSION_COST_USD)
+  - Add per-IP rate limiting on session creation (5/hour default, configurable via MAX_SESSIONS_PER_IP_PER_HOUR)
+  - Hardcode model to claude-sonnet-4-6 in production
+  - Add budget_exceeded protocol event with client-side display
+  - Expose /api/config endpoint for client feature flags
+
+- 3f5e22a: Unify shared sessions and agent rooms into a single "Rooms" concept. Remove all legacy shared-session code: `/api/shared-sessions/*` routes, SharedSessionPage, SharedSessionHeader, useSharedSession hook, shared-session-store, presence ping system, and related CSS. Rename `SharedSessionEvent` to `RoomEvent` and `shared_session_created` to `room_created` in the protocol. The sidebar now has one "Rooms" section. Room headers display the room name and a copy-invite-code button.
+
 ## 1.7.0
 
 ### Minor Changes

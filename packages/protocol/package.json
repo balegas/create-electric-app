@@ -1,6 +1,6 @@
 {
 	"name": "@electric-agent/protocol",
-	"version": "1.7.0",
+	"version": "1.8.0",
 	"description": "Shared event protocol for Electric Agent",
 	"type": "module",
 	"main": "./dist/index.js",
