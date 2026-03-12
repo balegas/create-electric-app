@@ -1,5 +1,10 @@
 /**
  * Generates CLAUDE.md files for project workspaces.
+ *
+ * CLAUDE.md provides environment context, infrastructure details, and guardrails.
+ * Implementation details (phase order, API patterns, code templates) live in the
+ * create-app skill (.claude/skills/create-app/SKILL.md) and in playbook skills
+ * shipped with npm dependencies (discoverable via `npx @tanstack/intent list`).
  */
 
 export interface GitConfig {
@@ -55,17 +60,13 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 
 	sections.push(SCAFFOLD_STRUCTURE)
 	sections.push("")
-	sections.push(DRIZZLE_WORKFLOW)
-	sections.push("")
 	sections.push(GUARDRAILS)
 	sections.push("")
-	sections.push(PLAYBOOK_INSTRUCTIONS)
+	sections.push(PLAYBOOK_DISCOVERY)
 	sections.push("")
 	sections.push(INFRASTRUCTURE)
 	sections.push("")
 	sections.push(devServerInstructions(opts.runtime))
-	sections.push("")
-	sections.push(SSR_RULES)
 	sections.push("")
 
 	const gitSection = gitInstructions(opts.git)
@@ -82,10 +83,10 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 // ---------------------------------------------------------------------------
 
 const PROJECT_CONTEXT =
-	"## Project Context\nThis is a reactive, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start."
+	"## Project Context\nThis is a local-first, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start. Electric syncs Postgres data to the client via shapes; TanStack DB provides reactive collections and optimistic mutations."
 
-const SCAFFOLD_STRUCTURE = `## Scaffold Structure (DO NOT EXPLORE)
-The project is scaffolded from a known template. DO NOT read or explore scaffold files before coding. You already know the structure:
+const SCAFFOLD_STRUCTURE = `## Scaffold Structure
+The project is scaffolded from a known template. Key files you should know about:
 - src/db/schema.ts — placeholder Drizzle schema (you will overwrite)
 - src/db/zod-schemas.ts — placeholder Zod derivation (you will overwrite)
 - src/db/index.ts — Drizzle client setup (do not modify)
@@ -93,32 +94,15 @@ The project is scaffolded from a known template. DO NOT read or explore scaffold
 - src/lib/electric-proxy.ts — Electric shape proxy helper (do not modify)
 - src/components/ClientOnly.tsx — SSR wrapper (do not modify, just import when needed)
 - src/routes/__root.tsx — root layout with SSR (do not add ssr:false here)
-- tests/helpers/schema-test-utils.ts — generateValidRow/generateRowWithout (do not modify)
-
-DO NOT use Bash/ls/find to explore the project. DO NOT read files you aren't about to modify. Start writing code.`
-
-const DRIZZLE_WORKFLOW = `## Drizzle Workflow (CRITICAL)
-Always follow this order:
-1. Edit src/db/schema.ts (Drizzle pgTable definitions)
-2. Edit src/db/zod-schemas.ts (derive Zod schemas via createSelectSchema/createInsertSchema from drizzle-zod — NEVER hand-write Zod schemas — ALWAYS import z from "zod/v4" and override ALL timestamp columns — see playbook tanstack-db/collections/SKILL.md for the correct pattern)
-3. Create collection files in src/db/collections/ (import from ../zod-schemas)
-4. Create API routes (proxy + mutation)
-5. Create UI components`
+- tests/helpers/schema-test-utils.ts — generateValidRow/generateRowWithout (do not modify)`
 
 const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 
 ### Protected Files — DO NOT MODIFY
-- docker-compose.yml
-- vite.config.ts (pre-configured with port, host, allowedHosts, and proxy — modifying it WILL break the preview)
-- tsconfig.json
-- biome.json
-- pnpm-lock.yaml
-- postgres.conf
-- vitest.config.ts
-- Caddyfile
+docker-compose.yml, vite.config.ts, tsconfig.json, biome.json, pnpm-lock.yaml, postgres.conf, vitest.config.ts, Caddyfile, drizzle.config.ts, src/db/index.ts, src/db/utils.ts, src/lib/electric-proxy.ts, src/components/ClientOnly.tsx, tests/helpers/schema-test-utils.ts
 
 ### Import Rules
-- Use "zod/v4" (NOT "zod") for all Zod imports
+- Use "zod/v4" (NOT "zod") for all Zod imports — drizzle-zod 0.8.x rejects v3 schema overrides
 - Use "lucide-react" for icons (NOT @radix-ui/react-icons)
 - Use "@radix-ui/themes" for Radix components (NOT @radix-ui/react-*)
 - Use "react-router" for routing (NOT react-router-dom)
@@ -127,48 +111,21 @@ const GUARDRAILS = `## Guardrails (MUST FOLLOW)
 - NEVER remove existing dependencies from package.json
 - Only add new dependencies
 
-### Schema Rules
-- ALL timestamp columns MUST be overridden — use the union+transform+default pattern from tanstack-db/collections/SKILL.md
-- ALL tables MUST have REPLICA IDENTITY FULL (auto-applied by migration hook)
-- UUID primary keys with defaultRandom()
-- timestamp({ withTimezone: true }) for all dates
-- snake_case for SQL table/column names
-- Foreign keys with onDelete: "cascade" where appropriate`
+### SSR Rule
+NEVER add ssr: false to __root.tsx — it renders the HTML shell and must always SSR.
+Add ssr: false to each LEAF route that uses useLiveQuery or collections.`
 
-const PLAYBOOK_INSTRUCTIONS = `## Playbooks (Domain Knowledge — MUST READ)
-Playbook SKILL.md files contain critical API usage patterns. Read them BEFORE writing code for each phase.
+const PLAYBOOK_DISCOVERY = `## Playbook Skills (Domain Knowledge)
+This project includes playbook skills shipped with its npm dependencies. These contain correct API usage patterns, code examples, and common mistakes for Electric SQL, TanStack DB, and related libraries.
 
-### Available Skills
-Read with the Read tool at these exact paths:
+**Discover all available skills by running:**
+\`\`\`bash
+npx @tanstack/intent list
+\`\`\`
 
-**Electric SQL** (\`node_modules/@electric-sql/playbook/skills/\`):
-- \`electric/SKILL.md\` — core Electric concepts and shape API
-- \`electric-tanstack-integration/SKILL.md\` — how Electric + TanStack DB work together (READ FIRST)
-- \`electric-quickstart/SKILL.md\` — quickstart patterns
-- \`electric-security-check/SKILL.md\` — security best practices
-- \`tanstack-start-quickstart/SKILL.md\` — TanStack Start framework patterns
-- \`deploying-electric/SKILL.md\` — deployment configuration
-- \`electric-go-live/SKILL.md\` — production checklist
+Read relevant skills BEFORE writing code for each phase. The create-app skill (.claude/skills/create-app/SKILL.md) tells you which skills to read at each phase.
 
-**TanStack DB** (\`node_modules/@tanstack/db-playbook/skills/\`):
-- \`tanstack-db/SKILL.md\` — overview: collections, useLiveQuery, mutations
-- \`tanstack-db/collections/SKILL.md\` — collection setup, timestamp schema pattern (CRITICAL for data model)
-- \`tanstack-db/schemas/SKILL.md\` — schema validation, TInput/TOutput
-- \`tanstack-db/mutations/SKILL.md\` — insert, update, delete, optimistic updates
-- \`tanstack-db/live-queries/SKILL.md\` — filtering, joins, aggregations
-- \`tanstack-db/electric/SKILL.md\` — Electric-specific TanStack DB patterns
-
-### Reading Order
-1. \`electric-tanstack-integration/SKILL.md\` — integration overview
-2. \`tanstack-db/SKILL.md\` — collections, queries, mutations API
-3. \`tanstack-db/collections/SKILL.md\` — collection setup with correct timestamp pattern
-4. \`electric/SKILL.md\` — shape API for proxy routes
-5. Other sub-skills as needed for your current phase
-
-### Important
-- ONLY read playbooks relevant to your current phase
-- Sub-skills (\`tanstack-db/collections/\`, \`tanstack-db/schemas/\`, etc.) have deeper detail — read them during implementation phases
-- Note: playbook examples use \`import { z } from "zod"\` but this project requires \`import { z } from "zod/v4"\` because drizzle-zod 0.8.x peer-depends on zod >=3.25 which ships v4 as a subpath export, and \`createSelectSchema\` rejects v3 schema overrides`
+**Important:** Playbook examples use \`import { z } from "zod"\` but this project requires \`import { z } from "zod/v4"\`.`
 
 function sandboxEnvironment(runtime?: string): string {
 	if (runtime === "sprites") {
@@ -208,7 +165,7 @@ function devServerInstructions(runtime?: string): string {
 - \`pnpm dev:stop\` — stop the dev server
 - \`pnpm dev:restart\` — stop then start
 
-**IMPORTANT**: Always use \`pnpm dev:start\` from the project directory. Do NOT use \`sprite-env services create\` or launch Vite manually — the project's vite.config.ts contains required settings (allowedHosts, port, proxy) that will not be applied if Vite is started from a different directory or with different arguments.
+**IMPORTANT**: Always use \`pnpm dev:start\` from the project directory. Do NOT use \`sprite-env services create\` or launch Vite manually.
 
 The app listens on port 8080 (set via VITE_PORT) — this is the only port the Sprite proxy exposes.
 The database and Electric sync service are remote (cloud-hosted) — there is no local Postgres or Docker.
@@ -216,12 +173,8 @@ The database and Electric sync service are remote (cloud-hosted) — there is no
 ### Migrations (CRITICAL)
 After modifying src/db/schema.ts, ALWAYS run migrations:
 \`\`\`bash
-pnpm drizzle-kit generate   # generate SQL from schema changes
-pnpm drizzle-kit migrate    # apply migration to the database
-\`\`\`
-
-### Workflow
-After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`
+pnpm drizzle-kit generate && pnpm drizzle-kit migrate
+\`\`\``
 	}
 
 	return `## Dev Server & Migrations
@@ -235,34 +188,14 @@ The app is exposed on the VITE_PORT environment variable (default: 5173).
 ### Migrations (CRITICAL)
 After modifying src/db/schema.ts, ALWAYS run migrations:
 \`\`\`bash
-pnpm dev:start              # start Postgres (needed for migrate)
-pnpm drizzle-kit generate   # generate SQL from schema changes
-pnpm drizzle-kit migrate    # apply migration to the database
-\`\`\`
-
-### Workflow
-After finishing ALL code generation: run migrations, then \`pnpm dev:start\` so the user can preview the app.`
+pnpm drizzle-kit generate && pnpm drizzle-kit migrate
+\`\`\``
 }
 
-const SSR_RULES = `## SSR Configuration (CRITICAL)
-NEVER add ssr: false to __root.tsx — it renders the HTML shell and must always SSR.
-Instead, add ssr: false to each LEAF route that uses useLiveQuery or collections.
-This is needed because useLiveQuery uses useSyncExternalStore without getServerSnapshot.`
-
 const SKILL_AUTO_TRIGGER = `## App Generation Pipeline (CRITICAL)
-When building a new app, you MUST use the /create-app skill. This skill is available at .claude/skills/create-app/SKILL.md and provides the structured phased pipeline for generating Electric SQL apps.
+When building a new app, you MUST use the /create-app skill. This skill is available at .claude/skills/create-app/SKILL.md and provides the structured pipeline for generating Electric SQL apps.
 
 Invoke it with: /create-app <description>
-
-The skill enforces the correct phase order:
-1. Clarification (if description is vague)
-2. Plan generation (PLAN.md with data model + tasks)
-3. Data model validation (schema + zod-schemas + tests — STOP if tests fail)
-4. Collections & API routes
-5. UI components
-6. Build & lint
-7. Final tests
-8. Architecture reference (ARCHITECTURE.md)
 
 Do NOT skip phases or code ad-hoc. Always follow the skill's structured pipeline.`
 
