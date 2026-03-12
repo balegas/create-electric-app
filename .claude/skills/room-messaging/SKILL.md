@@ -62,5 +62,6 @@ Use participant names to address them directly with `@<name>`.
 
 1. Always respond to incoming messages before doing other work
 2. One `@room` or `@<name>` per turn — no more
-3. No `@room` = silence (your turn ends, you wait)
-4. `GATE:` = need human input
+3. The `@room` or `@<name>` directive **MUST** start on its own line — never inline in a paragraph. The parser only recognises directives at the start of a line.
+4. No `@room` = silence (your turn ends, you wait)
+5. `GATE:` = need human input
