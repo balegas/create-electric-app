@@ -219,9 +219,9 @@ function copyTemplateFiles(srcDir: string, destDir: string): void {
 }
 
 const ADDED_DEPENDENCIES: Record<string, string> = {
-	"@tanstack/db": "0.5.31",
-	"@tanstack/react-db": "0.1.75",
-	"@tanstack/electric-db-collection": "0.2.39",
+	"@tanstack/db": "0.5.32",
+	"@tanstack/react-db": "0.1.76",
+	"@tanstack/electric-db-collection": "0.2.40",
 	"@electric-sql/client": "1.5.12",
 	"drizzle-orm": "0.45.1",
 	"drizzle-zod": "^0.8.3",
