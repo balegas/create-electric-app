@@ -116,7 +116,8 @@ export function Settings({
 			<div className="modal-card" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-title">Settings</div>
 
-				{/* Claude Authentication */}
+				{/* Claude Authentication (dev mode only) */}
+				{devMode && (
 				<div className="settings-field" style={{ marginTop: 12 }}>
 					<div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
 						<label htmlFor={keyInputId} style={{ margin: 0 }}>
@@ -176,8 +177,10 @@ export function Settings({
 						)}
 					</div>
 				</div>
+				)}
 
-				{/* GitHub PAT */}
+				{/* GitHub PAT (dev mode only) */}
+				{devMode && (<>
 				<div className="settings-divider" />
 				<div className="settings-section-label">GitHub</div>
 				<div className="settings-field">
@@ -222,6 +225,7 @@ export function Settings({
 						</a>
 					</div>
 				</div>
+				</>)}
 
 				{/* Agent mode */}
 				<div className="settings-divider" />

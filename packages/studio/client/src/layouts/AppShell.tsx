@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
 import { type AgentRoomEntry, getAgentRooms } from "../lib/agent-room-store"
-import { deleteSession, fetchConfig, fetchKeychainCredentials, type SessionInfo } from "../lib/api"
+import { deleteSession, fetchConfig, fetchKeychainCredentials, setDevMode as setApiDevMode, type SessionInfo } from "../lib/api"
 import {
 	hasApiKey as checkHasApiKey,
 	hasGhToken as checkHasGhToken,
@@ -163,7 +163,10 @@ export function AppShell() {
 	useEffect(() => {
 		refreshSettings()
 		fetchConfig()
-			.then((cfg) => setDevMode(cfg.devMode))
+			.then((cfg) => {
+				setDevMode(cfg.devMode)
+				setApiDevMode(cfg.devMode)
+			})
 			.catch(() => {})
 	}, [refreshSettings])
 

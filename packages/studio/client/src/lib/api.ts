@@ -4,8 +4,16 @@ import { getRoomToken, getSessionToken, setRoomToken, setSessionToken } from "./
 
 const API_BASE = "/api"
 
+/** Whether we're in dev mode — defaults to false (safe: don't send credentials until confirmed) */
+let _devMode = false
+
+export function setDevMode(mode: boolean) {
+	_devMode = mode
+}
+
 /** Return user-provided credentials (if set) for inclusion in request bodies. */
 function credentialFields(): { apiKey?: string; oauthToken?: string; ghToken?: string } {
+	if (!_devMode) return {}
 	const fields: { apiKey?: string; oauthToken?: string; ghToken?: string } = {}
 	const apiKey = getApiKey()
 	const oauthToken = getOauthToken()
@@ -129,6 +137,7 @@ export interface GhBranch {
 
 export interface StudioConfig {
 	devMode: boolean
+	maxSessionCostUsd?: number
 }
 
 export function fetchConfig() {

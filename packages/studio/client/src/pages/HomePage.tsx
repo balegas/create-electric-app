@@ -65,6 +65,7 @@ export function HomePage() {
 					hasGhToken={hasGhToken ?? false}
 					onKeySaved={refreshSettings}
 					onClose={() => setShowSettings(false)}
+					devMode={devMode}
 				/>
 			)}
 
@@ -102,16 +103,16 @@ export function HomePage() {
 					<PromptInput
 						onSubmit={isFreeformMode ? handleNewSession : handleNewProject}
 						placeholder={
-							!authSource
+							devMode && !authSource
 								? "Set an API key in Settings to get started..."
 								: isFreeformMode
 									? "What do you want to work on?"
 									: "What do you want to build?"
 						}
-						disabled={loading || !authSource}
+						disabled={loading || (devMode && !authSource)}
 					/>
 				</div>
-				{hasGhToken && (
+				{devMode && hasGhToken && (
 					<button
 						type="button"
 						className="hero-resume-btn"
