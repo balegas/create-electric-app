@@ -61,6 +61,7 @@ export function SessionPage() {
 		hasGhToken,
 		refreshSettings,
 		refreshSessions,
+		devMode,
 	} = useAppContext()
 	const [overflowOpen, setOverflowOpen] = useState(false)
 
@@ -186,6 +187,7 @@ export function SessionPage() {
 					onKeySaved={refreshSettings}
 					onClose={() => setShowSettings(false)}
 					onCopyLog={effectiveId ? handleCopyHistory : undefined}
+					devMode={devMode}
 				/>
 			)}
 
