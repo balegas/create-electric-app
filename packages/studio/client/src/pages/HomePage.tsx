@@ -21,12 +21,14 @@ export function HomePage() {
 		refreshSessions,
 		handleNewProject,
 		loading,
+		devMode,
 	} = useAppContext()
 
 	const navigate = useNavigate()
 	const { openMobileDrawer } = useOutletContext<OutletCtx>()
 	const [searchParams] = useSearchParams()
-	const isFreeformMode = searchParams.get("mode") === "session"
+	// Freeform mode is only available in dev mode
+	const isFreeformMode = devMode && searchParams.get("mode") === "session"
 	const [showRepoPicker, setShowRepoPicker] = useState(false)
 	const [resuming, setResuming] = useState(false)
 

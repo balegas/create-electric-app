@@ -3,7 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
 import { type AgentRoomEntry, getAgentRooms } from "../lib/agent-room-store"
-import { deleteSession, fetchKeychainCredentials, type SessionInfo } from "../lib/api"
+import { deleteSession, fetchConfig, fetchKeychainCredentials, type SessionInfo } from "../lib/api"
 import {
 	hasApiKey as checkHasApiKey,
 	hasGhToken as checkHasGhToken,
@@ -33,6 +33,8 @@ interface AppContextValue {
 	loading: boolean
 	agentRooms: AgentRoomEntry[]
 	refreshAgentRooms: () => void
+	/** Whether the server is running in dev mode (enables freeform sessions, etc.) */
+	devMode: boolean
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -63,6 +65,7 @@ export function AppShell() {
 	const [loading] = useState(false)
 	const [pendingProject, setPendingProject] = useState<PendingProject | null>(null)
 	const [agentRooms, setAgentRooms] = useState<AgentRoomEntry[]>(() => getAgentRooms())
+	const [devMode, setDevMode] = useState(false)
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		() => localStorage.getItem("sidebarCollapsed") === "true",
 	)
@@ -159,6 +162,9 @@ export function AppShell() {
 
 	useEffect(() => {
 		refreshSettings()
+		fetchConfig()
+			.then((cfg) => setDevMode(cfg.devMode))
+			.catch(() => {})
 	}, [refreshSettings])
 
 	const handleNewProject = useCallback(
@@ -203,6 +209,7 @@ export function AppShell() {
 		loading,
 		agentRooms,
 		refreshAgentRooms,
+		devMode,
 	}
 
 	return (

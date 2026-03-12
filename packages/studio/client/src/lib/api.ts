@@ -127,6 +127,16 @@ export interface GhBranch {
 	isDefault: boolean
 }
 
+// --- Config ---
+
+export interface StudioConfig {
+	devMode: boolean
+}
+
+export function fetchConfig() {
+	return request<StudioConfig>("/config")
+}
+
 // --- Session CRUD ---
 
 export function getSession(id: string) {

@@ -80,6 +80,7 @@ export type EngineEvent =
 			questions?: AskUserQuestionItem[]
 			ts: string
 	  }
+	| { type: "budget_exceeded"; budget_usd: number; spent_usd: number; ts: string }
 	| { type: "git_checkpoint"; commitHash: string; message: string; ts: string }
 	| {
 			type: "infra_config_prompt"
