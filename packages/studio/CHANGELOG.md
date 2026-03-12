@@ -1,5 +1,12 @@
 # @electric-agent/studio
 
+## 1.12.1
+
+### Patch Changes
+
+- 2874544: Hide Claude Sessions button and debug section in production mode. Remove natural-language command intercepts (start/stop/restart app, git ops) from the iterate endpoint. Fix room join auth by moving join endpoint to `/api/join-room/:id/:code` outside the protected `/api/rooms/:id/*` namespace.
+- d2f56e8: Instruct agents to always place @room directives on their own line so the parser can reliably extract them.
+
 ## 1.12.0
 
 ### Minor Changes
