@@ -7,9 +7,17 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion, Agent, WebS
 
 # Create Electric SQL App
 
-You are building a reactive, real-time application using Electric SQL + TanStack DB + Drizzle ORM inside a scaffolded TanStack Start project.
+You are building a **local-first, real-time Electric SQL application** using:
+- **Electric SQL** — Postgres-to-client sync via shapes
+- **TanStack DB** — reactive collections, live queries, optimistic mutations
+- **Drizzle ORM** — schema definitions and migrations
+- **TanStack Start** — React meta-framework with SSR + server functions
+
+The project is pre-scaffolded. Database and Electric sync service are provisioned. Your job is to design the data model, implement the app, and get it running.
 
 Follow the phases below **in strict order**. Do NOT skip phases or jump ahead.
+
+---
 
 ## Phase 0: Clarification
 
@@ -20,71 +28,40 @@ Evaluate the description provided in `$ARGUMENTS`.
 - 50-79: Recognizable app type but light on specifics
 - 0-49: Too vague to proceed
 
-**If the description scores below 70**, use AskUserQuestion to gather missing details. You can use any combination of formats — single or multiple questions, multiSelect for picking features, headers to group topics, or free-text for open-ended input. Choose whatever format best fits the gaps in the description. Keep questions specific to the described app type.
+**If the description scores below 70**, use AskUserQuestion to gather missing details. Choose whatever format best fits the gaps — single or multiple questions, multiSelect for picking features, headers to group topics, or free-text for open-ended input.
 
-After getting answers, enrich the description mentally and proceed.
+**If the description scores 70+**, proceed immediately.
 
-**If the description scores 70+**, proceed immediately without questions.
+---
 
-## Phase 1: Generate PLAN.md
+## Phase 1: Plan
 
-Based on the description, write a complete `PLAN.md` file with this structure:
+Write a `PLAN.md` file with this structure:
 
 ```markdown
 # [App Name] — Implementation Plan
 
 ## App Description
-[1-2 sentences]
+[1-2 sentences describing a local-first, real-time Electric SQL application]
 
 ## Data Model
 
 ### [Entity Name]
-\```typescript
-export const entityName = pgTable("entity_name", {
-  id: uuid().primaryKey().defaultRandom(),
-  // ALL columns with full types, defaults, and relations
-  created_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updated_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
-})
-\```
+- id: UUID, primary key, defaultRandom()
+- [field]: [type], [constraints]
+- created_at: timestamptz, notNull, defaultNow()
+- updated_at: timestamptz, notNull, defaultNow()
+- Relations: [FK references with onDelete cascade]
+
 (Repeat for EVERY entity)
 
 ## Implementation Tasks
-
-### Phase 1: Data Model & Migrations
-- [ ] Discover available skills: run `npx @tanstack/intent list` to see all installed playbook skills and their paths
-- [ ] Read guardrails and key playbooks: electric-app-guardrails, electric-tanstack-integration, tanstack-db, tanstack-db/collections (has timestamp pattern), tanstack-db/schemas
-- [ ] Define all Drizzle table schemas in src/db/schema.ts
-- [ ] Derive Zod schemas in src/db/zod-schemas.ts (drizzle-zod, z from "zod/v4", timestamp overrides)
-- [ ] Run drizzle-kit generate && drizzle-kit migrate
-- [ ] Write schema smoke tests in tests/schema.test.ts
-- [ ] Run pnpm test — STOP if tests fail
-
-### Phase 2: Collections & API Routes
-- [ ] Create collection for each entity in src/db/collections/<entity>.ts
-- [ ] Create Electric shape proxy route: src/routes/api/<entity>.ts
-- [ ] Create mutation routes: src/routes/api/mutations/<entity>.ts
-
-### Phase 3: UI Components
-- [ ] Create page routes with useLiveQuery (ssr: false on leaf routes)
-- [ ] Implement CRUD operations using mutation fetch calls
-- [ ] Style with Radix UI Themes + lucide-react icons
-
-### Phase 4: Build & Lint
-- [ ] pnpm run build passes
-- [ ] pnpm run check passes
-
-### Phase 5: Testing
-- [ ] Collection insert validation tests in tests/collections.test.ts
-- [ ] JSON round-trip tests (parseDates + schema validation)
-- [ ] pnpm test passes
-
-### Phase 6: Architecture Reference
-- [ ] Write ARCHITECTURE.md
-
-### Phase 7: Deploy & Preview
-- [ ] Run migrations (drizzle-kit generate && drizzle-kit migrate)
-- [ ] pnpm dev:start
+- [ ] Phase 2: Discover playbook skills and read relevant ones
+- [ ] Phase 3: Data model — schema, zod-schemas, migrations, tests
+- [ ] Phase 4: Collections & API routes
+- [ ] Phase 5: UI components
+- [ ] Phase 6: Build, lint & test
+- [ ] Phase 7: Deploy & preview
 
 ## Design Conventions
 - UUID primary keys with defaultRandom()
@@ -93,235 +70,170 @@ export const entityName = pgTable("entity_name", {
 - Foreign keys with onDelete: "cascade" where appropriate
 ```
 
-**Present the plan to the user for approval** using AskUserQuestion:
-- "Here is the implementation plan. Should I proceed?"
+**Write PLAN.md to disk first**, then present it for approval using AskUserQuestion:
+- "I've written the implementation plan to PLAN.md. Please review it. Should I proceed?"
 - Options: "Approve — start building", "Revise — I have feedback", "Cancel"
-- If "Revise": ask for feedback, regenerate PLAN.md, present again
+- If "Revise": ask for feedback, update PLAN.md, present again
 - If "Cancel": stop
 
-Write the approved PLAN.md to disk.
+---
 
-## Phase 2: Data Model Validation (CRITICAL GATE)
+## Phase 2: Discover & Learn
 
-This phase validates the data model BEFORE writing any application code. **Do NOT proceed to Phase 3 until tests pass.**
+After plan approval, discover the playbook skills installed in this project:
 
-### Step 2a: Write Schema
-Write `src/db/schema.ts` with all Drizzle pgTable definitions from PLAN.md.
+```bash
+npx @tanstack/intent list
+```
 
-Conventions:
-- `uuid().primaryKey().defaultRandom()` for IDs
-- `timestamp({ withTimezone: true }).notNull().defaultNow()` for timestamps
-- `.references(() => table.id, { onDelete: "cascade" })` for FKs
-- Do NOT import `relations` from drizzle-orm
+This outputs all available skills with their file paths. **Read the following skills** (use the paths from `intent list` output):
 
-### Step 2b: Write Zod Schemas
-Write `src/db/zod-schemas.ts`:
-- Import `z` from `"zod/v4"` (NOT `"zod"`) — drizzle-zod 0.8.x rejects v3 schema overrides
-- Use `createSelectSchema` and `createInsertSchema` from `drizzle-zod`
-- Override ALL timestamp columns using the pattern from `tanstack-db/collections/SKILL.md`:
-  ```typescript
-  const dateField = z
-    .union([z.string(), z.date()])
-    .transform((val) => (typeof val === 'string' ? new Date(val) : val))
-    .default(() => new Date())
-  ```
-- The `.transform()` converts Electric's string timestamps to Date objects
-- The `.default()` is required for `collection.insert()` to work without timestamps
-- Export both select and insert schemas for each entity
+1. **`electric-new-feature`** — end-to-end Electric feature guide (schema → shapes → collections → mutations → queries). This is your primary implementation reference.
+2. **`db-core/collection-setup`** — collection creation, Electric adapter, schema validation, timestamp handling
+3. **`db-core/mutations-optimistic`** — insert, update, delete, optimistic actions
+4. **`db-core/live-queries`** — query builder API (from, where, join, orderBy, etc.)
+5. **`react-db`** — useLiveQuery, useLiveSuspenseQuery hooks
+6. **`meta-framework`** — TanStack Start integration, SSR constraints, route preloading
 
-### Step 2c: Run Migrations
+Also read the scaffold helper files you'll use:
+- `src/db/utils.ts` — `parseDates()` (JSON date round-trip) and `generateTxId()` (Electric txid handshake)
+- `src/lib/electric-proxy.ts` — `proxyElectricRequest()` (Electric shape proxy for API routes)
+- `tests/helpers/schema-test-utils.ts` — `generateValidRow()` / `generateRowWithout()` (test data generation)
+
+---
+
+## Phase 3: Data Model (CRITICAL GATE)
+
+Validate the data model BEFORE writing application code. **Do NOT proceed until tests pass.**
+
+### 3a: Write Drizzle Schema
+Write `src/db/schema.ts` with all pgTable definitions from PLAN.md.
+
+### 3b: Write Zod Schemas
+Write `src/db/zod-schemas.ts` using `createSelectSchema` / `createInsertSchema` from `drizzle-zod`.
+
+**Scaffold-specific gotcha — zod/v4 import:**
+```typescript
+import { z } from "zod/v4"  // NOT "zod" — drizzle-zod 0.8.x rejects v3 overrides
+```
+Playbook examples show `import { z } from "zod"` — in THIS project, always use `"zod/v4"`.
+
+Override ALL timestamp columns — the pattern is in the `db-core/collection-setup` skill.
+
+### 3c: Run Migrations
 ```bash
 pnpm drizzle-kit generate && pnpm drizzle-kit migrate
 ```
 
-### Step 2d: Write Schema Tests
-Write `tests/schema.test.ts`:
-```typescript
-import { generateValidRow, generateRowWithout } from "./helpers/schema-test-utils"
-import { entitySelectSchema } from "@/db/zod-schemas"
+### 3d: Write & Run Tests
+Write `tests/schema.test.ts` using `generateValidRow(schema)` and `generateRowWithout(schema, field)` from `tests/helpers/schema-test-utils.ts`.
 
-describe("entity schema", () => {
-  it("accepts a complete row", () => {
-    expect(entitySelectSchema.safeParse(generateValidRow(entitySelectSchema)).success).toBe(true)
-  })
-  it("rejects without id", () => {
-    expect(entitySelectSchema.safeParse(generateRowWithout(entitySelectSchema, "id")).success).toBe(false)
-  })
-})
-```
-
-**Rules:**
-- DO NOT import collection files — they connect to Electric on import
-- DO NOT import `@/db` — requires Postgres
+**Test rules:**
 - ONLY import from `@/db/zod-schemas` and `@/db/schema`
+- DO NOT import collection files (they connect to Electric on import)
+- DO NOT import `@/db` (requires Postgres)
 - Use `generateValidRow(schema)` — never hand-write test data
 
-### Step 2e: Run Tests
 ```bash
 pnpm test
 ```
 
-**If tests fail**: fix the schema/zod-schemas and re-run. Do NOT proceed until green.
-**If tests pass**: mark Phase 1 tasks as `[x]` in PLAN.md and continue.
+**If tests fail**: fix and re-run. Do NOT proceed until green.
 
-## Phase 3: Collections & API Routes
+---
 
-### Collections
-For each entity, create `src/db/collections/<entity>.ts`:
-- Import the select schema from `@/db/zod-schemas`
-- Use absolute URL for `shapeOptions.url`:
-  ```typescript
-  url: new URL("/api/<entity>", typeof window !== "undefined" ? window.location.origin : "http://localhost:5174").toString()
-  ```
+## Phase 4: Collections & API Routes
 
-### API Routes
+Follow the patterns from the `electric-new-feature` and `db-core/collection-setup` skills.
 
-**Electric Shape Proxy** (`src/routes/api/<entity>.ts`):
+**For each entity, create:**
+1. **Collection** — `src/db/collections/<entity>.ts`
+2. **Electric shape proxy route** — `src/routes/api/<entity>.ts` using `proxyElectricRequest()` from `src/lib/electric-proxy.ts`
+3. **Mutation route** — `src/routes/api/mutations/<entity>.ts` using `parseDates()` from `src/db/utils.ts`
+
+**Scaffold-specific patterns:**
+
+Shape proxy routes use the scaffold helper:
 ```typescript
-import { createFileRoute } from "@tanstack/react-router"
 import { proxyElectricRequest } from "@/lib/electric-proxy"
-
-export const Route = createFileRoute("/api/<entity>")({
-  // @ts-expect-error – server.handlers types lag behind runtime support
-  server: {
-    handlers: {
-      GET: async ({ request }: { request: Request }) => {
-        return proxyElectricRequest(request, "<table_name>")
-      },
-    },
-  },
-})
+// In GET handler: return proxyElectricRequest(request, "table_name")
 ```
 
-**Mutation Route** (`src/routes/api/mutations/<entity>.ts`):
-- Use `parseDates(await request.json())` for all handlers
-- PUT/PATCH: destructure out `created_at` and `updated_at` before spreading
-- Return `{ txid }` from each mutation
+Mutation routes must use `parseDates()` for JSON date round-trip:
+```typescript
+import { parseDates } from "@/db/utils"
+// const body = parseDates(await request.json())
+```
 
-## Phase 4: UI Components
+API routes use `createFileRoute` + `server.handlers` (NOT `createAPIFileRoute`).
 
-**Before writing any UI code**, read the ui-design skill:
-- `.claude/skills/ui-design/SKILL.md` — design thinking + Radix UI Themes component patterns
+---
 
-Design approach:
-- Commit to a coherent aesthetic direction that fits the app's purpose
-- Every component should use Radix UI Themes — never raw HTML elements
-- Follow the spacing scale and typography hierarchy from the skill
+## Phase 5: UI Components
 
-Implementation:
-- Create page routes with `useLiveQuery` — add `ssr: false` to leaf routes (NOT `__root.tsx`)
-- Wrap `useLiveQuery` components in `ClientOnly` when used from `__root.tsx`
-- Use the component patterns from ui-design skill: page layout, data tables, card lists, dialog forms, empty states, delete confirmations
-- Use `lucide-react` for icons (NOT `@radix-ui/react-icons`)
-- All UI components from `@radix-ui/themes` — never raw HTML for buttons, inputs, tables
+**Before writing UI code**, read the ui-design skill:
+- `.claude/skills/ui-design/SKILL.md` — design system, Radix UI Themes component patterns
 
-## Phase 5: Build & Verify
+Also read the `react-db` and `meta-framework` skills for hook usage and SSR patterns.
 
-Run the build tool:
+Key constraints:
+- `ssr: false` on leaf routes that use `useLiveQuery` (NEVER on `__root.tsx`)
+- All UI from `@radix-ui/themes` — never raw HTML for interactive elements
+- Icons from `lucide-react` only
+
+---
+
+## Phase 6: Build, Lint & Test
+
 ```bash
 pnpm run build && pnpm run check
 ```
 
-Fix any errors. Re-run until clean.
-
-## Phase 6: Final Tests
-
-Write additional tests:
+Fix any errors. Then write additional tests:
 - `tests/collections.test.ts` — collection insert validation (import from zod-schemas only)
-- JSON round-trip test: `parseDates(JSON.parse(JSON.stringify(row)))` validates correctly
-
-Run `pnpm test` — fix until green.
-
-## Phase 7: Architecture Reference
-
-Write `ARCHITECTURE.md` in the project root (under 1500 tokens):
-```markdown
-# [App Name] — Architecture Reference
-_Last updated: [ISO date]_
-
-## App Description
-## Data Model
-### [Entity] (`table_name`)
-- **Columns**: ...
-- **Relations**: ...
-- **Collection**: src/db/collections/...
-
-## API Routes
-| Method | Path | File | Purpose |
-
-## UI Routes & Components
-| Route | File | Description |
-
-### Key Components
-
-## Styling
-## State & Context
-```
-
-## Phase 8: Deploy & Preview
-
-Start the dev server so the user can preview the app:
+- JSON round-trip: `parseDates(JSON.parse(JSON.stringify(row)))` validates correctly
 
 ```bash
+pnpm test
+```
+
+Fix until green.
+
+---
+
+## Phase 7: Deploy & Preview
+
+Run migrations and start the dev server:
+```bash
+pnpm drizzle-kit generate && pnpm drizzle-kit migrate
 pnpm dev:start
 ```
 
-**IMPORTANT**: Always use `pnpm dev:start` from the project directory. Do NOT use `sprite-env services create` or launch Vite manually — the project's `vite.config.ts` contains required settings (`allowedHosts`, `port`, `proxy`) that will not be applied if Vite is started from a different directory.
+**IMPORTANT**: Always use `pnpm dev:start` from the project directory.
 
-After starting, the app is accessible at the preview URL (shown in the UI).
+After the app is running, write `ARCHITECTURE.md` (brief reference: entities, routes, components).
 
-Once the app is running, invoke the UI design skill to iterate on the UI with the user:
-
+Then invoke the UI design skill for interactive refinement:
 ```
 /ui-design
 ```
 
-This loads the design system and component patterns into context, audits the current UI against best practices, and enters an interactive loop where the user can request specific improvements.
+---
 
-## Critical Rules (from electric-app-guardrails)
+## Scaffold Gotchas (not in playbooks)
 
-- `z` from `"zod/v4"` — NEVER from `"zod"` (drizzle-zod 0.8.x rejects v3 overrides)
-- ALL timestamp columns: `z.union([z.string(), z.date()]).transform(val => typeof val === 'string' ? new Date(val) : val).default(() => new Date())`
-- Mutation routes MUST use `parseDates(await request.json())`
-- PUT/PATCH: destructure out `created_at`, `updated_at` before spreading
-- `shapeOptions.url` MUST be absolute URL
-- API routes use `createFileRoute` + `server.handlers` — NOT `createAPIFileRoute` or `createServerFileRoute`
-- Icons from `lucide-react` only
-- `ssr: false` on leaf routes with `useLiveQuery`, NEVER on `__root.tsx`
-- `ClientOnly` wrapper for `useLiveQuery` in `__root.tsx`
-- Schema tests: import from `@/db/zod-schemas` only, NEVER from collections or `@/db`
+These are specific to this scaffold and NOT covered by playbook skills:
 
-## Drizzle Workflow Order (ALWAYS follow)
+1. **`zod/v4` import** — Always `import { z } from "zod/v4"`, never `"zod"`. Playbooks show `"zod"` but drizzle-zod 0.8.x in this project requires the v4 subpath export.
 
-1. Edit `src/db/schema.ts`
-2. Edit `src/db/zod-schemas.ts` (derive via drizzle-zod)
-3. `pnpm drizzle-kit generate && pnpm drizzle-kit migrate`
-4. Create collections
-5. Create API routes (proxy + mutation)
-6. Create UI components
+2. **Protected files — DO NOT MODIFY:**
+   docker-compose.yml, vite.config.ts, tsconfig.json, biome.json, pnpm-lock.yaml, postgres.conf, vitest.config.ts, Caddyfile, drizzle.config.ts, src/db/index.ts, src/db/utils.ts, src/lib/electric-proxy.ts, src/components/ClientOnly.tsx, tests/helpers/schema-test-utils.ts
 
-## Deployment & Preview (Sprites / Cloud Sandboxes)
+3. **Import rules:**
+   - `"lucide-react"` for icons (NOT @radix-ui/react-icons)
+   - `"@radix-ui/themes"` for components (NOT @radix-ui/react-*)
+   - `"react-router"` for routing (NOT react-router-dom)
 
-When the app runs inside a cloud sandbox (Fly.io Sprite), the following constraints apply:
-
-- **Port 8080 is the ONLY externally accessible port.** The Sprite HTTP proxy routes all traffic to port 8080 inside the VM. The app MUST listen on this port — this is pre-configured via the `VITE_PORT` environment variable (set to `8080` in sprites, `5173` in Docker).
-- **The app MUST bind to `0.0.0.0`**, not `localhost`. This is pre-configured in `vite.config.ts` via `host: true`.
-- **`allowedHosts: true`** is set in `vite.config.ts` so that Sprite hostnames (`*.sprites.app`) can access the dev server. Without this, Vite rejects requests from non-localhost origins.
-- **The preview URL** follows the pattern: `https://<sprite-name>.sprites.app`
-- **`vite.config.ts` is pre-configured** with `port`, `host: true`, `allowedHosts: true`, and the Electric proxy — **DO NOT MODIFY it**. Changing it WILL break the preview.
-
-**ALWAYS use `pnpm dev:start`** to start the dev server. This script runs Vite from the project directory where `vite.config.ts` is located. **DO NOT use `sprite-env services create`** or launch Vite manually — doing so will start Vite from the wrong directory, causing it to miss the config and reject Sprite hostnames with `allowedHosts` errors.
-
-After finishing all code generation, always run migrations then `pnpm dev:start` so the user can preview.
-
-## Scaffold Files (DO NOT MODIFY)
-
-- `src/db/index.ts` — Drizzle client setup
-- `src/db/utils.ts` — parseDates + generateTxId
-- `src/lib/electric-proxy.ts` — Electric shape proxy helper
-- `src/components/ClientOnly.tsx` — SSR wrapper
-- `tests/helpers/schema-test-utils.ts` — generateValidRow/generateRowWithout
-- `vitest.config.ts` — test config
-- `vite.config.ts` — Vite dev server (port, host, allowedHosts, proxy — see Deployment section)
-- `docker-compose.yml` — Postgres + Electric
-- `drizzle.config.ts` — Drizzle config
+4. **Dependency rules:**
+   - NEVER remove existing dependencies from package.json
+   - Only add new dependencies
