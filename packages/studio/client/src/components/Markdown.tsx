@@ -1,6 +1,15 @@
+import DOMPurify from "dompurify"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { highlight } from "sugar-high"
+
+/** Sanitize HTML to only allow safe tags produced by sugar-high (spans with style) */
+function sanitizeHighlightedHtml(html: string): string {
+	return DOMPurify.sanitize(html, {
+		ALLOWED_TAGS: ["span"],
+		ALLOWED_ATTR: ["style", "class"],
+	})
+}
 
 function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
 	const code = String(children).replace(/\n$/, "")
@@ -10,8 +19,8 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
 		return <code>{children}</code>
 	}
 
-	const html = highlight(code)
-	// biome-ignore lint/security/noDangerouslySetInnerHtml: sugar-high produces safe span-only HTML
+	const html = sanitizeHighlightedHtml(highlight(code))
+	// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized via DOMPurify
 	return <code dangerouslySetInnerHTML={{ __html: html }} />
 }
 

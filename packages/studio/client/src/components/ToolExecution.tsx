@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify"
 import { highlight } from "sugar-high"
 import type { ConsoleEntry } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
@@ -57,8 +58,12 @@ function formatInput(input: Record<string, unknown>): string {
 function HighlightedPre({ text, maxLen }: { text: string; maxLen: number }) {
 	const truncated = text.length > maxLen
 	const content = truncated ? text.slice(0, maxLen) : text
-	const html = highlight(content) + (truncated ? "\n... (truncated)" : "")
-	// biome-ignore lint/security/noDangerouslySetInnerHtml: sugar-high produces safe span-only HTML
+	const highlighted = DOMPurify.sanitize(highlight(content), {
+		ALLOWED_TAGS: ["span"],
+		ALLOWED_ATTR: ["style", "class"],
+	})
+	const html = highlighted + (truncated ? "\n... (truncated)" : "")
+	// biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized via DOMPurify
 	return <pre dangerouslySetInnerHTML={{ __html: html }} />
 }
 

