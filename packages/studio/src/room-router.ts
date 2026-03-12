@@ -429,6 +429,7 @@ export class RoomRouter {
 		lines.push(
 			"To send a message: @room <your message> (broadcast) or @<name> <message> (direct).",
 			"Place your @room message at the END of your response, after completing any work.",
+			"CRITICAL: The @room or @<name> directive MUST be on its own line — never inline in a paragraph. The parser only recognises directives at the start of a line.",
 			"If you have nothing to say, finish without @room — your turn ends silently.",
 			"To request human input: @room GATE: <question>",
 			"",
