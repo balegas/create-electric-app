@@ -20,6 +20,7 @@ import {
 	resumeSessionSchema,
 	sendRoomMessageSchema,
 } from "./api-schemas.js"
+import { PRODUCTION_ALLOWED_TOOLS } from "./bridge/claude-code-base.js"
 import { ClaudeCodeDockerBridge, type ClaudeCodeDockerConfig } from "./bridge/claude-code-docker.js"
 import {
 	ClaudeCodeSpritesBridge,
@@ -135,9 +136,47 @@ function resolveStudioUrl(port: number): string {
 	return `http://localhost:${port}`
 }
 
+// ---------------------------------------------------------------------------
+// Rate limiting — in-memory sliding window per IP
+// ---------------------------------------------------------------------------
+
+const MAX_SESSIONS_PER_IP_PER_HOUR = Number(process.env.MAX_SESSIONS_PER_IP_PER_HOUR) || 5
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
+const sessionCreationsByIp = new Map<string, number[]>()
+
+function extractClientIp(c: { req: { header: (name: string) => string | undefined } }): string {
+	return (
+		c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+		c.req.header("cf-connecting-ip") ||
+		"unknown"
+	)
+}
+
+function checkSessionRateLimit(ip: string): boolean {
+	const now = Date.now()
+	const cutoff = now - RATE_LIMIT_WINDOW_MS
+	let timestamps = sessionCreationsByIp.get(ip) ?? []
+	// Prune stale entries
+	timestamps = timestamps.filter((t) => t > cutoff)
+	if (timestamps.length >= MAX_SESSIONS_PER_IP_PER_HOUR) {
+		sessionCreationsByIp.set(ip, timestamps)
+		return false
+	}
+	timestamps.push(now)
+	sessionCreationsByIp.set(ip, timestamps)
+	return true
+}
+
+// ---------------------------------------------------------------------------
+// Per-session cost budget
+// ---------------------------------------------------------------------------
+
+const MAX_SESSION_COST_USD = Number(process.env.MAX_SESSION_COST_USD) || 5
+
 /**
  * Accumulate cost and turn metrics from a session_end event into the session's totals.
  * Called each time a Claude Code run finishes (initial + iterate runs).
+ * In production mode, enforces a per-session cost budget.
  */
 function accumulateSessionCost(config: ServerConfig, sessionId: string, event: EngineEvent): void {
 	if (event.type !== "session_end") return
@@ -159,17 +198,50 @@ function accumulateSessionCost(config: ServerConfig, sessionId: string, event: E
 	console.log(
 		`[session:${sessionId}] Cost: $${updates.totalCostUsd?.toFixed(4) ?? "?"} (${updates.totalTurns ?? "?"} turns)`,
 	)
+
+	// Enforce budget in production mode
+	if (
+		!config.devMode &&
+		updates.totalCostUsd != null &&
+		updates.totalCostUsd > MAX_SESSION_COST_USD
+	) {
+		console.log(
+			`[session:${sessionId}] Budget exceeded: $${updates.totalCostUsd.toFixed(2)} > $${MAX_SESSION_COST_USD}`,
+		)
+		const bridge = bridges.get(sessionId)
+		if (bridge) {
+			bridge
+				.emit({
+					type: "budget_exceeded",
+					budget_usd: MAX_SESSION_COST_USD,
+					spent_usd: updates.totalCostUsd,
+					ts: ts(),
+				})
+				.catch(() => {})
+		}
+		config.sessions.update(sessionId, { status: "error" })
+		closeBridge(sessionId)
+	}
 }
 
 /**
  * Create a Claude Code bridge for a session.
  * Spawns `claude` CLI with stream-json I/O inside the sandbox.
+ * In production mode, enforces tool restrictions and hardcodes the model.
  */
 function createClaudeCodeBridge(
 	config: ServerConfig,
 	sessionId: string,
 	claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig,
 ): SessionBridge {
+	// Production mode: restrict tools and hardcode model
+	if (!config.devMode) {
+		if (!claudeConfig.allowedTools) {
+			claudeConfig.allowedTools = PRODUCTION_ALLOWED_TOOLS
+		}
+		claudeConfig.model = undefined // force default (claude-sonnet-4-6)
+	}
+
 	const conn = sessionStream(config, sessionId)
 	let bridge: SessionBridge
 
@@ -403,6 +475,11 @@ export function createApp(config: ServerConfig) {
 		checks.sandbox = config.sandbox.runtime
 
 		return c.json({ healthy, checks }, healthy ? 200 : 503)
+	})
+
+	// Public config — exposes non-sensitive flags to the client
+	app.get("/api/config", (c) => {
+		return c.json({ devMode: config.devMode })
 	})
 
 	// Provision Electric Cloud resources via the Claim API
@@ -922,6 +999,19 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createSessionSchema)
 		if (isResponse(body)) return body
 
+		// Block freeform sessions in production mode
+		if (body.freeform && !config.devMode) {
+			return c.json({ error: "Freeform sessions are not available" }, 403)
+		}
+
+		// Rate-limit session creation in production mode
+		if (!config.devMode) {
+			const ip = extractClientIp(c)
+			if (!checkSessionRateLimit(ip)) {
+				return c.json({ error: "Too many sessions. Please try again later." }, 429)
+			}
+		}
+
 		const sessionId = crypto.randomUUID()
 		const inferredName =
 			body.name ||
@@ -1164,6 +1254,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						projectName,
 						projectDir: handle.projectDir,
 						runtime: config.sandbox.runtime,
+						production: !config.devMode,
 						...(repoConfig
 							? {
 									git: {
@@ -2562,6 +2653,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, resumeSessionSchema)
 		if (isResponse(body)) return body
 
+		// Rate-limit session creation in production mode
+		if (!config.devMode) {
+			const ip = extractClientIp(c)
+			if (!checkSessionRateLimit(ip)) {
+				return c.json({ error: "Too many sessions. Please try again later." }, 429)
+			}
+		}
+
 		const sessionId = crypto.randomUUID()
 		const repoName =
 			body.repoUrl
@@ -2651,6 +2750,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				projectName: repoName,
 				projectDir: handle.projectDir,
 				runtime: config.sandbox.runtime,
+				production: !config.devMode,
 				git: {
 					mode: "existing",
 					repoName: parseRepoNameFromUrl(body.repoUrl) ?? repoName,

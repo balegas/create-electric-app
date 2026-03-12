@@ -150,6 +150,19 @@ export function useSession(sessionId: string | null) {
 					return updated
 				}
 
+				case "budget_exceeded": {
+					const be = event as EngineEvent & { spent_usd: number; budget_usd: number }
+					return [
+						...prev,
+						{
+							kind: "log" as const,
+							level: "error" as const,
+							message: `Session budget exceeded ($${be.spent_usd.toFixed(2)} / $${be.budget_usd.toFixed(2)} limit)`,
+							ts: event.ts,
+						},
+					]
+				}
+
 				case "session_end":
 				case "session_start":
 				case "app_status":
@@ -177,6 +190,9 @@ export function useSession(sessionId: string | null) {
 					totalDurationMs: prev.totalDurationMs + (event.duration_ms ?? 0),
 				}))
 			}
+		}
+		if (event.type === "budget_exceeded") {
+			setIsComplete(true)
 		}
 	}, [])
 

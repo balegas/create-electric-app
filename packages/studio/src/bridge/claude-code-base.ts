@@ -57,6 +57,9 @@ export const DEFAULT_ALLOWED_TOOLS = [
 	"Skill",
 ]
 
+/** Tools allowed in production mode — no WebSearch to prevent abuse */
+export const PRODUCTION_ALLOWED_TOOLS = DEFAULT_ALLOWED_TOOLS.filter((t) => t !== "WebSearch")
+
 export abstract class ClaudeCodeBaseBridge implements SessionBridge {
 	readonly sessionId: string
 
