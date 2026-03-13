@@ -175,7 +175,11 @@ export function RoomPage() {
 
 			<div className="session-content">
 				<div className="room-messages">
-					<RoomEventList events={events} participants={participants} />
+					<RoomEventList
+						events={events}
+						participants={participants}
+						provisioning={!!roomEntry?.sessions && participants.length < 3}
+					/>
 				</div>
 
 				<RoomInput
@@ -348,9 +352,11 @@ function ParticipantLink({
 function RoomEventList({
 	events,
 	participants,
+	provisioning,
 }: {
 	events: RoomEvent[]
 	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
+	provisioning?: boolean
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
 	const workingAgents = participants.filter((p) => p.running)
@@ -362,7 +368,23 @@ function RoomEventList({
 	if (events.length === 0) {
 		return (
 			<div className="room-empty">
-				<p>No messages yet. Add agents to start the conversation.</p>
+				{provisioning ? (
+					<>
+						<div className="room-working-indicator">
+							<span className="room-working-dots">
+								<span />
+								<span />
+								<span />
+							</span>
+							<span className="room-working-text">Setting up agents...</span>
+						</div>
+						<p className="room-provisioning-detail">
+							Creating sandboxes and configuring coder, reviewer, and UI designer agents.
+						</p>
+					</>
+				) : (
+					<p>No messages yet. Add agents to start the conversation.</p>
+				)}
 			</div>
 		)
 	}
