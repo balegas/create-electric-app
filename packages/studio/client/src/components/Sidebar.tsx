@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { useAppContext } from "../layouts/AppShell"
 import { addAgentRoom, removeAgentRoom } from "../lib/agent-room-store"
 import { createAgentRoom, joinAgentRoom } from "../lib/api"
-import { getAvatarColor, SessionListItem } from "./SessionListItem"
+import { DeleteModal, getAvatarColor, SessionListItem } from "./SessionListItem"
 
 interface SidebarProps {
 	collapsed: boolean
@@ -65,6 +65,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 	const [roomName, setRoomName] = useState("")
 	const [joinRoomOpen, setJoinRoomOpen] = useState(false)
 	const [joinRoomCode, setJoinRoomCode] = useState("")
+	const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null)
 
 	// Close inline inputs when sidebar collapses
 	useEffect(() => {
@@ -246,12 +247,22 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 								className="session-item-delete"
 								onClick={(e) => {
 									e.stopPropagation()
-									handleRemoveRoom(r.id)
+									setDeletingRoomId(r.id)
 								}}
 								title="Remove"
 							>
 								&times;
 							</button>
+							{deletingRoomId === r.id && (
+								<DeleteModal
+									projectName={r.name}
+									onConfirm={() => {
+										setDeletingRoomId(null)
+										handleRemoveRoom(r.id)
+									}}
+									onCancel={() => setDeletingRoomId(null)}
+								/>
+							)}
 						</div>
 					)
 				})}

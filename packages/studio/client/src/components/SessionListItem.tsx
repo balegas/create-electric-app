@@ -49,7 +49,7 @@ function formatTimeAgo(dateStr: string): string {
 	return `${days}d ago`
 }
 
-function DeleteModal({
+export function DeleteModal({
 	projectName,
 	onConfirm,
 	onCancel,
