@@ -51,10 +51,7 @@ describe("github-app", () => {
 			expect(opts.headers.Authorization).toMatch(/^Bearer ey/)
 
 			const body = JSON.parse(opts.body)
-			expect(body.permissions).toEqual({
-				contents: "write",
-				administration: "write",
-			})
+			expect(body).toEqual({})
 
 			vi.unstubAllGlobals()
 		})

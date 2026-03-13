@@ -37,7 +37,7 @@ import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
 import { createGate, rejectAllGates, resolveGate } from "./gate.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
-import { getInstallationToken } from "./github-app.js"
+import { createOrgRepo, getInstallationToken } from "./github-app.js"
 import { generateInviteCode } from "./invite-code.js"
 import { resolveProjectDir } from "./project-utils.js"
 import type { RoomRegistry } from "./room-registry.js"
@@ -150,6 +150,7 @@ const sessionCreationsByIp = new Map<string, number[]>()
 const GITHUB_APP_ID = process.env.GITHUB_APP_ID
 const GITHUB_INSTALLATION_ID = process.env.GITHUB_INSTALLATION_ID
 const GITHUB_PRIVATE_KEY = process.env.GITHUB_PRIVATE_KEY?.replace(/\\n/g, "\n")
+const GITHUB_ORG = "electric-apps"
 
 // Rate limiting for GitHub token endpoint
 const githubTokenRequestsBySession = new Map<string, number[]>()
@@ -1015,13 +1016,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 
 		const sessionId = crypto.randomUUID()
-		const inferredName =
-			body.name ||
-			body.description
-				.slice(0, 40)
-				.replace(/[^a-z0-9]+/gi, "-")
-				.replace(/^-|-$/g, "")
-				.toLowerCase()
+		const inferredName = config.devMode
+			? body.name ||
+				body.description
+					.slice(0, 40)
+					.replace(/[^a-z0-9]+/gi, "-")
+					.replace(/^-|-$/g, "")
+					.toLowerCase()
+			: `electric-${sessionId.slice(0, 8)}`
 		const baseDir = body.baseDir || process.cwd()
 		const { projectName } = resolveProjectDir(baseDir, inferredName)
 
@@ -1253,6 +1255,65 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						})
 					}
 
+					// In prod mode, create GitHub repo and initialize git in the sandbox
+					let prodGitConfig: { mode: "pre-created"; repoName: string; repoUrl: string } | undefined
+					if (!config.devMode && GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY) {
+						try {
+							// Repo name matches the project name (already has random slug)
+							const repoSlug = projectName
+
+							await bridge.emit({
+								type: "log",
+								level: "build",
+								message: "Creating GitHub repository...",
+								ts: ts(),
+							})
+
+							const { token } = await getInstallationToken(
+								GITHUB_APP_ID,
+								GITHUB_INSTALLATION_ID,
+								GITHUB_PRIVATE_KEY,
+							)
+							const repo = await createOrgRepo(GITHUB_ORG, repoSlug, token)
+
+							if (repo) {
+								const actualRepoName = `${GITHUB_ORG}/${repo.htmlUrl.split("/").pop()}`
+								// Initialize git and set remote in the sandbox
+								await config.sandbox.exec(
+									handle,
+									`cd '${handle.projectDir}' && git init -b main && git remote add origin '${repo.cloneUrl}'`,
+								)
+								prodGitConfig = {
+									mode: "pre-created" as const,
+									repoName: actualRepoName,
+									repoUrl: repo.htmlUrl,
+								}
+
+								config.sessions.update(sessionId, {
+									git: {
+										branch: "main",
+										remoteUrl: repo.htmlUrl,
+										repoName: actualRepoName,
+										lastCommitHash: null,
+										lastCommitMessage: null,
+										lastCheckpointAt: null,
+									},
+								})
+
+								await bridge.emit({
+									type: "log",
+									level: "done",
+									message: `GitHub repo created: ${repo.htmlUrl}`,
+									ts: ts(),
+								})
+							} else {
+								console.warn(`[session:${sessionId}] Failed to create GitHub repo`)
+							}
+						} catch (err) {
+							console.error(`[session:${sessionId}] GitHub repo creation error:`, err)
+						}
+					}
+
 					// Write CLAUDE.md to the sandbox workspace.
 					// Our generator includes hardcoded playbook paths and reading order
 					// so we don't depend on @tanstack/intent generating a skill block.
@@ -1262,15 +1323,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						projectDir: handle.projectDir,
 						runtime: config.sandbox.runtime,
 						production: !config.devMode,
-						...(repoConfig
-							? {
-									git: {
-										mode: "create" as const,
-										repoName: `${repoConfig.account}/${repoConfig.repoName}`,
-										visibility: repoConfig.visibility,
-									},
-								}
-							: {}),
+						...(prodGitConfig
+							? { git: prodGitConfig }
+							: repoConfig
+								? {
+										git: {
+											mode: "create" as const,
+											repoName: `${repoConfig.account}/${repoConfig.repoName}`,
+											visibility: repoConfig.visibility,
+										},
+									}
+								: {}),
 					})
 					try {
 						await config.sandbox.exec(

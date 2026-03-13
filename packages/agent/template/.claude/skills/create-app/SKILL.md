@@ -61,7 +61,8 @@ Write a `PLAN.md` file with this structure:
 - [ ] Phase 4: Collections & API routes
 - [ ] Phase 5: UI components
 - [ ] Phase 6: Build, lint & test
-- [ ] Phase 7: Deploy & preview
+- [ ] Phase 7: README.md & ARCHITECTURE.md
+- [ ] Phase 8: Deploy & preview
 
 ## Design Conventions
 - UUID primary keys with defaultRandom()
@@ -211,7 +212,9 @@ pnpm dev:start
 
 **IMPORTANT**: Always use `pnpm dev:start` from the project directory.
 
-After the app is running, write `ARCHITECTURE.md` (brief reference: entities, routes, components).
+After the app is running, write:
+1. `README.md` — overwrite the scaffold README with a project-specific one: app name, one-line description, screenshot placeholder, how to run (`pnpm install && pnpm dev:start`), tech stack (Electric SQL, TanStack DB, Drizzle, TanStack Start), and a brief feature list.
+2. `ARCHITECTURE.md` — brief reference: entities, routes, components.
 
 Then invoke the UI design skill for interactive refinement:
 ```

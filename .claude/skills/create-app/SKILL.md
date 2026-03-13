@@ -79,7 +79,8 @@ export const entityName = pgTable("entity_name", {
 - [ ] JSON round-trip tests (parseDates + schema validation)
 - [ ] pnpm test passes
 
-### Phase 6: Architecture Reference
+### Phase 6: README & Architecture Reference
+- [ ] Overwrite README.md with project-specific content
 - [ ] Write ARCHITECTURE.md
 
 ### Phase 7: Deploy & Preview
@@ -222,8 +223,16 @@ Write additional tests:
 
 Run `pnpm test` — fix until green.
 
-## Phase 7: Architecture Reference
+## Phase 7: README & Architecture Reference
 
+### README.md
+Overwrite the scaffold `README.md` with a project-specific one:
+- App name and one-line description
+- How to run: `pnpm install && pnpm dev:start`
+- Tech stack: Electric SQL, TanStack DB, Drizzle ORM, TanStack Start
+- Brief feature list
+
+### ARCHITECTURE.md
 Write `ARCHITECTURE.md` in the project root (under 1500 tokens):
 ```markdown
 # [App Name] — Architecture Reference
