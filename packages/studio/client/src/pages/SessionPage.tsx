@@ -137,6 +137,15 @@ export function SessionPage() {
 		}
 	}, [effectiveId, isComplete, refreshSessions])
 
+	// Sync needsInput to localStorage so the sidebar avatar ring updates
+	// (orange = gate waiting, cyan = running) without waiting for server polling
+	const hasUnresolvedGate = entries.some((e) => e.kind === "gate" && !e.resolved)
+	useEffect(() => {
+		if (!effectiveId) return
+		updateSession(effectiveId, { needsInput: hasUnresolvedGate })
+		refreshSessions()
+	}, [effectiveId, hasUnresolvedGate, refreshSessions])
+
 	// Derive preview URL and port from app_status event
 	const appPort = appStatus?.port
 	const previewUrl = appStatus?.previewUrl
