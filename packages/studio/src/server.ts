@@ -2012,11 +2012,37 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			revoked: false,
 		})
 
-		// Define the 3 agents
+		// Define the 3 agents with randomized display names
+		const agentSuffixes = [
+			"fox",
+			"owl",
+			"lynx",
+			"wolf",
+			"bear",
+			"hawk",
+			"pine",
+			"oak",
+			"elm",
+			"ivy",
+			"ray",
+			"arc",
+			"reef",
+			"dusk",
+			"ash",
+			"sage",
+		]
+		const pick = () => agentSuffixes[Math.floor(Math.random() * agentSuffixes.length)]
+		const usedSuffixes = new Set<string>()
+		const uniquePick = () => {
+			let s = pick()
+			while (usedSuffixes.has(s)) s = pick()
+			usedSuffixes.add(s)
+			return s
+		}
 		const agentDefs = [
-			{ name: "coder", role: "coder" },
-			{ name: "reviewer", role: "reviewer" },
-			{ name: "ui-designer", role: "ui-designer" },
+			{ name: `coder-${uniquePick()}`, role: "coder" },
+			{ name: `reviewer-${uniquePick()}`, role: "reviewer" },
+			{ name: `designer-${uniquePick()}`, role: "ui-designer" },
 		] as const
 
 		// Create session IDs and streams upfront for all 3 agents
