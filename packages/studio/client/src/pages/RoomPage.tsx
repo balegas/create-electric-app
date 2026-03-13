@@ -352,11 +352,7 @@ function RoomEventList({
 			})}
 			{workingAgents.length > 0 && (
 				<div className="room-working-indicator">
-					<span className="room-working-dots">
-						<span />
-						<span />
-						<span />
-					</span>
+					<span className="spinner-inline" />
 					<span className="room-working-text">
 						{workingAgents.map((a) => a.name).join(", ")}{" "}
 						{workingAgents.length === 1 ? "is" : "are"} working

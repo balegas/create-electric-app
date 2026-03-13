@@ -699,43 +699,11 @@
 .room-working-indicator {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 6px;
 	padding: 6px 14px;
 	color: var(--text-subtle);
-	font-size: 12px;
-}
-
-.room-working-dots {
-	display: inline-flex;
-	gap: 3px;
-	align-items: center;
-}
-
-.room-working-dots span {
-	width: 4px;
-	height: 4px;
-	border-radius: 50%;
-	background: var(--purple);
-	animation: working-bounce 1.2s ease-in-out infinite;
-}
-
-.room-working-dots span:nth-child(2) {
-	animation-delay: 0.2s;
-}
-
-.room-working-dots span:nth-child(3) {
-	animation-delay: 0.4s;
-}
-
-@keyframes working-bounce {
-	0%,
-	80%,
-	100% {
-		opacity: 0.3;
-	}
-	40% {
-		opacity: 1;
-	}
+	font-size: 13px;
+	animation: fade-pulse 2s ease-in-out infinite;
 }
 
 .room-working-text {
