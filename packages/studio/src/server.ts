@@ -2679,6 +2679,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json(
 			{
 				roomId,
+				code,
+				name: roomName,
 				roomToken,
 				sessions: sessions.map((s) => ({
 					sessionId: s.sessionId,
