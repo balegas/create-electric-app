@@ -428,3 +428,40 @@
 .gate-option.gate-option-checkbox.checked .gate-checkbox-indicator {
 	color: var(--brand-1);
 }
+
+/* Documentation resource links in resolved config summary */
+.gate-resources {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 10px;
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gate-resources-label {
+	font-size: 11px;
+	color: var(--text-muted);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin-right: 2px;
+}
+
+.gate-resources a {
+	font-size: 11px;
+	color: var(--text-subtle);
+	text-decoration: none;
+	padding: 2px 6px;
+	border-radius: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	transition:
+		color 0.15s,
+		border-color 0.15s;
+}
+
+.gate-resources a:hover {
+	color: var(--brand-1);
+	border-color: rgba(153, 143, 231, 0.3);
+}

@@ -171,6 +171,33 @@ function InfraConfigGate({
 							.
 						</div>
 					)}
+					<div className="gate-resources">
+						<span className="gate-resources-label">Resources</span>
+						<a href="https://electric-sql.com/docs" target="_blank" rel="noopener noreferrer">
+							Electric SQL
+						</a>
+						<a
+							href="https://tanstack.com/db/latest/docs/overview"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							TanStack DB
+						</a>
+						<a
+							href="https://tanstack.com/start/latest/docs/overview"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							TanStack Start
+						</a>
+						<a
+							href="https://orm.drizzle.team/docs/overview"
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							Drizzle ORM
+						</a>
+					</div>
 				</div>
 			</div>
 		)

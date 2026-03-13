@@ -275,41 +275,47 @@ export function SessionPage() {
 					)}
 				</span>
 
-				{/* Mobile overflow menu */}
-				<button
-					type="button"
-					className="session-header-overflow"
-					onClick={(e) => {
-						e.stopPropagation()
-						setOverflowOpen((v) => !v)
-					}}
-					aria-label="More options"
-				>
-					<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-						<title>More</title>
-						<circle cx="8" cy="3" r="1.5" />
-						<circle cx="8" cy="8" r="1.5" />
-						<circle cx="8" cy="13" r="1.5" />
-					</svg>
-				</button>
-				{overflowOpen && (
-					<div className="session-header-overflow-menu">
-						{cost.totalCostUsd > 0 && (
-							<span className="session-header-overflow-menu-item session-header-overflow-cost">
-								Cost: ${cost.totalCostUsd.toFixed(2)} ({cost.totalTurns} turns)
-							</span>
-						)}
+				{/* Mobile overflow menu — only show if there are items */}
+				{(devMode || cost.totalCostUsd > 0) && (
+					<>
 						<button
 							type="button"
-							className="session-header-overflow-menu-item"
-							onClick={() => {
-								setOverflowOpen(false)
-								setShowSettings((v) => !v)
+							className="session-header-overflow"
+							onClick={(e) => {
+								e.stopPropagation()
+								setOverflowOpen((v) => !v)
 							}}
+							aria-label="More options"
 						>
-							Settings
+							<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+								<title>More</title>
+								<circle cx="8" cy="3" r="1.5" />
+								<circle cx="8" cy="8" r="1.5" />
+								<circle cx="8" cy="13" r="1.5" />
+							</svg>
 						</button>
-					</div>
+						{overflowOpen && (
+							<div className="session-header-overflow-menu">
+								{cost.totalCostUsd > 0 && (
+									<span className="session-header-overflow-menu-item session-header-overflow-cost">
+										Cost: ${cost.totalCostUsd.toFixed(2)} ({cost.totalTurns} turns)
+									</span>
+								)}
+								{devMode && (
+									<button
+										type="button"
+										className="session-header-overflow-menu-item"
+										onClick={() => {
+											setOverflowOpen(false)
+											setShowSettings((v) => !v)
+										}}
+									>
+										Settings
+									</button>
+								)}
+							</div>
+						)}
+					</>
 				)}
 			</div>
 
