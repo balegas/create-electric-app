@@ -103,6 +103,17 @@ Before making changes, commit to a coherent aesthetic:
 - Giant forms without structure — group related fields, use Dialog for create/edit
 - Tables without visual anchoring — use `variant="surface"` or Card wrappers
 
+### Design Thinking — Advanced
+
+Beyond the baseline Radix patterns, aim for **distinctive, memorable interfaces**:
+
+- **Typography with character**: Work the full typographic range. Use size, weight, and color to establish clear hierarchy. Heading `size="7"` or `size="8"` for page titles creates presence. Pair display-weight headings with lighter body text.
+- **Color with conviction**: Dominant colors with sharp accents outperform timid palettes. The violet accent should feel intentional, not decorative. Use contrast to draw the eye.
+- **Motion and micro-interactions**: Add subtle transitions for state changes. Focus on high-impact moments — a well-orchestrated page load with staggered reveals creates more delight than scattered animations. Use CSS transitions for hover states.
+- **Spatial composition**: Break out of everything-centered layouts. Use asymmetry, `justify="between"` for headers, generous negative space, and visual weight through surfaces. Let content breathe.
+- **Atmosphere and depth**: Create visual atmosphere through Card `variant="surface"`, translucent panel backgrounds, and subtle layering. The interface should feel crafted, not generated.
+- **Contextual design**: Every app has a different purpose and audience. A task manager feels different from a data dashboard. Match the aesthetic to the domain — colors, density, and component choices should reflect the content.
+
 ### Import Rules
 
 - Use `@radix-ui/themes` for all components (NOT `@radix-ui/react-*`)
