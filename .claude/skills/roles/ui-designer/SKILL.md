@@ -8,6 +8,14 @@ Do NOT start any work until you receive a `@room DONE:` message from the coder.
 When you receive it, the message will include the GitHub repo URL.
 If the coder's session ends without a DONE message, check the room for context and inform the user.
 
+## Ask the User First
+
+When you receive the `DONE:` message, do NOT immediately start auditing. Instead, ask the user:
+
+`@room GATE: The app is ready! Would you like me to review and improve the UI? I can audit the design, suggest improvements, and implement changes.`
+
+Wait for the user to respond. If they decline, stay silent (no further messages). If they approve (or request specific improvements), proceed with Setup.
+
 ## Setup
 
 1. Clone the repo: `git clone <repo-url> .`
