@@ -85,11 +85,12 @@
 		background: var(--bg-hover);
 	}
 
-	/* ---- Session header: compact, taller on mobile ---- */
+	/* ---- Session header: compact, taller on mobile, sticky to top ---- */
 	.session-header {
-		padding: 0 8px;
+		position: fixed;
+		padding: env(safe-area-inset-top, 0) 8px 0 8px;
 		gap: 6px;
-		height: 56px;
+		height: calc(56px + env(safe-area-inset-top, 0));
 	}
 
 	.session-header-name {
@@ -159,7 +160,7 @@
 	/* Overflow dropdown */
 	.session-header-overflow-menu {
 		position: absolute;
-		top: 52px;
+		top: calc(52px + env(safe-area-inset-top, 0));
 		right: 8px;
 		background: var(--bg-surface);
 		border: 1px solid var(--border);
@@ -192,9 +193,9 @@
 		color: var(--text);
 	}
 
-	/* ---- Console: account for taller overlaid header on mobile ---- */
+	/* ---- Console: account for taller overlaid header on mobile + safe area ---- */
 	.console {
-		padding: 64px 8px 8px;
+		padding: calc(64px + env(safe-area-inset-top, 0)) 8px 8px;
 		overflow-x: hidden;
 	}
 
@@ -212,7 +213,7 @@
 
 	/* ---- Session loading skeleton: mobile ---- */
 	.session-loading {
-		padding: 64px 8px 8px;
+		padding: calc(64px + env(safe-area-inset-top, 0)) 8px 8px;
 	}
 
 	/* ---- Tool inline: truncate summary more aggressively ---- */
@@ -260,15 +261,16 @@
 	.mobile-home-topbar {
 		display: flex;
 		align-items: center;
-		padding: 6px 10px;
-		height: 52px;
+		padding: env(safe-area-inset-top, 6px) 10px 6px 10px;
+		height: calc(52px + env(safe-area-inset-top, 0));
 		flex-shrink: 0;
 		border-bottom: 1px solid rgba(58, 58, 68, 0.5);
 		gap: 8px;
 		background: rgba(27, 27, 31, 0.8);
 		backdrop-filter: blur(12px);
 		-webkit-backdrop-filter: blur(12px);
-		position: relative;
+		position: sticky;
+		top: 0;
 		z-index: 10;
 	}
 
