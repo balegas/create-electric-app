@@ -67,6 +67,15 @@ export const createRoomSchema = z.object({
 	maxRounds: z.number().int().positive().optional(),
 })
 
+// POST /api/rooms/create-app
+export const createAppRoomSchema = z.object({
+	description: z.string().min(1).max(MAX_TEXT),
+	name: z.string().max(MAX_SHORT).optional(),
+	apiKey: optionalKey,
+	oauthToken: optionalKey,
+	ghToken: optionalKey,
+})
+
 // POST /api/rooms/:id/agents
 export const addAgentSchema = z.object({
 	name: z.string().max(MAX_SHORT).optional(),
