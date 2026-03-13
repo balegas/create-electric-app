@@ -10,6 +10,8 @@ export interface SessionInfo {
 	createdAt: string
 	lastActiveAt: string
 	status: "running" | "complete" | "error" | "cancelled"
+	/** True when the agent is blocked waiting for user input (ask_user_question gate) */
+	needsInput?: boolean
 	/** SDK session ID from the last coder run — used to resume conversation context across iterations */
 	lastCoderSessionId?: string
 	/** Host port mapped to the sandbox's dev server */

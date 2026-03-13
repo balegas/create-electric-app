@@ -41,6 +41,7 @@ import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "
 import { createOrgRepo, getInstallationToken } from "./github-app.js"
 import { generateInviteCode } from "./invite-code.js"
 import { resolveProjectDir } from "./project-utils.js"
+import { Registry } from "./registry.js"
 import type { RoomRegistry } from "./room-registry.js"
 import { type RoomParticipant, RoomRouter } from "./room-router.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
@@ -705,6 +706,7 @@ export function createApp(config: ServerConfig) {
 		if (hookEvent.type === "ask_user_question") {
 			const toolUseId = hookEvent.tool_use_id
 			console.log(`[hook-event] Blocking for ask_user_question gate: ${toolUseId}`)
+			config.sessions.update(sessionId, { needsInput: true })
 			try {
 				const gateTimeout = 5 * 60 * 1000 // 5 minutes
 				const result = await Promise.race([
@@ -717,6 +719,7 @@ export function createApp(config: ServerConfig) {
 					),
 				])
 				console.log(`[hook-event] ask_user_question gate resolved: ${toolUseId}`)
+				config.sessions.update(sessionId, { needsInput: false })
 				return c.json({
 					hookSpecificOutput: {
 						hookEventName: "PreToolUse",
@@ -729,6 +732,7 @@ export function createApp(config: ServerConfig) {
 				})
 			} catch (err) {
 				console.error(`[hook-event] ask_user_question gate error:`, err)
+				config.sessions.update(sessionId, { needsInput: false })
 				return c.json({ ok: true }) // Don't block Claude Code on timeout
 			}
 		}
@@ -868,6 +872,7 @@ export function createApp(config: ServerConfig) {
 		if (hookEvent.type === "ask_user_question") {
 			const toolUseId = hookEvent.tool_use_id
 			console.log(`[hook] Blocking for ask_user_question gate: ${toolUseId}`)
+			config.sessions.update(sessionId, { needsInput: true })
 			try {
 				const gateTimeout = 5 * 60 * 1000
 				const result = await Promise.race([
@@ -880,6 +885,7 @@ export function createApp(config: ServerConfig) {
 					),
 				])
 				console.log(`[hook] ask_user_question gate resolved: ${toolUseId}`)
+				config.sessions.update(sessionId, { needsInput: false })
 				return c.json({
 					sessionId,
 					hookSpecificOutput: {
@@ -893,6 +899,7 @@ export function createApp(config: ServerConfig) {
 				})
 			} catch (err) {
 				console.error(`[hook] ask_user_question gate error:`, err)
+				config.sessions.update(sessionId, { needsInput: false })
 				return c.json({ ok: true, sessionId })
 			}
 		}
@@ -996,8 +1003,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		if (isResponse(body)) return body
 
 		// In prod mode, use server-side API key; ignore user-provided credentials
-		const apiKey = config.devMode ? body.apiKey : process.env.ANTHROPIC_API_KEY
-		const oauthToken = config.devMode ? body.oauthToken : undefined
+		const apiKey = config.devMode
+			? body.apiKey || process.env.ANTHROPIC_API_KEY
+			: process.env.ANTHROPIC_API_KEY
+		const oauthToken = config.devMode
+			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
+			: undefined
 		const ghToken = config.devMode ? body.ghToken : undefined
 
 		// Block freeform sessions in production mode
@@ -1172,7 +1183,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				apiKey,
 				oauthToken,
 				ghToken,
-				...(!config.devMode && {
+				...((!config.devMode || GITHUB_APP_ID) && {
 					prodMode: {
 						sessionToken: deriveSessionToken(config.streamConfig.secret, sessionId),
 						studioUrl: resolveStudioUrl(config.port),
@@ -1256,9 +1267,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						})
 					}
 
-					// In prod mode, create GitHub repo and initialize git in the sandbox
+					// Create GitHub repo via GitHub App when credentials are available
 					let prodGitConfig: { mode: "pre-created"; repoName: string; repoUrl: string } | undefined
-					if (!config.devMode && GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY) {
+					if (GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY) {
 						try {
 							// Repo name matches the project name (already has random slug)
 							const repoSlug = projectName
@@ -1522,8 +1533,52 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			return c.json({ error: "Container is not running" }, 400)
 		}
 
+		// Ensure we have a CC bridge (not just a stream writer).
+		// After server restart, bridges are lost — getOrCreateBridge would create
+		// a HostedStreamBridge that can only write to the stream but can't spawn
+		// Claude Code processes. We need a ClaudeCodeDockerBridge to restart the agent.
+		let bridge = bridges.get(sessionId)
+		if (!bridge) {
+			const hookToken = deriveHookToken(config.streamConfig.secret, sessionId)
+			const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
+				config.sandbox.runtime === "sprites"
+					? {
+							prompt: body.request,
+							cwd: session.sandboxProjectDir || handle.projectDir,
+							studioUrl: resolveStudioUrl(config.port),
+							hookToken,
+						}
+					: {
+							prompt: body.request,
+							cwd: session.sandboxProjectDir || handle.projectDir,
+							studioPort: config.port,
+							hookToken,
+						}
+			bridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
+
+			// Re-register basic event tracking callbacks
+			bridge.onAgentEvent((event) => {
+				if (event.type === "session_start") {
+					const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+					if (ccSessionId) {
+						config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
+					}
+				}
+				if (event.type === "session_end") {
+					accumulateSessionCost(config, sessionId, event)
+				}
+			})
+
+			bridge.onComplete(async (success) => {
+				config.sessions.update(sessionId, {
+					status: success ? "complete" : "error",
+				})
+			})
+
+			console.log(`[iterate] Recreated CC bridge for session ${sessionId} after restart`)
+		}
+
 		// Write user prompt to the stream
-		const bridge = getOrCreateBridge(config, sessionId)
 		await bridge.emit({ type: "user_prompt", message: body.request, ts: ts() })
 
 		config.sessions.update(sessionId, { status: "running" })
@@ -1966,8 +2021,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		if (isResponse(body)) return body
 
 		// In prod mode, use server-side API key; ignore user-provided credentials
-		const apiKey = config.devMode ? body.apiKey : process.env.ANTHROPIC_API_KEY
-		const oauthToken = config.devMode ? body.oauthToken : undefined
+		const apiKey = config.devMode
+			? body.apiKey || process.env.ANTHROPIC_API_KEY
+			: process.env.ANTHROPIC_API_KEY
+		const oauthToken = config.devMode
+			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
+			: undefined
 		const ghToken = config.devMode ? body.ghToken : undefined
 
 		// Rate-limit session creation in production mode
@@ -2081,15 +2140,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Record all sessions
 		for (const s of sessions) {
 			const projectName =
-				s.role === "coder"
-					? config.devMode
-						? body.name ||
-							body.description
-								.slice(0, 40)
-								.replace(/[^a-z0-9]+/gi, "-")
-								.replace(/^-|-$/g, "")
-								.toLowerCase()
-						: `electric-${s.sessionId.slice(0, 8)}`
+				s.role === "coder" && config.devMode
+					? body.name ||
+						body.description
+							.slice(0, 40)
+							.replace(/[^a-z0-9]+/gi, "-")
+							.replace(/^-|-$/g, "")
+							.toLowerCase()
 					: `room-${s.name}-${s.sessionId.slice(0, 8)}`
 			const sandboxProjectDir = `/home/agent/workspace/${projectName}`
 			const session: SessionInfo = {
@@ -2133,7 +2190,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			// 1. Wait for infra config gate on coder's session
 			await router.sendMessage(
 				"system",
-				`Waiting for infrastructure configuration — please open ${coderSession.name}'s session and confirm the setup.`,
+				`Waiting for setup — open ${coderSession.name}'s session to confirm infrastructure.`,
 			)
 			console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
 			let infra: InfraConfig
@@ -2197,7 +2254,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			// 2. Create sandboxes in parallel
 			// Coder gets full scaffold, reviewer/ui-designer get minimal
-			await router.sendMessage("system", "Creating sandboxes for all agents...")
+			await router.sendMessage("system", "Creating sandboxes")
 			await coderBridge.emit({
 				type: "log",
 				level: "build",
@@ -2206,7 +2263,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			})
 
 			const sandboxOpts = (sid: string) => ({
-				...(!config.devMode && {
+				...((!config.devMode || GITHUB_APP_ID) && {
 					prodMode: {
 						sessionToken: deriveSessionToken(config.streamConfig.secret, sid),
 						studioUrl: resolveStudioUrl(config.port),
@@ -2311,10 +2368,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					})
 				}
 
-				// GitHub repo creation (prod mode)
+				// GitHub repo creation (uses GitHub App when credentials are available)
 				let repoUrl: string | null = null
 				let prodGitConfig: { mode: "pre-created"; repoName: string; repoUrl: string } | undefined
-				if (!config.devMode && GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY) {
+				if (GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY) {
 					try {
 						const repoSlug = coderInfo.projectName
 
@@ -2439,12 +2496,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								cwd: handle.projectDir,
 								studioUrl: resolveStudioUrl(config.port),
 								hookToken: coderHookToken,
+								agentName: coderSession.name,
 							}
 						: {
 								prompt: coderPrompt,
 								cwd: handle.projectDir,
 								studioPort: config.port,
 								hookToken: coderHookToken,
+								agentName: coderSession.name,
 							}
 				const coderCcBridge = createClaudeCodeBridge(
 					config,
@@ -2476,13 +2535,32 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								console.error(`[room:create-app:${roomId}] handleAgentOutput error (coder):`, err)
 							})
 					}
+					// Notify room when coder is waiting for user input
+					if (event.type === "ask_user_question") {
+						config.sessions.update(coderSession.sessionId, { needsInput: true })
+						router
+							.sendMessage(
+								"system",
+								`${coderSession.name} needs input — open their session to respond.`,
+							)
+							.catch((err) => {
+								console.error(`[room:create-app:${roomId}] Failed to send gate notification:`, err)
+							})
+					}
+					if (event.type === "gate_resolved") {
+						config.sessions.update(coderSession.sessionId, { needsInput: false })
+						router
+							.sendMessage("system", `${coderSession.name} received input — resuming.`)
+							.catch(() => {})
+					}
 				})
 
-				// Coder failure handler: if coder ends without DONE, notify room
+				// Coder completion handler: notify room on success or failure
 				coderCcBridge.onComplete(async (success) => {
 					const updates: Partial<SessionInfo> = {
 						status: success ? "complete" : "error",
 					}
+					let repoInfo = ""
 					try {
 						const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
 						if (gs.initialized) {
@@ -2496,25 +2574,24 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								lastCommitMessage: gs.lastCommitMessage ?? null,
 								lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
 							}
+							if (existing?.git?.repoName) {
+								repoInfo = ` Repo: https://github.com/${existing.git.repoName}`
+							}
 						}
 					} catch {
 						// Sandbox may be stopped
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					if (!success) {
-						router
-							.handleAgentOutput(
-								coderSession.sessionId,
-								"@room Coder session ended unexpectedly. No DONE signal was sent.",
-							)
-							.catch((err) => {
-								console.error(
-									`[room:create-app:${roomId}] Failed to send coder failure message:`,
-									err,
-								)
-							})
-					}
+					const msg = success
+						? `@room DONE: App is ready.${repoInfo}`
+						: "@room Coder session ended unexpectedly."
+					router.handleAgentOutput(coderSession.sessionId, msg).catch((err) => {
+						console.error(
+							`[room:create-app:${roomId}] Failed to send coder completion message:`,
+							err,
+						)
+					})
 				})
 
 				await coderBridge.emit({
@@ -2529,7 +2606,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				// Add coder as room participant
 				const coderParticipant: RoomParticipant = {
 					sessionId: coderSession.sessionId,
-					name: "coder",
+					name: coderSession.name,
 					role: "coder",
 					bridge: coderCcBridge,
 				}
@@ -2640,6 +2717,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 					// Track events
 					ccBridge.onAgentEvent((event) => {
+						console.log(
+							`[room:create-app:${roomId}] ${agentSession.name} event: type=${event.type}${event.type === "assistant_message" && "text" in event ? ` text=${(event as EngineEvent & { text: string }).text.slice(0, 120)}` : ""}`,
+						)
 						if (event.type === "session_start") {
 							const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
 							if (ccSessionId) {
@@ -2652,17 +2732,36 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							accumulateSessionCost(config, agentSession.sessionId, event)
 						}
 						if (event.type === "assistant_message" && "text" in event) {
+							const text = (event as EngineEvent & { text: string }).text
+							console.log(
+								`[room:create-app:${roomId}] ${agentSession.name} assistant_message -> calling handleAgentOutput (sessionId=${agentSession.sessionId})`,
+							)
+							router.handleAgentOutput(agentSession.sessionId, text).catch((err) => {
+								console.error(
+									`[room:create-app:${roomId}] handleAgentOutput error (${agentSession.name}):`,
+									err,
+								)
+							})
+						}
+						if (event.type === "ask_user_question") {
+							config.sessions.update(agentSession.sessionId, { needsInput: true })
 							router
-								.handleAgentOutput(
-									agentSession.sessionId,
-									(event as EngineEvent & { text: string }).text,
+								.sendMessage(
+									"system",
+									`${agentSession.name} needs input — open their session to respond.`,
 								)
 								.catch((err) => {
 									console.error(
-										`[room:create-app:${roomId}] handleAgentOutput error (${agentSession.name}):`,
+										`[room:create-app:${roomId}] Failed to send gate notification (${agentSession.name}):`,
 										err,
 									)
 								})
+						}
+						if (event.type === "gate_resolved") {
+							config.sessions.update(agentSession.sessionId, { needsInput: false })
+							router
+								.sendMessage("system", `${agentSession.name} received input — resuming.`)
+								.catch(() => {})
 						}
 					})
 
@@ -2681,20 +2780,20 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 					await ccBridge.start()
 
-					// Add as room participant (gated — waits for room messages)
+					// Add as room participant (not gated — messages flow freely)
 					const participant: RoomParticipant = {
 						sessionId: agentSession.sessionId,
 						name: agentSession.name,
 						role: agentSession.role,
 						bridge: ccBridge,
 					}
-					await router.addParticipant(participant, true)
+					await router.addParticipant(participant, false)
 				}
 
 				console.log(`[room:create-app:${roomId}] All 3 agents started and added to room`)
 				await router.sendMessage(
 					"system",
-					`All agents are ready. ${coderSession.name} is building the app. ${reviewerSession.name} and ${uiDesignerSession.name} are waiting for completion.`,
+					`All agents ready — ${coderSession.name} is building, ${reviewerSession.name} and ${uiDesignerSession.name} waiting.`,
 				)
 			}
 		}
@@ -2791,18 +2890,38 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	app.get("/api/rooms/:id", (c) => {
 		const roomId = c.req.param("id")
 		const router = roomRouters.get(roomId)
-		if (!router) return c.json({ error: "Room not found" }, 404)
 
+		if (router) {
+			return c.json({
+				roomId,
+				state: router.state,
+				roundCount: router.roundCount,
+				participants: router.participants.map((p) => ({
+					sessionId: p.sessionId,
+					name: p.name,
+					role: p.role,
+					running: p.bridge.isRunning(),
+					needsInput: config.sessions.get(p.sessionId)?.needsInput ?? false,
+				})),
+			})
+		}
+
+		// No active router — check if room exists in the registry (e.g. after server restart)
+		const roomEntry = config.rooms.getRoom(roomId)
+		if (!roomEntry) return c.json({ error: "Room not found" }, 404)
+
+		// Return basic room state without live participants
+		// Sessions are still readable via their individual SSE streams
 		return c.json({
 			roomId,
-			state: router.state,
-			roundCount: router.roundCount,
-			participants: router.participants.map((p) => ({
-				sessionId: p.sessionId,
-				name: p.name,
-				role: p.role,
-				running: p.bridge.isRunning(),
-			})),
+			state: "closed" as const,
+			roundCount: 0,
+			participants: [] as Array<{
+				sessionId: string
+				name: string
+				role?: string
+				running: boolean
+			}>,
 		})
 	})
 
@@ -2825,8 +2944,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				return c.json({ error: "Service at capacity, please try again later" }, 503)
 			}
 		}
-		const apiKey = config.devMode ? body.apiKey : process.env.ANTHROPIC_API_KEY
-		const oauthToken = config.devMode ? body.oauthToken : undefined
+		const apiKey = config.devMode
+			? body.apiKey || process.env.ANTHROPIC_API_KEY
+			: process.env.ANTHROPIC_API_KEY
+		const oauthToken = config.devMode
+			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
+			: undefined
 		const ghToken = config.devMode ? body.ghToken : undefined
 
 		const sessionId = crypto.randomUUID()
@@ -2887,7 +3010,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					apiKey,
 					oauthToken,
 					ghToken,
-					...(!config.devMode && {
+					...((!config.devMode || GITHUB_APP_ID) && {
 						prodMode: {
 							sessionToken: deriveSessionToken(config.streamConfig.secret, sessionId),
 							studioUrl: resolveStudioUrl(config.port),
@@ -3148,11 +3271,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		return c.json({ ok: true })
 	})
 
-	// SSE proxy for room events
+	// SSE proxy for room events (works even after server restart — reads from durable stream)
 	app.get("/api/rooms/:id/events", async (c) => {
 		const roomId = c.req.param("id")
-		const router = roomRouters.get(roomId)
-		if (!router) return c.json({ error: "Room not found" }, 404)
+		// Verify room exists in registry or has active router
+		if (!roomRouters.has(roomId) && !config.rooms.getRoom(roomId)) {
+			return c.json({ error: "Room not found" }, 404)
+		}
 
 		const connection = roomStream(config, roomId)
 		const lastEventId = c.req.header("Last-Event-ID") || c.req.query("offset") || "-1"
@@ -3782,15 +3907,39 @@ export async function startWebServer(opts: {
 	if (devMode) {
 		console.log("[studio] Dev mode enabled — keychain endpoint active")
 	}
+	// Hydrate session registry from durable stream (survives restarts)
+	const registry = await Registry.create(opts.streamConfig)
+
 	const config: ServerConfig = {
 		port: opts.port ?? 4400,
 		dataDir: opts.dataDir ?? path.resolve(process.cwd(), ".electric-agent"),
-		sessions: new ActiveSessions(),
+		sessions: ActiveSessions.fromRegistry(registry),
 		rooms: opts.rooms,
 		sandbox: opts.sandbox,
 		streamConfig: opts.streamConfig,
 		bridgeMode: opts.bridgeMode ?? "claude-code",
 		devMode,
+	}
+
+	// Reconnect to surviving sandbox containers (Docker only)
+	if (config.sandbox.runtime === "docker") {
+		const dockerProvider = config.sandbox as DockerSandboxProviderType
+		const allSessions = registry.listSessions()
+		dockerProvider.reconnect(allSessions)
+
+		// Mark sessions with live containers as "complete" (not stale),
+		// and sessions without containers as "error"
+		for (const session of allSessions) {
+			if (session.status === "running") {
+				const handle = dockerProvider.get(session.id)
+				config.sessions.update(session.id, {
+					status: handle ? "complete" : "error",
+				})
+			}
+		}
+	} else {
+		// Non-Docker: mark all running sessions as stale
+		registry.cleanupStaleSessions(0)
 	}
 
 	fs.mkdirSync(config.dataDir, { recursive: true })

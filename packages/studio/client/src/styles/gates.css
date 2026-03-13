@@ -61,7 +61,7 @@
 	border: 1px solid var(--border);
 	border-radius: 8px;
 	color: var(--text);
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	transition:
 		border-color 0.15s,
@@ -122,7 +122,7 @@
 	border: 1px solid var(--border);
 	background: var(--bg);
 	color: var(--text-muted);
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	cursor: pointer;
 	transition:
@@ -174,7 +174,7 @@
 	border: 1px solid var(--border);
 	border-radius: 8px;
 	background: var(--bg-surface);
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 }
 
@@ -200,7 +200,7 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	color: var(--text);
 	cursor: pointer;
@@ -276,7 +276,7 @@
 }
 
 .gate-option-title {
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	font-weight: 600;
 	color: var(--text);
@@ -298,7 +298,7 @@
 	align-items: center;
 	gap: 0;
 	padding: 3px 0;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	line-height: 1.6;
 }
@@ -331,7 +331,7 @@
 	border-radius: 6px;
 	padding: 8px 10px;
 	margin: 6px 0;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 12px;
 	line-height: 1.6;
 	word-break: break-all;
@@ -345,7 +345,7 @@
 
 /* Free-form answer display (resolved state) */
 .gate-answer-summary {
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	color: var(--text-muted);
 	padding: 6px 10px;

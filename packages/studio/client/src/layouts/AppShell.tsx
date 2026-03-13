@@ -163,7 +163,6 @@ export function AppShell() {
 			return
 		}
 		setAuthSource(null)
-		setShowSettings(true)
 	}, [])
 
 	useEffect(() => {

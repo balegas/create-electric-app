@@ -422,9 +422,10 @@ function AskUserQuestionGate({
 	resolvedSummary?: string
 }) {
 	// Normalize: use full questions array if present, else build single-item array
-	const questions: NormalizedQuestion[] = event.questions?.length
-		? event.questions
-		: [{ question: event.question, options: event.options }]
+	const questions: NormalizedQuestion[] =
+		Array.isArray(event.questions) && event.questions.length
+			? event.questions
+			: [{ question: event.question, options: event.options }]
 
 	const hasMultipleQuestions = questions.length > 1
 	const hasAnyMultiSelect = questions.some((q) => q.multiSelect)

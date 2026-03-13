@@ -105,6 +105,7 @@ export interface SessionInfo {
 	createdAt: string
 	lastActiveAt: string
 	status: "running" | "complete" | "error" | "cancelled"
+	needsInput?: boolean
 	appPort?: number
 	previewUrl?: string
 	totalCostUsd?: number
@@ -278,7 +279,13 @@ export interface RoomState {
 	roomId: string
 	state: "active" | "closed"
 	roundCount: number
-	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
+	participants: Array<{
+		sessionId: string
+		name: string
+		role?: string
+		running?: boolean
+		needsInput?: boolean
+	}>
 }
 
 export async function createAgentRoom(name: string, maxRounds?: number) {

@@ -218,7 +218,7 @@
 
 .session-header-cost {
 	font-size: 11px;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	color: var(--text-muted);
 	flex-shrink: 0;
 	padding: 2px 6px;
@@ -233,7 +233,7 @@
 
 .session-header-action {
 	font-size: 12px;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	cursor: pointer;
 	color: var(--text-muted);
 	background: transparent;
@@ -336,7 +336,7 @@
 	margin: 0 auto;
 	padding: 6px 16px;
 	font-size: 11px;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	color: var(--text);
 	background: var(--bg-surface);
 	border: 1px solid var(--border);
@@ -468,7 +468,7 @@
 
 /* Invite code pill */
 .invite-code-btn {
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 12px;
 	padding: 4px 10px;
 	border: 1px dashed var(--border);
@@ -513,7 +513,7 @@
 	border: 1px solid var(--border);
 	border-radius: 4px;
 	color: var(--text);
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 12px;
 }
 
@@ -532,7 +532,7 @@
 	border-radius: 4px;
 	background: var(--bg-surface);
 	color: var(--text-muted);
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 12px;
 	cursor: pointer;
 	flex-shrink: 0;
@@ -591,12 +591,6 @@
 	gap: 8px;
 }
 
-.room-provisioning-detail {
-	font-size: 13px;
-	color: var(--text-subtle);
-	opacity: 0.7;
-}
-
 .room-header-participants {
 	display: flex;
 	align-items: center;
@@ -611,8 +605,8 @@
 	height: 30px;
 	border-radius: 50%;
 	font-size: 11px;
-	font-weight: 600;
-	font-family: var(--font-mono);
+	font-weight: 400;
+	font-family: var(--font-sans);
 	margin-left: -4px;
 	border: 2px solid var(--bg);
 	cursor: pointer;
@@ -632,25 +626,22 @@
 .room-event-list {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 2px;
 }
 
 .room-event {
 	font-size: 13px;
+	/* Use same font as sessions — swap comment to switch */
+	font-family: var(--font-sans);
+	/* font-family: var(--font-sans); */
 }
 
 .room-message {
-	padding: 10px 14px;
-	background: var(--bg-surface);
-	border: 1px solid var(--border);
-	border-radius: 8px;
-}
-
-.room-message-header {
 	display: flex;
-	align-items: center;
-	gap: 8px;
-	margin-bottom: 6px;
+	align-items: baseline;
+	gap: 6px;
+	padding: 4px 0;
+	flex-wrap: wrap;
 }
 
 .room-message-from {
@@ -673,28 +664,45 @@
 	text-decoration: underline;
 }
 
+.room-inline-link {
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	color: var(--brand-1);
+	cursor: pointer;
+	text-decoration: underline;
+	text-decoration-style: dotted;
+	display: inline;
+}
+
+.room-inline-link:hover {
+	text-decoration-style: solid;
+}
+
 .room-message-to {
 	color: var(--text-subtle);
 	font-size: 12px;
 }
 
 .room-message-time {
-	margin-left: auto;
 	color: var(--text-subtle);
 	font-size: 11px;
+	white-space: nowrap;
 }
 
 .room-message-body {
-	white-space: pre-wrap;
 	word-break: break-word;
 	line-height: 1.5;
+	flex: 1;
+	min-width: 0;
 }
 
 .room-system-event {
 	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 4px 14px;
+	align-items: baseline;
+	gap: 6px;
+	padding: 2px 0;
 	color: var(--text-subtle);
 	font-size: 12px;
 	font-style: italic;
@@ -761,7 +769,7 @@
 	color: var(--text);
 	padding: 6px 10px;
 	font-size: 13px;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	min-width: 160px;
 }
 
@@ -819,7 +827,7 @@
 	font-size: 12px;
 	color: var(--text);
 	cursor: pointer;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 }
 
 .room-dm-target:hover {
@@ -849,7 +857,7 @@
 	color: var(--text);
 	padding: 8px 12px;
 	font-size: 13px;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	resize: none;
 }
 
@@ -872,7 +880,7 @@
 	color: var(--text);
 	padding: 8px 12px;
 	font-size: 13px;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 }
 
 .room-form-label select {

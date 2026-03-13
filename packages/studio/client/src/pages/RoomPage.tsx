@@ -106,10 +106,11 @@ export function RoomPage() {
 						loadedRef.current = true
 						setRoomState(state)
 						setError(null)
-						// Sync participant running status to localStorage so sidebar reflects it
+						// Sync participant status to localStorage so sidebar reflects it
 						for (const p of state.participants) {
 							updateSession(p.sessionId, {
 								status: p.running ? "running" : "complete",
+								needsInput: p.needsInput,
 							})
 						}
 						refreshSessions()
@@ -349,17 +350,66 @@ function ParticipantLink({
 	)
 }
 
+function escapeRegExp(str: string) {
+	return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+function RoomMessageBody({
+	body,
+	participants,
+}: {
+	body: string
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
+}) {
+	const navigate = useNavigate()
+	const nameMap = new Map(participants.map((p) => [p.name, p.sessionId]))
+
+	if (nameMap.size === 0) return <>{body}</>
+
+	const namePattern = [...nameMap.keys()].map(escapeRegExp).join("|")
+	const regex = new RegExp(`(${namePattern})`, "g")
+	const parts = body.split(regex)
+
+	return (
+		<>
+			{parts.map((part, i) => {
+				const sessionId = nameMap.get(part)
+				if (sessionId) {
+					return (
+						<button
+							key={`${part}-${i}`}
+							type="button"
+							className="room-inline-link"
+							onClick={() => navigate(`/session/${sessionId}`)}
+							title={`Go to ${part}'s session`}
+						>
+							{part}
+						</button>
+					)
+				}
+				return <span key={`text-${i}`}>{part}</span>
+			})}
+		</>
+	)
+}
+
 function RoomEventList({
 	events,
 	participants,
 	provisioning,
 }: {
 	events: RoomEvent[]
-	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
+	participants: Array<{
+		sessionId: string
+		name: string
+		role?: string
+		running?: boolean
+		needsInput?: boolean
+	}>
 	provisioning?: boolean
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
-	const workingAgents = participants.filter((p) => p.running)
+	const workingAgents = participants.filter((p) => p.running && !p.needsInput)
 
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -369,21 +419,16 @@ function RoomEventList({
 		return (
 			<div className="room-empty">
 				{provisioning ? (
-					<>
-						<div className="room-working-indicator">
-							<span className="room-working-dots">
-								<span />
-								<span />
-								<span />
-							</span>
-							<span className="room-working-text">Setting up agents...</span>
-						</div>
-						<p className="room-provisioning-detail">
-							Creating sandboxes and configuring coder, reviewer, and UI designer agents.
-						</p>
-					</>
+					<div className="room-working-indicator">
+						<span className="room-working-dots">
+							<span />
+							<span />
+							<span />
+						</span>
+						<span className="room-working-text">Setting up agents</span>
+					</div>
 				) : (
-					<p>No messages yet. Add agents to start the conversation.</p>
+					<p>No messages yet.</p>
 				)}
 			</div>
 		)
@@ -397,14 +442,12 @@ function RoomEventList({
 					case "agent_message":
 						return (
 							<div key={key} className="room-event room-message">
-								<div className="room-message-header">
-									<ParticipantLink name={event.from} participants={participants} />
-									{event.to && <span className="room-message-to">&rarr; {event.to}</span>}
-									<span className="room-message-time">
-										{new Date(event.ts).toLocaleTimeString()}
-									</span>
-								</div>
-								<div className="room-message-body">{event.body}</div>
+								<ParticipantLink name={event.from} participants={participants} />
+								{event.to && <span className="room-message-to">&rarr; {event.to}</span>}
+								<span className="room-message-body">
+									<RoomMessageBody body={event.body} participants={participants} />
+								</span>
+								<span className="room-message-time">{new Date(event.ts).toLocaleTimeString()}</span>
 							</div>
 						)
 					case "participant_joined":

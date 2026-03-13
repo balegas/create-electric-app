@@ -167,17 +167,38 @@ export class RoomRouter {
 	 * Parses for @room messages and handles gating/delivery.
 	 */
 	async handleAgentOutput(sessionId: string, text: string): Promise<void> {
-		if (this._state === "closed") return
+		if (this._state === "closed") {
+			console.log(`[room-router:${this.roomId}] handleAgentOutput: room closed, ignoring`)
+			return
+		}
 
 		const participant = this._participants.get(sessionId)
-		if (!participant) return
+		if (!participant) {
+			console.log(
+				`[room-router:${this.roomId}] handleAgentOutput: no participant for sessionId=${sessionId}, known participants: ${[...this._participants.keys()].join(", ")}`,
+			)
+			return
+		}
 
 		const knownNames = [...this._participants.values()]
 			.filter((p) => p.sessionId !== sessionId)
 			.map((p) => p.name)
 
+		console.log(
+			`[room-router:${this.roomId}] handleAgentOutput: participant=${participant.name} gated=${participant.gated} knownNames=${knownNames.join(",")} text=${text.slice(0, 120)}`,
+		)
+
 		const parsed = parseRoomMessage(text, participant.name, knownNames)
-		if (!parsed) return // Agent chose silence
+		if (!parsed) {
+			console.log(
+				`[room-router:${this.roomId}] handleAgentOutput: no @room/@name found in text from ${participant.name}`,
+			)
+			return // Agent chose silence
+		}
+
+		console.log(
+			`[room-router:${this.roomId}] handleAgentOutput: parsed @room message from ${participant.name}: to=${parsed.to ?? "broadcast"} isDone=${parsed.isDone} body=${parsed.body.slice(0, 80)}`,
+		)
 
 		let finalBody = parsed.body
 		const isGateRequest = parsed.isGateRequest
@@ -276,6 +297,9 @@ export class RoomRouter {
 	 */
 	private async deliverMessage(msg: { from: string; to?: string; body: string }): Promise<void> {
 		if (this._state === "closed") return
+
+		// System messages are for the room UI only — don't deliver to agents
+		if (msg.from === "system") return
 
 		const deliverTo: InternalParticipant[] = []
 
@@ -402,7 +426,11 @@ export class RoomRouter {
 
 		if (self.role) {
 			lines.push(`Your role: ${self.role}`)
-			lines.push(`Read .claude/skills/role/SKILL.md for your role-specific guidelines.`)
+			// Coder already has its own skill at .claude/skills/create-app/SKILL.md
+			// Only non-coder roles get a role skill injected at .claude/skills/role/
+			if (self.role !== "coder") {
+				lines.push(`Read .claude/skills/role/SKILL.md for your role-specific guidelines.`)
+			}
 		}
 
 		lines.push("")
@@ -433,7 +461,7 @@ export class RoomRouter {
 			"If you have nothing to say, finish without @room — your turn ends silently.",
 			"To request human input: @room GATE: <question>",
 			"",
-			"IMPORTANT: You just joined this room — greet the other participants with a brief @room message introducing yourself.",
+			"Do NOT greet or introduce yourself. Wait silently until you have actionable work to do or a substantive message to share.",
 		)
 
 		return lines.join("\n")

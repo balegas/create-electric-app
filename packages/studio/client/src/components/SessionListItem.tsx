@@ -85,7 +85,9 @@ export function DeleteModal({
 export function SessionListItem({ session, active, onClick, onDelete }: SessionListItemProps) {
 	const [showDeleteModal, setShowDeleteModal] = useState(false)
 
-	const statusRingClass = `session-avatar-${session.status}`
+	const statusRingClass = session.needsInput
+		? "session-avatar-needs-input"
+		: `session-avatar-${session.status}`
 	const avatarClass = `session-avatar ${statusRingClass}`
 	const color = getAvatarColor(session.id)
 	const avatarStyle = { background: color.bg, color: color.fg }

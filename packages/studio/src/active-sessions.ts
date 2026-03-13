@@ -1,18 +1,40 @@
+import type { Registry } from "./registry.js"
 import type { SessionInfo } from "./sessions.js"
 
 /**
- * Lightweight in-memory session store for the current server lifetime.
+ * In-memory session store with optional durable backing via Registry.
  *
- * Sessions are private to each user (stored in their browser's localStorage).
- * The server only tracks active sessions for sandbox/bridge management.
- * This store is NOT persisted — it resets on server restart.
+ * When a Registry is provided, mutations are persisted to the durable stream
+ * (fire-and-forget — the in-memory state is the source of truth for reads).
+ * On startup, call `ActiveSessions.create(registry)` to hydrate from the stream.
  */
 export class ActiveSessions {
 	private sessions = new Map<string, SessionInfo>()
 	private transcriptToSession = new Map<string, string>()
+	private registry: Registry | null = null
+
+	/**
+	 * Create an ActiveSessions store backed by a Registry.
+	 * Seeds in-memory state from the registry's persisted sessions.
+	 */
+	static fromRegistry(registry: Registry): ActiveSessions {
+		const store = new ActiveSessions()
+		store.registry = registry
+
+		// Seed from persisted sessions
+		for (const session of registry.listSessions()) {
+			store.sessions.set(session.id, session)
+		}
+
+		console.log(`[active-sessions] Seeded ${store.sessions.size} session(s) from registry`)
+		return store
+	}
 
 	add(session: SessionInfo): void {
 		this.sessions.set(session.id, session)
+		this.registry?.addSession(session).catch((err) => {
+			console.error(`[active-sessions] Failed to persist add:`, err)
+		})
 	}
 
 	get(id: string): SessionInfo | undefined {
@@ -25,11 +47,20 @@ export class ActiveSessions {
 			Object.assign(session, update, {
 				lastActiveAt: new Date().toISOString(),
 			})
+			this.registry?.updateSession(id, update).catch((err) => {
+				console.error(`[active-sessions] Failed to persist update:`, err)
+			})
 		}
 	}
 
 	delete(id: string): boolean {
-		return this.sessions.delete(id)
+		const deleted = this.sessions.delete(id)
+		if (deleted) {
+			this.registry?.deleteSession(id).catch((err) => {
+				console.error(`[active-sessions] Failed to persist delete:`, err)
+			})
+		}
+		return deleted
 	}
 
 	/** Check if a session exists in the active store. */
@@ -59,5 +90,8 @@ export class ActiveSessions {
 	 */
 	mapTranscript(transcriptPath: string, sessionId: string): void {
 		this.transcriptToSession.set(transcriptPath, sessionId)
+		this.registry?.mapTranscriptToSession(transcriptPath, sessionId).catch((err) => {
+			console.error(`[active-sessions] Failed to persist transcript mapping:`, err)
+		})
 	}
 }

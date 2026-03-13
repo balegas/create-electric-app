@@ -4,7 +4,7 @@
 	align-items: baseline;
 	gap: 0;
 	padding: 3px 0;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	line-height: 1.6;
 }
@@ -51,7 +51,7 @@
 /* Duration badge */
 .duration {
 	margin-left: auto;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 11px;
 	color: var(--text-subtle);
 	white-space: nowrap;
@@ -76,7 +76,7 @@
 	gap: 6px;
 	padding: 3px 0;
 	cursor: pointer;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	color: var(--text-subtle);
 	list-style: none;
@@ -118,7 +118,7 @@
 
 .tool-inline-command {
 	color: var(--text-muted);
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -148,7 +148,7 @@
 }
 
 .tool-inline-body pre {
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 12px;
 	line-height: 1.5;
 	color: var(--text-muted);
@@ -183,7 +183,7 @@
 	gap: 6px;
 	padding: 3px 0;
 	cursor: pointer;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	color: var(--text-subtle);
 	list-style: none;
@@ -226,7 +226,7 @@
 }
 
 .thinking-body pre {
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 12px;
 	line-height: 1.5;
 	color: var(--text-muted);
@@ -269,7 +269,7 @@
 	gap: 6px;
 	padding: 3px 0;
 	cursor: pointer;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	color: var(--text-muted);
 	line-height: 1.6;
@@ -326,7 +326,7 @@
 	align-items: center;
 	gap: 8px;
 	padding: 3px 0;
-	font-family: var(--font-mono);
+	font-family: var(--font-sans);
 	font-size: 13px;
 	line-height: 1.6;
 	color: var(--text-muted);

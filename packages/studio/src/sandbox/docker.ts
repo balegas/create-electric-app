@@ -209,6 +209,82 @@ export class DockerSandboxProvider implements SandboxProvider {
 		return state
 	}
 
+	/**
+	 * Discover running sandbox containers and rebuild in-memory state.
+	 * Called on server startup to reconnect to containers that survived a restart.
+	 */
+	reconnect(sessions: Array<{ id: string; projectName: string; sandboxProjectDir: string }>): void {
+		try {
+			// List running agent containers with their compose metadata
+			const output = execSync(
+				`docker ps --filter "ancestor=${SANDBOX_IMAGE}" --format '{{.ID}}\\t{{.Labels}}'`,
+				{ encoding: "utf-8", timeout: 10_000, stdio: ["ignore", "pipe", "ignore"] },
+			).trim()
+
+			if (!output) return
+
+			for (const line of output.split("\n")) {
+				const [, labels] = line.split("\t")
+				if (!labels) continue
+
+				// Extract compose project name, config path, and port
+				const projectMatch = labels.match(/com\.docker\.compose\.project=([^,]+)/)
+				const configMatch = labels.match(/com\.docker\.compose\.project\.config_files=([^,]+)/)
+				if (!projectMatch || !configMatch) continue
+
+				const composeProject = projectMatch[1]
+				const composePath = configMatch[1]
+				const composeDir = path.dirname(composePath)
+
+				// Extract host port from docker inspect
+				let port = 0
+				try {
+					const portOutput = execSync(
+						`docker compose -p ${composeProject} -f ${composePath} port agent 5173`,
+						{ encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] },
+					).trim()
+					const portMatch = portOutput.match(/:(\d+)$/)
+					if (portMatch) port = Number.parseInt(portMatch[1], 10)
+				} catch {
+					continue // Can't determine port, skip
+				}
+
+				// Match to a session by compose project slug
+				// Project name is ea-<slug>, where slug comes from projectName or sessionId prefix
+				const slug = composeProject.replace(/^ea-/, "")
+				const session = sessions.find((s) => {
+					const sessionSlug = (s.projectName || s.id.slice(0, 8))
+						.replace(/[^a-z0-9-]/gi, "-")
+						.toLowerCase()
+					return sessionSlug === slug
+				})
+
+				if (!session) continue
+				if (this.activeContainers.has(session.id)) continue // Already tracked
+
+				const handle: SandboxHandle = {
+					sessionId: session.id,
+					runtime: "docker",
+					port,
+					projectDir:
+						session.sandboxProjectDir ||
+						`/home/agent/workspace/${session.projectName || session.id.slice(0, 8)}`,
+				}
+
+				this.activeContainers.set(session.id, handle)
+				this.internalState.set(session.id, { composeDir, composeProject })
+
+				console.log(
+					`[docker] Reconnected container: session=${session.id} project=${composeProject} port=${port}`,
+				)
+			}
+
+			console.log(`[docker] Reconnected ${this.activeContainers.size} container(s)`)
+		} catch (err) {
+			console.error(`[docker] Failed to reconnect containers:`, err)
+		}
+	}
+
 	async create(sessionId: string, opts?: CreateSandboxOpts): Promise<SandboxHandle> {
 		const port = await findFreePort()
 		const slug = (opts?.projectName || sessionId.slice(0, 8))
