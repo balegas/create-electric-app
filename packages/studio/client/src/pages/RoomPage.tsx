@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { getAvatarColor } from "../components/SessionListItem"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
 import { useAppContext } from "../layouts/AppShell"
-import { getAgentRooms } from "../lib/agent-room-store"
+import { addAgentRoom, getAgentRooms } from "../lib/agent-room-store"
 import {
 	addAgentToRoom,
 	addSessionToRoom,
 	closeAgentRoom,
+	createAppRoom,
 	getAgentRoomState,
 	type RoomState,
 	sendRoomMessage,
@@ -22,13 +23,66 @@ interface OutletCtx {
 export function RoomPage() {
 	const { id: roomId } = useParams<{ id: string }>()
 	const navigate = useNavigate()
+	const location = useLocation()
 	const { openMobileDrawer } = useOutletContext<OutletCtx>()
-	const { refreshSessions } = useAppContext()
+	const { refreshSessions, refreshAgentRooms } = useAppContext()
 	const [roomState, setRoomState] = useState<RoomState | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [showAddAgent, setShowAddAgent] = useState(false)
 	const [sending, setSending] = useState(false)
 	const loadedRef = useRef(false)
+
+	// Handle /room/new — create a multi-agent app room
+	useEffect(() => {
+		if (roomId !== "new") return
+		const state = location.state as { description?: string } | null
+		const description = state?.description
+		if (!description) {
+			navigate("/", { replace: true })
+			return
+		}
+
+		let cancelled = false
+		createAppRoom(description)
+			.then((result) => {
+				if (cancelled) return
+				// Store room in localStorage for sidebar
+				addAgentRoom({
+					id: result.roomId,
+					code: result.code,
+					name: result.name,
+					createdAt: new Date().toISOString(),
+					sessions: {
+						coder: result.sessions.find((s) => s.role === "coder")?.sessionId ?? "",
+						reviewer: result.sessions.find((s) => s.role === "reviewer")?.sessionId ?? "",
+						uiDesigner: result.sessions.find((s) => s.role === "ui-designer")?.sessionId ?? "",
+					},
+				})
+				// Store each agent session in localStorage for sidebar display
+				for (const s of result.sessions) {
+					addSession({
+						id: s.sessionId,
+						projectName: s.name,
+						sandboxProjectDir: "",
+						description: `Room agent: ${s.name} (${s.role})`,
+						createdAt: new Date().toISOString(),
+						lastActiveAt: new Date().toISOString(),
+						status: "running",
+					})
+				}
+				refreshSessions()
+				refreshAgentRooms()
+				navigate(`/room/${result.roomId}`, { replace: true })
+			})
+			.catch((err) => {
+				if (cancelled) return
+				setError(err instanceof Error ? err.message : "Failed to create room")
+			})
+
+		return () => {
+			cancelled = true
+		}
+	}, [roomId, location.state, navigate, refreshSessions, refreshAgentRooms])
 
 	const { events, isClosed } = useRoomEvents(roomId ?? null)
 
@@ -471,6 +525,7 @@ function RoomInput({
 const BUILT_IN_ROLES = [
 	{ value: "coder", label: "Coder", description: "Writes code, creates PRs" },
 	{ value: "reviewer", label: "Reviewer", description: "Reviews PRs (read-only)" },
+	{ value: "ui-designer", label: "UI Designer", description: "Audits and improves UI" },
 ] as const
 
 function AddAgentModal({
