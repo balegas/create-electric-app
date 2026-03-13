@@ -24,6 +24,9 @@ const ROLE_ALIASES: Record<string, string> = {
 	reviewer: "reviewer",
 	"code reviewer": "reviewer",
 	"pr reviewer": "reviewer",
+	"ui-designer": "ui-designer",
+	"ui designer": "ui-designer",
+	"frontend designer": "ui-designer",
 }
 
 // ---------------------------------------------------------------------------
@@ -64,9 +67,15 @@ const REVIEWER_TOOLS = [
 	"Skill",
 ]
 
+/**
+ * UI Designer gets full write access — needs Write/Edit/Bash to modify code and run dev server.
+ */
+const UI_DESIGNER_TOOLS = [...ALL_TOOLS]
+
 const ROLE_TOOLS: Record<string, string[]> = {
 	coder: CODER_TOOLS,
 	reviewer: REVIEWER_TOOLS,
+	"ui-designer": UI_DESIGNER_TOOLS,
 }
 
 // ---------------------------------------------------------------------------
