@@ -175,6 +175,11 @@ API routes use `createFileRoute` + `server.handlers` (NOT `createAPIFileRoute`).
 **Before writing UI code**, read the ui-design skill:
 - `.claude/skills/ui-design/SKILL.md` — design system, Radix UI Themes component patterns
 
+The `__root.tsx` Theme wrapper MUST use the Electric brand defaults:
+```tsx
+<Theme accentColor="violet" grayColor="mauve" radius="medium" panelBackground="translucent">
+```
+
 Also read the `react-db` and `meta-framework` skills for hook usage and SSR patterns.
 
 Key constraints:
@@ -215,11 +220,6 @@ pnpm dev:start
 After the app is running, write:
 1. `README.md` — overwrite the scaffold README with a project-specific one: app name, one-line description, screenshot placeholder, how to run (`pnpm install && pnpm dev:start`), tech stack (Electric SQL, TanStack DB, Drizzle, TanStack Start), and a brief feature list.
 2. `ARCHITECTURE.md` — brief reference: entities, routes, components.
-
-Then invoke the UI design skill for interactive refinement:
-```
-/ui-design
-```
 
 ---
 
