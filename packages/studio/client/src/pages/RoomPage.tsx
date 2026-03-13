@@ -46,6 +46,11 @@ export function RoomPage() {
 		createAppRoom(description)
 			.then((result) => {
 				if (cancelled) return
+				const findSession = (role: string) => {
+					const s = result.sessions?.find((s) => s.role === role)
+					if (!s) throw new Error(`Server did not return expected role: ${role}`)
+					return s.sessionId
+				}
 				// Store room in localStorage for sidebar
 				addAgentRoom({
 					id: result.roomId,
@@ -53,9 +58,9 @@ export function RoomPage() {
 					name: result.name,
 					createdAt: new Date().toISOString(),
 					sessions: {
-						coder: result.sessions.find((s) => s.role === "coder")?.sessionId ?? "",
-						reviewer: result.sessions.find((s) => s.role === "reviewer")?.sessionId ?? "",
-						uiDesigner: result.sessions.find((s) => s.role === "ui-designer")?.sessionId ?? "",
+						coder: findSession("coder"),
+						reviewer: findSession("reviewer"),
+						uiDesigner: findSession("ui-designer"),
 					},
 				})
 				// Store each agent session in localStorage for sidebar display
