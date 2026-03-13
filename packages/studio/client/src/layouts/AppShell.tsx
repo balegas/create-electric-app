@@ -181,8 +181,13 @@ export function AppShell() {
 			// Show a faded placeholder avatar while the session is being created
 			const words = description.split(/\s+/).slice(0, 3).join(" ")
 			setPendingProject({ name: words || "New project" })
-			// Navigate immediately — SessionPage will create the session
-			navigate("/session/new", { state: { description, freeform } })
+			if (freeform) {
+				// Freeform sessions stay as single sessions
+				navigate("/session/new", { state: { description, freeform: true } })
+			} else {
+				// App creation goes through the multi-agent room workflow
+				navigate("/room/new", { state: { description } })
+			}
 		},
 		[navigate],
 	)
