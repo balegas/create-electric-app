@@ -84,14 +84,14 @@ export function RoomPage() {
 		}
 	}, [roomId, location.state, navigate, refreshSessions, refreshAgentRooms])
 
-	const { events, isClosed } = useRoomEvents(roomId ?? null)
+	const { events, isClosed } = useRoomEvents(roomId && roomId !== "new" ? roomId : null)
 
 	// Look up invite code from the local room store
 	const roomEntry = roomId ? getAgentRooms().find((r) => r.id === roomId) : undefined
 
 	// Fetch room state on mount + periodically
 	useEffect(() => {
-		if (!roomId) return
+		if (!roomId || roomId === "new") return
 		let cancelled = false
 		loadedRef.current = false
 		const fetchState = () => {
