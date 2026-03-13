@@ -5,6 +5,12 @@ export interface AgentRoomEntry {
 	code: string
 	name: string
 	createdAt: string
+	/** Session IDs for create-app rooms */
+	sessions?: {
+		coder: string
+		reviewer: string
+		uiDesigner: string
+	}
 }
 
 export function getAgentRooms(): AgentRoomEntry[] {
