@@ -1,5 +1,15 @@
 # @electric-agent/agent
 
+## 1.4.2
+
+### Patch Changes
+
+- 9cbc6f8: Add hosted production mode with server-side Claude API key, rate limiting (global session cap, per-IP limits, per-session cost budget), GitHub App integration for automatic repo creation under electric-apps org, git credential helper for transparent token management in sandboxes, and random slug naming for prod repos. Dev mode retains full credential UI and no rate limits. Agent template updated with README writing step in create-app skill.
+- Updated dependencies [9cbc6f8]
+- Updated dependencies [5591cbd]
+- Updated dependencies [e17104c]
+  - @electric-agent/studio@1.13.0
+
 ## 1.4.1
 
 ### Patch Changes

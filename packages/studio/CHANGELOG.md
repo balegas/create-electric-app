@@ -1,5 +1,24 @@
 # @electric-agent/studio
 
+## 1.13.0
+
+### Minor Changes
+
+- 9cbc6f8: Add hosted production mode with server-side Claude API key, rate limiting (global session cap, per-IP limits, per-session cost budget), GitHub App integration for automatic repo creation under electric-apps org, git credential helper for transparent token management in sandboxes, and random slug naming for prod repos. Dev mode retains full credential UI and no rate limits. Agent template updated with README writing step in create-app skill.
+- 5591cbd: Add multi-agent room workflow for app creation. When a user submits an app description, the system creates a room with 3 agents (coder, reviewer, UI designer) that collaborate via room messaging. Includes new POST /api/rooms/create-app endpoint, client-side room creation flow, and UI designer role registration.
+- e17104c: Session persistence, bridge resurrection, and UI polish
+
+  - Persist sessions across server restarts via durable stream Registry
+  - Reconnect Docker containers on startup (match running containers to sessions)
+  - Recreate ClaudeCodeDockerBridge on iterate after restart (fixes agent not responding)
+  - Consistent room container naming: all agents use `room-{name}-{id}` prefix
+  - Add needsInput flag with orange avatar ring on sidebar when agent awaits user input
+  - Emit room messages on gate resolve ("received input — resuming")
+  - Fix GatePrompt crash (Array.isArray guard for questions)
+  - Fix "is working" indicator shown when agent is waiting for input
+  - Switch all fonts from monospace to sans-serif (OpenSauceOne)
+  - Remove bold fonts from avatars
+
 ## 1.12.1
 
 ### Patch Changes
