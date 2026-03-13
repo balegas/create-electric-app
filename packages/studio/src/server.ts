@@ -12,6 +12,7 @@ import { ActiveSessions } from "./active-sessions.js"
 import {
 	addAgentSchema,
 	addSessionToRoomSchema,
+	createAppRoomSchema,
 	createRoomSchema,
 	createSandboxSchema,
 	createSessionSchema,
@@ -1952,6 +1953,742 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			return c.json({ error: "Invalid or missing room token" }, 401)
 		}
 		return next()
+	})
+
+	// Create a room with 3 agents for multi-agent app creation
+	app.post("/api/rooms/create-app", async (c) => {
+		const body = await validateBody(c, createAppRoomSchema)
+		if (isResponse(body)) return body
+
+		// In prod mode, use server-side API key; ignore user-provided credentials
+		const apiKey = config.devMode ? body.apiKey : process.env.ANTHROPIC_API_KEY
+		const oauthToken = config.devMode ? body.oauthToken : undefined
+		const ghToken = config.devMode ? body.ghToken : undefined
+
+		// Rate-limit session creation in production mode
+		if (!config.devMode) {
+			const ip = extractClientIp(c)
+			if (!checkSessionRateLimit(ip)) {
+				return c.json({ error: "Too many sessions. Please try again later." }, 429)
+			}
+			if (checkGlobalSessionCap(config.sessions)) {
+				return c.json({ error: "Service at capacity, please try again later" }, 503)
+			}
+		}
+
+		const roomId = crypto.randomUUID()
+		const roomName = body.name || `app-${roomId.slice(0, 8)}`
+
+		// Create the room's durable stream
+		const roomConn = roomStream(config, roomId)
+		try {
+			await DurableStream.create({
+				url: roomConn.url,
+				headers: roomConn.headers,
+				contentType: "application/json",
+			})
+		} catch (err) {
+			console.error(`[room:create-app] Failed to create room stream:`, err)
+			return c.json({ error: "Failed to create room stream" }, 500)
+		}
+
+		// Create and start the router
+		const router = new RoomRouter(roomId, roomName, config.streamConfig)
+		await router.start()
+		roomRouters.set(roomId, router)
+
+		// Save to room registry
+		const code = generateInviteCode()
+		await config.rooms.addRoom({
+			id: roomId,
+			code,
+			name: roomName,
+			createdAt: new Date().toISOString(),
+			revoked: false,
+		})
+
+		// Define the 3 agents
+		const agentDefs = [
+			{ name: "coder", role: "coder" },
+			{ name: "reviewer", role: "reviewer" },
+			{ name: "ui-designer", role: "ui-designer" },
+		] as const
+
+		// Create session IDs and streams upfront for all 3 agents
+		const sessions: { name: string; role: string; sessionId: string; sessionToken: string }[] = []
+		for (const agentDef of agentDefs) {
+			const sessionId = crypto.randomUUID()
+			const conn = sessionStream(config, sessionId)
+			try {
+				await DurableStream.create({
+					url: conn.url,
+					headers: conn.headers,
+					contentType: "application/json",
+				})
+			} catch (err) {
+				console.error(`[room:create-app] Failed to create stream for ${agentDef.name}:`, err)
+				return c.json({ error: `Failed to create stream for ${agentDef.name}` }, 500)
+			}
+
+			const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
+			sessions.push({ name: agentDef.name, role: agentDef.role, sessionId, sessionToken })
+		}
+
+		const roomToken = deriveRoomToken(config.streamConfig.secret, roomId)
+		console.log(
+			`[room:create-app] Created room ${roomId} with agents: ${sessions.map((s) => s.name).join(", ")}`,
+		)
+
+		// Return immediately so the client can show the room + sessions
+		// The async flow handles sandbox creation, skill injection, and agent startup
+		// Sessions are created in agentDefs order: [coder, reviewer, ui-designer]
+		const coderSession = sessions[0]
+		const reviewerSession = sessions[1]
+		const uiDesignerSession = sessions[2]
+		const coderBridge = getOrCreateBridge(config, coderSession.sessionId)
+
+		// Record all sessions
+		for (const s of sessions) {
+			const projectName =
+				s.role === "coder"
+					? config.devMode
+						? body.name ||
+							body.description
+								.slice(0, 40)
+								.replace(/[^a-z0-9]+/gi, "-")
+								.replace(/^-|-$/g, "")
+								.toLowerCase()
+						: `electric-${s.sessionId.slice(0, 8)}`
+					: `room-${s.name}-${s.sessionId.slice(0, 8)}`
+			const sandboxProjectDir = `/home/agent/workspace/${projectName}`
+			const session: SessionInfo = {
+				id: s.sessionId,
+				projectName,
+				sandboxProjectDir,
+				description: s.role === "coder" ? body.description : `Room agent: ${s.name} (${s.role})`,
+				createdAt: new Date().toISOString(),
+				lastActiveAt: new Date().toISOString(),
+				status: "running",
+			}
+			config.sessions.add(session)
+		}
+
+		// Write user prompt to coder's stream
+		await coderBridge.emit({ type: "user_prompt", message: body.description, ts: ts() })
+
+		// Gather GitHub accounts for the infra config gate (dev mode only)
+		let ghAccounts: { login: string; type: "user" | "org" }[] = []
+		if (config.devMode && ghToken && isGhAuthenticated(ghToken)) {
+			try {
+				ghAccounts = ghListAccounts(ghToken)
+			} catch {
+				// gh not available
+			}
+		}
+
+		// Emit infra config gate on coder's stream
+		const coderProjectName =
+			config.sessions.get(coderSession.sessionId)?.projectName ?? coderSession.name
+		await coderBridge.emit({
+			type: "infra_config_prompt",
+			projectName: coderProjectName,
+			ghAccounts,
+			runtime: config.sandbox.runtime,
+			ts: ts(),
+		})
+
+		// Async flow: wait for gate, create sandboxes, start agents
+		const asyncFlow = async () => {
+			// 1. Wait for infra config gate on coder's session
+			console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
+			let infra: InfraConfig
+			let repoConfig: {
+				account: string
+				repoName: string
+				visibility: "public" | "private"
+			} | null = null
+			let claimId: string | undefined
+
+			try {
+				const gateValue = await createGate<
+					InfraConfig & {
+						repoAccount?: string
+						repoName?: string
+						repoVisibility?: "public" | "private"
+						claimId?: string
+					}
+				>(coderSession.sessionId, "infra_config")
+
+				console.log(`[room:create-app:${roomId}] Infra gate resolved: mode=${gateValue.mode}`)
+
+				if (gateValue.mode === "cloud" || gateValue.mode === "claim") {
+					infra = {
+						mode: "cloud",
+						databaseUrl: gateValue.databaseUrl,
+						electricUrl: gateValue.electricUrl,
+						sourceId: gateValue.sourceId,
+						secret: gateValue.secret,
+					}
+					if (gateValue.mode === "claim") {
+						claimId = gateValue.claimId
+					}
+				} else {
+					infra = { mode: "local" }
+				}
+
+				// Extract repo config if provided
+				if (gateValue.repoAccount && gateValue.repoName?.trim()) {
+					repoConfig = {
+						account: gateValue.repoAccount,
+						repoName: gateValue.repoName,
+						visibility: gateValue.repoVisibility ?? "private",
+					}
+					config.sessions.update(coderSession.sessionId, {
+						git: {
+							branch: "main",
+							remoteUrl: null,
+							repoName: `${repoConfig.account}/${repoConfig.repoName}`,
+							repoVisibility: repoConfig.visibility,
+							lastCommitHash: null,
+							lastCommitMessage: null,
+							lastCheckpointAt: null,
+						},
+					})
+				}
+			} catch (err) {
+				console.log(`[room:create-app:${roomId}] Infra gate error (defaulting to local):`, err)
+				infra = { mode: "local" }
+			}
+
+			// 2. Create sandboxes in parallel
+			// Coder gets full scaffold, reviewer/ui-designer get minimal
+			await coderBridge.emit({
+				type: "log",
+				level: "build",
+				message: "Creating sandboxes for all agents...",
+				ts: ts(),
+			})
+
+			const sandboxOpts = (sid: string) => ({
+				...(!config.devMode && {
+					prodMode: {
+						sessionToken: deriveSessionToken(config.streamConfig.secret, sid),
+						studioUrl: resolveStudioUrl(config.port),
+					},
+				}),
+			})
+
+			const coderInfo = config.sessions.get(coderSession.sessionId)
+			if (!coderInfo) throw new Error("Coder session not found in registry")
+			const reviewerInfo = config.sessions.get(reviewerSession.sessionId)
+			if (!reviewerInfo) throw new Error("Reviewer session not found in registry")
+			const uiDesignerInfo = config.sessions.get(uiDesignerSession.sessionId)
+			if (!uiDesignerInfo) throw new Error("UI designer session not found in registry")
+
+			const [coderHandle, reviewerHandle, uiDesignerHandle] = await Promise.all([
+				config.sandbox.create(coderSession.sessionId, {
+					projectName: coderInfo.projectName,
+					infra,
+					apiKey,
+					oauthToken,
+					ghToken,
+					...sandboxOpts(coderSession.sessionId),
+				}),
+				config.sandbox.create(reviewerSession.sessionId, {
+					projectName: reviewerInfo.projectName,
+					infra: { mode: "local" },
+					apiKey,
+					oauthToken,
+					ghToken,
+					...sandboxOpts(reviewerSession.sessionId),
+				}),
+				config.sandbox.create(uiDesignerSession.sessionId, {
+					projectName: uiDesignerInfo.projectName,
+					infra: { mode: "local" },
+					apiKey,
+					oauthToken,
+					ghToken,
+					...sandboxOpts(uiDesignerSession.sessionId),
+				}),
+			])
+
+			const handles = [
+				{ session: coderSession, handle: coderHandle },
+				{ session: reviewerSession, handle: reviewerHandle },
+				{ session: uiDesignerSession, handle: uiDesignerHandle },
+			]
+
+			// Update session info with sandbox details
+			for (const { session: s, handle } of handles) {
+				config.sessions.update(s.sessionId, {
+					appPort: handle.port,
+					sandboxProjectDir: handle.projectDir,
+					previewUrl: handle.previewUrl,
+					...(s.role === "coder" && claimId ? { claimId } : {}),
+				})
+			}
+
+			await coderBridge.emit({
+				type: "log",
+				level: "done",
+				message: "All sandboxes ready",
+				ts: ts(),
+			})
+
+			// 3. Set up coder sandbox (full scaffold + CLAUDE.md + skills + GitHub repo)
+			{
+				const handle = coderHandle
+
+				// Copy scaffold
+				await coderBridge.emit({
+					type: "log",
+					level: "build",
+					message: "Setting up project...",
+					ts: ts(),
+				})
+				try {
+					if (config.sandbox.runtime === "docker") {
+						await config.sandbox.exec(handle, `cp -r /opt/scaffold-base '${handle.projectDir}'`)
+						await config.sandbox.exec(
+							handle,
+							`cd '${handle.projectDir}' && sed -i 's/"name": "scaffold-base"/"name": "${coderInfo.projectName.replace(/[^a-z0-9_-]/gi, "-")}"/' package.json`,
+						)
+					} else {
+						await config.sandbox.exec(
+							handle,
+							`source /etc/profile.d/npm-global.sh 2>/dev/null; electric-agent scaffold '${handle.projectDir}' --name '${coderInfo.projectName}' --skip-git`,
+						)
+					}
+					await coderBridge.emit({
+						type: "log",
+						level: "done",
+						message: "Project ready",
+						ts: ts(),
+					})
+				} catch (err) {
+					console.error(`[room:create-app:${roomId}] Project setup failed:`, err)
+					await coderBridge.emit({
+						type: "log",
+						level: "error",
+						message: `Project setup failed: ${err instanceof Error ? err.message : "unknown"}`,
+						ts: ts(),
+					})
+				}
+
+				// GitHub repo creation (prod mode)
+				let repoUrl: string | null = null
+				let prodGitConfig: { mode: "pre-created"; repoName: string; repoUrl: string } | undefined
+				if (!config.devMode && GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY) {
+					try {
+						const repoSlug = coderInfo.projectName
+
+						await coderBridge.emit({
+							type: "log",
+							level: "build",
+							message: "Creating GitHub repository...",
+							ts: ts(),
+						})
+
+						const { token } = await getInstallationToken(
+							GITHUB_APP_ID,
+							GITHUB_INSTALLATION_ID,
+							GITHUB_PRIVATE_KEY,
+						)
+						const repo = await createOrgRepo(GITHUB_ORG, repoSlug, token)
+
+						if (repo) {
+							const actualRepoName = `${GITHUB_ORG}/${repo.htmlUrl.split("/").pop()}`
+							await config.sandbox.exec(
+								handle,
+								`cd '${handle.projectDir}' && git init -b main && git remote add origin '${repo.cloneUrl}'`,
+							)
+							prodGitConfig = {
+								mode: "pre-created" as const,
+								repoName: actualRepoName,
+								repoUrl: repo.htmlUrl,
+							}
+							repoUrl = repo.htmlUrl
+
+							config.sessions.update(coderSession.sessionId, {
+								git: {
+									branch: "main",
+									remoteUrl: repo.htmlUrl,
+									repoName: actualRepoName,
+									lastCommitHash: null,
+									lastCommitMessage: null,
+									lastCheckpointAt: null,
+								},
+							})
+
+							await coderBridge.emit({
+								type: "log",
+								level: "done",
+								message: `GitHub repo created: ${repo.htmlUrl}`,
+								ts: ts(),
+							})
+						}
+					} catch (err) {
+						console.error(`[room:create-app:${roomId}] GitHub repo creation error:`, err)
+					}
+				} else if (repoConfig) {
+					repoUrl = `https://github.com/${repoConfig.account}/${repoConfig.repoName}`
+				}
+
+				// Write CLAUDE.md to coder sandbox
+				const claudeMd = generateClaudeMd({
+					description: body.description,
+					projectName: coderInfo.projectName,
+					projectDir: handle.projectDir,
+					runtime: config.sandbox.runtime,
+					production: !config.devMode,
+					...(prodGitConfig
+						? { git: prodGitConfig }
+						: repoConfig
+							? {
+									git: {
+										mode: "create" as const,
+										repoName: `${repoConfig.account}/${repoConfig.repoName}`,
+										visibility: repoConfig.visibility,
+									},
+								}
+							: {}),
+				})
+				try {
+					await config.sandbox.exec(
+						handle,
+						`cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF`,
+					)
+				} catch (err) {
+					console.error(`[room:create-app:${roomId}] Failed to write CLAUDE.md:`, err)
+				}
+
+				// Write create-app skill to coder sandbox
+				if (createAppSkillContent) {
+					try {
+						const skillDir = `${handle.projectDir}/.claude/skills/create-app`
+						const skillB64 = Buffer.from(createAppSkillContent).toString("base64")
+						await config.sandbox.exec(
+							handle,
+							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+						)
+					} catch (err) {
+						console.error(`[room:create-app:${roomId}] Failed to write create-app skill:`, err)
+					}
+				}
+
+				// Write room-messaging skill to coder sandbox
+				if (roomMessagingSkillContent) {
+					try {
+						const skillDir = `${handle.projectDir}/.claude/skills/room-messaging`
+						const skillB64 = Buffer.from(roomMessagingSkillContent).toString("base64")
+						await config.sandbox.exec(
+							handle,
+							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+						)
+					} catch (err) {
+						console.error(
+							`[room:create-app:${roomId}] Failed to write room-messaging skill to coder:`,
+							err,
+						)
+					}
+				}
+
+				// 4. Create Claude Code bridge for coder
+				const coderPrompt = `/create-app ${body.description}`
+				const coderHookToken = deriveHookToken(config.streamConfig.secret, coderSession.sessionId)
+				const coderClaudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
+					config.sandbox.runtime === "sprites"
+						? {
+								prompt: coderPrompt,
+								cwd: handle.projectDir,
+								studioUrl: resolveStudioUrl(config.port),
+								hookToken: coderHookToken,
+							}
+						: {
+								prompt: coderPrompt,
+								cwd: handle.projectDir,
+								studioPort: config.port,
+								hookToken: coderHookToken,
+							}
+				const coderCcBridge = createClaudeCodeBridge(
+					config,
+					coderSession.sessionId,
+					coderClaudeConfig,
+				)
+
+				// Track coder events
+				coderCcBridge.onAgentEvent((event) => {
+					if (event.type === "session_start") {
+						const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+						if (ccSessionId) {
+							config.sessions.update(coderSession.sessionId, {
+								lastCoderSessionId: ccSessionId,
+							})
+						}
+					}
+					if (event.type === "session_end") {
+						accumulateSessionCost(config, coderSession.sessionId, event)
+					}
+					// Route assistant_message output to the room router
+					if (event.type === "assistant_message" && "text" in event) {
+						router
+							.handleAgentOutput(
+								coderSession.sessionId,
+								(event as EngineEvent & { text: string }).text,
+							)
+							.catch((err) => {
+								console.error(`[room:create-app:${roomId}] handleAgentOutput error (coder):`, err)
+							})
+					}
+				})
+
+				// Coder failure handler: if coder ends without DONE, notify room
+				coderCcBridge.onComplete(async (success) => {
+					const updates: Partial<SessionInfo> = {
+						status: success ? "complete" : "error",
+					}
+					try {
+						const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
+						if (gs.initialized) {
+							const existing = config.sessions.get(coderSession.sessionId)
+							updates.git = {
+								branch: gs.branch ?? "main",
+								remoteUrl: existing?.git?.remoteUrl ?? null,
+								repoName: existing?.git?.repoName ?? null,
+								repoVisibility: existing?.git?.repoVisibility,
+								lastCommitHash: gs.lastCommitHash ?? null,
+								lastCommitMessage: gs.lastCommitMessage ?? null,
+								lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
+							}
+						}
+					} catch {
+						// Sandbox may be stopped
+					}
+					config.sessions.update(coderSession.sessionId, updates)
+
+					if (!success) {
+						router
+							.handleAgentOutput(
+								coderSession.sessionId,
+								"@room Coder session ended unexpectedly. No DONE signal was sent.",
+							)
+							.catch((err) => {
+								console.error(
+									`[room:create-app:${roomId}] Failed to send coder failure message:`,
+									err,
+								)
+							})
+					}
+				})
+
+				await coderBridge.emit({
+					type: "log",
+					level: "build",
+					message: `Running: claude "/create-app ${body.description}"`,
+					ts: ts(),
+				})
+
+				await coderCcBridge.start()
+
+				// Add coder as room participant
+				const coderParticipant: RoomParticipant = {
+					sessionId: coderSession.sessionId,
+					name: "coder",
+					role: "coder",
+					bridge: coderCcBridge,
+				}
+				await router.addParticipant(coderParticipant, false)
+
+				// Send the initial command to the coder
+				await coderCcBridge.sendCommand({
+					command: "new",
+					description: body.description,
+					projectName: coderInfo.projectName,
+					baseDir: "/home/agent/workspace",
+				})
+
+				// Store the repoUrl for reviewer/ui-designer prompts
+				// (we continue setting up those agents now)
+				const finalRepoUrl = repoUrl
+
+				// 5. Set up reviewer and ui-designer sandboxes
+				const supportAgents = [
+					{ session: reviewerSession, handle: reviewerHandle },
+					{ session: uiDesignerSession, handle: uiDesignerHandle },
+				]
+
+				for (const { session: agentSession, handle: agentHandle } of supportAgents) {
+					const agentBridge = getOrCreateBridge(config, agentSession.sessionId)
+
+					// Write a minimal CLAUDE.md
+					const minimalClaudeMd = "Room agent workspace"
+					try {
+						await config.sandbox.exec(
+							agentHandle,
+							`mkdir -p '${agentHandle.projectDir}' && cat > '${agentHandle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${minimalClaudeMd}\nCLAUDEMD_EOF`,
+						)
+					} catch (err) {
+						console.error(
+							`[room:create-app:${roomId}] Failed to write CLAUDE.md for ${agentSession.name}:`,
+							err,
+						)
+					}
+
+					// Write room-messaging skill
+					if (roomMessagingSkillContent) {
+						try {
+							const skillDir = `${agentHandle.projectDir}/.claude/skills/room-messaging`
+							const skillB64 = Buffer.from(roomMessagingSkillContent).toString("base64")
+							await config.sandbox.exec(
+								agentHandle,
+								`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+							)
+						} catch (err) {
+							console.error(
+								`[room:create-app:${roomId}] Failed to write room-messaging skill for ${agentSession.name}:`,
+								err,
+							)
+						}
+					}
+
+					// Resolve and inject role skill
+					const roleSkill = resolveRoleSkill(agentSession.role)
+					if (roleSkill) {
+						try {
+							const skillDir = `${agentHandle.projectDir}/.claude/skills/role`
+							const skillB64 = Buffer.from(roleSkill.skillContent).toString("base64")
+							await config.sandbox.exec(
+								agentHandle,
+								`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+							)
+						} catch (err) {
+							console.error(
+								`[room:create-app:${roomId}] Failed to write role skill for ${agentSession.name}:`,
+								err,
+							)
+						}
+					}
+
+					// Build prompt
+					const repoRef = finalRepoUrl ? ` The GitHub repo is: ${finalRepoUrl}.` : ""
+					const agentPrompt =
+						agentSession.role === "reviewer"
+							? `You are "reviewer", a code review agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.${repoRef} Wait for the coder to send a @room DONE: message before starting any work.`
+							: `You are "ui-designer", a UI design agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.${repoRef} Wait for the coder to send a @room DONE: message before starting any work.`
+
+					// Create Claude Code bridge
+					const agentHookToken = deriveHookToken(config.streamConfig.secret, agentSession.sessionId)
+					const agentClaudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
+						config.sandbox.runtime === "sprites"
+							? {
+									prompt: agentPrompt,
+									cwd: agentHandle.projectDir,
+									studioUrl: resolveStudioUrl(config.port),
+									hookToken: agentHookToken,
+									agentName: agentSession.name,
+									...(roleSkill?.allowedTools && {
+										allowedTools: roleSkill.allowedTools,
+									}),
+								}
+							: {
+									prompt: agentPrompt,
+									cwd: agentHandle.projectDir,
+									studioPort: config.port,
+									hookToken: agentHookToken,
+									agentName: agentSession.name,
+									...(roleSkill?.allowedTools && {
+										allowedTools: roleSkill.allowedTools,
+									}),
+								}
+					const ccBridge = createClaudeCodeBridge(config, agentSession.sessionId, agentClaudeConfig)
+
+					// Track events
+					ccBridge.onAgentEvent((event) => {
+						if (event.type === "session_start") {
+							const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+							if (ccSessionId) {
+								config.sessions.update(agentSession.sessionId, {
+									lastCoderSessionId: ccSessionId,
+								})
+							}
+						}
+						if (event.type === "session_end") {
+							accumulateSessionCost(config, agentSession.sessionId, event)
+						}
+						if (event.type === "assistant_message" && "text" in event) {
+							router
+								.handleAgentOutput(
+									agentSession.sessionId,
+									(event as EngineEvent & { text: string }).text,
+								)
+								.catch((err) => {
+									console.error(
+										`[room:create-app:${roomId}] handleAgentOutput error (${agentSession.name}):`,
+										err,
+									)
+								})
+						}
+					})
+
+					ccBridge.onComplete(async (success) => {
+						config.sessions.update(agentSession.sessionId, {
+							status: success ? "complete" : "error",
+						})
+					})
+
+					await agentBridge.emit({
+						type: "log",
+						level: "done",
+						message: `Sandbox ready for "${agentSession.name}"`,
+						ts: ts(),
+					})
+
+					await ccBridge.start()
+
+					// Add as room participant (gated — waits for room messages)
+					const participant: RoomParticipant = {
+						sessionId: agentSession.sessionId,
+						name: agentSession.name,
+						role: agentSession.role,
+						bridge: ccBridge,
+					}
+					await router.addParticipant(participant, true)
+				}
+
+				console.log(`[room:create-app:${roomId}] All 3 agents started and added to room`)
+			}
+		}
+
+		asyncFlow().catch(async (err) => {
+			console.error(`[room:create-app:${roomId}] Flow failed:`, err)
+			for (const s of sessions) {
+				config.sessions.update(s.sessionId, { status: "error" })
+			}
+			try {
+				await coderBridge.emit({
+					type: "log",
+					level: "error",
+					message: `Room creation failed: ${err instanceof Error ? err.message : String(err)}`,
+					ts: ts(),
+				})
+			} catch {
+				// Bridge may not be usable
+			}
+		})
+
+		return c.json(
+			{
+				roomId,
+				roomToken,
+				sessions: sessions.map((s) => ({
+					sessionId: s.sessionId,
+					name: s.name,
+					role: s.role,
+					sessionToken: s.sessionToken,
+				})),
+			},
+			201,
+		)
 	})
 
 	// Create a room
