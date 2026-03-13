@@ -2229,7 +2229,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}),
 				config.sandbox.create(reviewerSession.sessionId, {
 					projectName: reviewerInfo.projectName,
-					infra: { mode: "local" },
+					infra: { mode: "none" },
 					apiKey,
 					oauthToken,
 					ghToken,
@@ -2237,7 +2237,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}),
 				config.sandbox.create(uiDesignerSession.sessionId, {
 					projectName: uiDesignerInfo.projectName,
-					infra: { mode: "local" },
+					infra: { mode: "none" },
 					apiKey,
 					oauthToken,
 					ghToken,

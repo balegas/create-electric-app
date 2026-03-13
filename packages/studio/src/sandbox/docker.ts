@@ -84,7 +84,7 @@ function generateComposeFile(
 	// Keep the container alive — the Claude Code bridge starts the agent
 	const agentCommand = '["tail", "-f", "/dev/null"]'
 
-	if (isCloud) {
+	if (isCloud || isNone) {
 		return `services:
   agent:
     image: ${SANDBOX_IMAGE}
