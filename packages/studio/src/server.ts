@@ -2131,6 +2131,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Async flow: wait for gate, create sandboxes, start agents
 		const asyncFlow = async () => {
 			// 1. Wait for infra config gate on coder's session
+			await router.sendMessage("system", "Waiting for infrastructure configuration...")
 			console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
 			let infra: InfraConfig
 			let repoConfig: {
@@ -2193,6 +2194,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			// 2. Create sandboxes in parallel
 			// Coder gets full scaffold, reviewer/ui-designer get minimal
+			await router.sendMessage("system", "Creating sandboxes for all agents...")
 			await coderBridge.emit({
 				type: "log",
 				level: "build",
@@ -2687,6 +2689,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}
 
 				console.log(`[room:create-app:${roomId}] All 3 agents started and added to room`)
+				await router.sendMessage(
+					"system",
+					`All agents are ready. ${coderSession.name} is building the app. ${reviewerSession.name} and ${uiDesignerSession.name} are waiting for completion.`,
+				)
 			}
 		}
 
