@@ -146,9 +146,17 @@ export function SessionPage() {
 		refreshSessions()
 	}, [effectiveId, hasUnresolvedGate, refreshSessions])
 
-	// Derive preview URL and port from app_status event
-	const appPort = appStatus?.port
-	const previewUrl = appStatus?.previewUrl
+	// Derive preview URL and port — prefer app_status event, fall back to session info.
+	// On resume the replayed app_status (from dev:start detection) often lacks port/previewUrl,
+	// so we merge with the values stored on the session (set when the sandbox was created).
+	const appPort = appStatus?.port ?? activeSession?.appPort
+	const previewUrl = appStatus?.previewUrl ?? activeSession?.previewUrl
+
+	// Show the "Open App" link once we've received either an app_status event OR a "done"
+	// log message (e.g. "Sandbox ready", "Project ready") — whichever comes first.
+	// This ensures the link appears on resume even if the app_status event had no URL.
+	const hasDoneMessage = entries.some((e) => e.kind === "log" && e.level === "done")
+	const showAppLink = appStatus != null || (hasDoneMessage && Boolean(previewUrl || appPort))
 
 	const [sendError, setSendError] = useState<string | null>(null)
 
@@ -245,12 +253,12 @@ export function SessionPage() {
 				)}
 
 				{/* Mobile icon-only Open App button */}
-				{appStatus && (previewUrl || appPort) && (
+				{showAppLink && (previewUrl || appPort) && (
 					<a
 						href={previewUrl ?? `http://localhost:${appPort}`}
 						target="_blank"
 						rel="noopener noreferrer"
-						className={`mobile-open-app-icon ${appStatus.status === "running" ? "primary" : ""}`}
+						className={`mobile-open-app-icon ${appStatus?.status === "running" ? "primary" : ""}`}
 						aria-label="Open App"
 					>
 						<svg
@@ -272,12 +280,12 @@ export function SessionPage() {
 				)}
 
 				<span className="session-header-actions-group">
-					{appStatus && (
+					{showAppLink && (
 						<a
 							href={previewUrl ?? (appPort ? `http://localhost:${appPort}` : "#")}
 							target="_blank"
 							rel="noopener noreferrer"
-							className={`session-header-action ${appStatus.status === "running" ? "primary" : ""}`}
+							className={`session-header-action ${appStatus?.status === "running" ? "primary" : ""}`}
 						>
 							Open App
 						</a>
