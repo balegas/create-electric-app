@@ -2131,7 +2131,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Async flow: wait for gate, create sandboxes, start agents
 		const asyncFlow = async () => {
 			// 1. Wait for infra config gate on coder's session
-			await router.sendMessage("system", "Waiting for infrastructure configuration...")
+			await router.sendMessage(
+				"system",
+				`Waiting for infrastructure configuration — please open ${coderSession.name}'s session and confirm the setup.`,
+			)
 			console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
 			let infra: InfraConfig
 			let repoConfig: {
