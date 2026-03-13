@@ -292,6 +292,29 @@ export async function createAgentRoom(name: string, maxRounds?: number) {
 	return result
 }
 
+export async function createAppRoom(description: string, name?: string) {
+	const result = await request<{
+		roomId: string
+		code: string
+		name: string
+		roomToken: string
+		sessions: Array<{ sessionId: string; name: string; role: string; sessionToken: string }>
+	}>("/rooms/create-app", {
+		method: "POST",
+		body: { description, name, ...credentialFields() },
+	})
+	if (result.roomToken) {
+		setRoomToken(result.roomId, result.roomToken)
+	}
+	// Store session tokens so the client can auth to each agent's session
+	for (const s of result.sessions) {
+		if (s.sessionToken) {
+			setSessionToken(s.sessionId, s.sessionToken)
+		}
+	}
+	return result
+}
+
 export async function joinAgentRoom(id: string, code: string) {
 	const result = await request<{ id: string; code: string; name: string; roomToken: string }>(
 		`/join-room/${id}/${code}`,
