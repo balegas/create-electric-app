@@ -1936,8 +1936,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	}
 
 	// Protect room-scoped routes via X-Room-Token header
+	// "create-app" is a creation endpoint — no room token exists yet
+	const roomAuthExemptIds = new Set(["create-app"])
+
 	app.use("/api/rooms/:id/*", async (c, next) => {
 		const id = c.req.param("id")
+		if (roomAuthExemptIds.has(id)) return next()
 		const token = extractRoomToken(c)
 		if (!token || !validateRoomToken(config.streamConfig.secret, id, token)) {
 			return c.json({ error: "Invalid or missing room token" }, 401)
@@ -1946,8 +1950,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	})
 
 	app.use("/api/rooms/:id", async (c, next) => {
-		if (c.req.method !== "GET" && c.req.method !== "DELETE") return next()
 		const id = c.req.param("id")
+		if (roomAuthExemptIds.has(id)) return next()
+		if (c.req.method !== "GET" && c.req.method !== "DELETE") return next()
 		const token = extractRoomToken(c)
 		if (!token || !validateRoomToken(config.streamConfig.secret, id, token)) {
 			return c.json({ error: "Invalid or missing room token" }, 401)
