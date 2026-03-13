@@ -1706,7 +1706,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				cloud: "Electric Cloud (BYO)",
 			}
 			details = { Infrastructure: modeLabels[body.mode as string] ?? String(body.mode) }
-			if (body.mode === "cloud" || body.mode === "claim") {
+			if (body.mode === "cloud") {
 				if (body.databaseUrl) details["Connection string"] = body.databaseUrl as string
 				if (body.sourceId) details["Source ID"] = body.sourceId as string
 			}

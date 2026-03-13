@@ -79,8 +79,7 @@ function InfraConfigGate({
 				payload.sourceId = sourceId
 				payload.secret = secret
 				payload.claimId = claimId
-				parts.push(`Database: ${databaseUrl}`)
-				parts.push(`Source ID: ${sourceId}`)
+				parts.push("Provisioned (72h)")
 				if (claimUrl) parts.push(`Claim: ${claimUrl}`)
 			} else if (mode === "cloud") {
 				payload.mode = "cloud"
@@ -127,22 +126,31 @@ function InfraConfigGate({
 		const details: Record<string, string> = resolvedDetails ?? {}
 		if (!resolvedDetails) {
 			details.Infrastructure = modeLabels[mode]
-			if (mode === "cloud" || mode === "claim") {
+			if (mode === "cloud") {
 				if (databaseUrl) details["Connection string"] = databaseUrl
 				if (sourceId) details["Source ID"] = sourceId
-			}
-			if (mode === "claim" && claimUrl) {
-				details["Claim link"] = claimUrl
 			}
 			if (setupRepo && repoAccount && repoName.trim()) {
 				details.Repository = `${repoAccount}/${repoName}`
 				details.Visibility = repoVisibility
 			}
 		}
+
+		// For claim mode, extract the claim link and show it as a friendly link
+		// instead of displaying raw connection strings
+		const resolvedClaimLink = details["Claim link"]
+		const filteredDetails = Object.entries(details).filter(
+			([key]) =>
+				!(
+					resolvedClaimLink &&
+					(key === "Connection string" || key === "Source ID" || key === "Claim link")
+				),
+		)
+
 		return (
 			<div className="gate-prompt">
 				<div className="gate-config-summary">
-					{Object.entries(details).map(([key, value]) => (
+					{filteredDetails.map(([key, value]) => (
 						<div key={key}>
 							<strong>{key}:</strong>{" "}
 							{value.startsWith("http") ? (
@@ -154,6 +162,15 @@ function InfraConfigGate({
 							)}
 						</div>
 					))}
+					{resolvedClaimLink && (
+						<div style={{ marginTop: 4, fontSize: "0.9em", opacity: 0.8 }}>
+							This source will expire in 72h unless you{" "}
+							<a href={resolvedClaimLink} target="_blank" rel="noopener noreferrer">
+								claim it in Electric Cloud
+							</a>
+							.
+						</div>
+					)}
 				</div>
 			</div>
 		)
@@ -225,41 +242,21 @@ function InfraConfigGate({
 					) : (
 						<div style={{ fontSize: "0.85em" }}>
 							<p style={{ color: "var(--color-done, #4c4)", margin: "0 0 6px" }}>
-								Resources provisioned successfully (72h TTL).
+								Resources provisioned successfully.
 							</p>
-							<div
-								style={{
-									background: "rgba(255,255,255,0.04)",
-									border: "1px solid rgba(255,255,255,0.1)",
-									borderRadius: 6,
-									padding: "8px 10px",
-									margin: "6px 0",
-									fontFamily: "monospace",
-									fontSize: "0.9em",
-									lineHeight: 1.6,
-									wordBreak: "break-all",
-								}}
-							>
-								<div>
-									<strong>Database URL:</strong> {databaseUrl}
-								</div>
-								<div>
-									<strong>Source ID:</strong> {sourceId}
-								</div>
-								<div>
-									<strong>Electric URL:</strong> {electricUrl}
-								</div>
-							</div>
+							<p style={{ margin: "4px 0", opacity: 0.8 }}>
+								A temporary database and Electric Cloud source have been created. They will expire
+								in 72 hours unless you claim them into your account.
+							</p>
 							{claimUrl && (
 								<p style={{ margin: "8px 0 0" }}>
-									Claim into your account:{" "}
 									<a
 										href={claimUrl}
 										target="_blank"
 										rel="noopener noreferrer"
-										style={{ wordBreak: "break-all" }}
+										style={{ color: "var(--brand-1)" }}
 									>
-										{claimUrl}
+										Claim in Electric Cloud &rarr;
 									</a>
 								</p>
 							)}
