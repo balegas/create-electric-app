@@ -256,6 +256,19 @@
 		font-size: 14px;
 	}
 
+	/* ---- Room prompt bar: stack select above textarea+button ---- */
+	.room-prompt-bar {
+		flex-wrap: wrap;
+	}
+
+	.room-prompt-bar .room-target-select {
+		min-width: 0;
+		width: 100%;
+		flex: none;
+		padding: 8px 10px;
+		font-size: 14px;
+	}
+
 	/* ---- Mobile home topbar: hamburger + brand on home page ---- */
 	.mobile-home-topbar {
 		display: flex;

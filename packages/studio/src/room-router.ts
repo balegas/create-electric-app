@@ -314,6 +314,20 @@ export class RoomRouter {
 			}
 		}
 
+		// Announce when agents pick up a DONE task (visible in room timeline)
+		const isDone = /^DONE:/m.test(msg.body)
+		if (isDone && deliverTo.length > 0) {
+			for (const p of deliverTo) {
+				const action =
+					p.role === "reviewer"
+						? "starting review"
+						: p.role === "ui-designer"
+							? "starting UI audit"
+							: "picking up task"
+				await this.sendMessage("system", `${p.name} is ${action}`)
+			}
+		}
+
 		const prompt = `Message from ${msg.from}:\n\n${msg.body}`
 
 		await Promise.all(

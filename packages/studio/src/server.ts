@@ -2511,6 +2511,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					coderClaudeConfig,
 				)
 
+				// Track whether the coder already sent a DONE: message itself
+				// so the onComplete handler doesn't emit a duplicate.
+				let coderSentDone = false
+
 				// Track coder events
 				coderCcBridge.onAgentEvent((event) => {
 					if (event.type === "session_start") {
@@ -2526,14 +2530,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					// Route assistant_message output to the room router
 					if (event.type === "assistant_message" && "text" in event) {
-						router
-							.handleAgentOutput(
-								coderSession.sessionId,
-								(event as EngineEvent & { text: string }).text,
-							)
-							.catch((err) => {
-								console.error(`[room:create-app:${roomId}] handleAgentOutput error (coder):`, err)
-							})
+						const text = (event as EngineEvent & { text: string }).text
+						// Detect if the coder is sending its own DONE message
+						if (/^@room\s+DONE:/m.test(text)) {
+							coderSentDone = true
+						}
+						router.handleAgentOutput(coderSession.sessionId, text).catch((err) => {
+							console.error(`[room:create-app:${roomId}] handleAgentOutput error (coder):`, err)
+						})
 					}
 					// Notify room when coder is waiting for user input
 					if (event.type === "ask_user_question") {
@@ -2583,15 +2587,32 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					const msg = success
-						? `@room DONE: App is ready.${repoInfo}`
-						: "@room Coder session ended unexpectedly."
-					router.handleAgentOutput(coderSession.sessionId, msg).catch((err) => {
-						console.error(
-							`[room:create-app:${roomId}] Failed to send coder completion message:`,
-							err,
-						)
-					})
+					// Only emit a DONE/failure message if the coder didn't already
+					// send its own @room DONE: — prevents duplicate done messages.
+					if (!coderSentDone) {
+						const msg = success
+							? `@room DONE: App is ready.${repoInfo}`
+							: "@room Coder session ended unexpectedly."
+						router.handleAgentOutput(coderSession.sessionId, msg).catch((err) => {
+							console.error(
+								`[room:create-app:${roomId}] Failed to send coder completion message:`,
+								err,
+							)
+						})
+					} else if (!success) {
+						// Coder sent DONE but then exited with error — notify room
+						router
+							.handleAgentOutput(
+								coderSession.sessionId,
+								"@room Coder session ended unexpectedly after reporting done.",
+							)
+							.catch((err) => {
+								console.error(
+									`[room:create-app:${roomId}] Failed to send coder failure message:`,
+									err,
+								)
+							})
+					}
 				})
 
 				await coderBridge.emit({
