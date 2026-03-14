@@ -2705,7 +2705,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					const agentPrompt =
 						agentSession.role === "reviewer"
 							? `You are "reviewer", a code review agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.${repoRef} Wait for the coder to send a @room DONE: message before starting any work.`
-							: `You are "ui-designer", a UI design agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.${repoRef} Wait for the coder to send a @room DONE: message before starting any work.`
+							: `You are "ui-designer", a UI design agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.${repoRef} Do NOT start any work until a user explicitly asks you to make UI changes. Ignore @room DONE: messages — they are informational only.`
 
 					// Create Claude Code bridge
 					const agentHookToken = deriveHookToken(config.streamConfig.secret, agentSession.sessionId)
