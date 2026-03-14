@@ -2583,32 +2583,18 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					// Only emit a message if the coder didn't send its own
-					// @room DONE:. The server never auto-generates DONE — that is
-					// the coder's responsibility (see room-messaging skill).
+					// Session status is visible in the UI via session state.
+					// Do NOT broadcast @room messages on session end — they
+					// cause other agents (reviewer, ui-designer) to react and
+					// generate noise. The coder's own @room DONE: is sufficient.
 					if (!coderSentDone) {
-						const msg = success
-							? "@room Coder session ended without reporting completion."
-							: "@room Coder session ended unexpectedly."
-						router.handleAgentOutput(coderSession.sessionId, msg).catch((err) => {
-							console.error(
-								`[room:create-app:${roomId}] Failed to send coder completion message:`,
-								err,
-							)
-						})
+						console.log(
+							`[room:create-app:${roomId}] Coder session ended ${success ? "successfully" : "with error"} without sending DONE`,
+						)
 					} else if (!success) {
-						// Coder sent DONE but then exited with error — notify room
-						router
-							.handleAgentOutput(
-								coderSession.sessionId,
-								"@room Coder session ended unexpectedly after reporting done.",
-							)
-							.catch((err) => {
-								console.error(
-									`[room:create-app:${roomId}] Failed to send coder failure message:`,
-									err,
-								)
-							})
+						console.log(
+							`[room:create-app:${roomId}] Coder session ended with error after sending DONE`,
+						)
 					}
 				})
 
@@ -2705,7 +2691,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					const agentPrompt =
 						agentSession.role === "reviewer"
 							? `You are "reviewer", a code review agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.${repoRef} Wait for the coder to send a @room DONE: message before starting any work.`
-							: `You are "ui-designer", a UI design agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.${repoRef} Wait for the coder to send a @room DONE: message before starting any work.`
+							: `You are "ui-designer", a UI design agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.${repoRef} Do NOT start any work until a user explicitly asks you to make UI changes. Ignore @room DONE: messages — they are informational only.`
 
 					// Create Claude Code bridge
 					const agentHookToken = deriveHookToken(config.streamConfig.secret, agentSession.sessionId)
