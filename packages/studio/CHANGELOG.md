@@ -1,5 +1,13 @@
 # @electric-agent/studio
 
+## 1.13.2
+
+### Patch Changes
+
+- b2549bd: Always show the Open App button in the UI when a preview URL or port is available, regardless of app completion state. Add a DONE room message to the create-app skill's final phase to signal pipeline completion. Initialize all agents with repo info (URL, branch) via the room router's discovery prompt so they can clone and review code locally.
+- 6e69388: Move DONE message responsibility to room-messaging skill instead of auto-generating it in server onComplete handler. The server no longer emits `@room DONE:` when the coder session exits successfully — only the coder agent itself should send DONE after verifying the app is ready.
+- 75fbc3d: Restrict UI agent to only act on explicit user requests, not on coder DONE messages.
+
 ## 1.13.1
 
 ### Patch Changes

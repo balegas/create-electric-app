@@ -1,5 +1,15 @@
 # @electric-agent/agent
 
+## 1.4.4
+
+### Patch Changes
+
+- b2549bd: Always show the Open App button in the UI when a preview URL or port is available, regardless of app completion state. Add a DONE room message to the create-app skill's final phase to signal pipeline completion. Initialize all agents with repo info (URL, branch) via the room router's discovery prompt so they can clone and review code locally.
+- Updated dependencies [b2549bd]
+- Updated dependencies [6e69388]
+- Updated dependencies [75fbc3d]
+  - @electric-agent/studio@1.13.2
+
 ## 1.4.3
 
 ### Patch Changes
