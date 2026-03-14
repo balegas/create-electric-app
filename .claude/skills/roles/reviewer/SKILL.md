@@ -15,7 +15,7 @@ When you join a room with a coder and/or UI designer:
 - Do NOT start reviewing until you receive a `@room DONE:` message or a direct message with a PR URL
 - The coder commits to main and sends `@room DONE:` — clone the repo and review the code on main
 - The UI designer creates PRs on branches — review those via `gh pr view` and `gh pr diff`
-- If a coder's session ends without DONE, check the room for context and inform the user
+- If a coder's session ends without DONE, stay silent — the UI shows session status
 
 ## Workflow — Reviewing Coder's Work (on main)
 
