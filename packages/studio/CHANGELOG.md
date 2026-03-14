@@ -1,5 +1,12 @@
 # @electric-agent/studio
 
+## 1.13.3
+
+### Patch Changes
+
+- 622d337: Fix flash of "No messages yet." when creating a room by showing a "Creating room" loading state while roomId is "new".
+- 622d337: Add app preview button to room header (mobile icon + desktop text link). The server now returns previewUrl and appPort in the room state response.
+
 ## 1.13.2
 
 ### Patch Changes
