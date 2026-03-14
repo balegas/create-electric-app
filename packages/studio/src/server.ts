@@ -2901,10 +2901,24 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const router = roomRouters.get(roomId)
 
 		if (router) {
+			// Find preview URL / port from any participant's session (prefer coder role)
+			const coderParticipant = router.participants.find((p) => p.role === "coder")
+			const previewParticipant = coderParticipant ?? router.participants[0]
+			let previewUrl: string | undefined
+			let appPort: number | undefined
+			if (previewParticipant) {
+				const handle = config.sandbox.get(previewParticipant.sessionId)
+				const session = config.sessions.get(previewParticipant.sessionId)
+				previewUrl = handle?.previewUrl ?? session?.previewUrl
+				appPort = handle?.port ?? session?.appPort
+			}
+
 			return c.json({
 				roomId,
 				state: router.state,
 				roundCount: router.roundCount,
+				previewUrl,
+				appPort,
 				participants: router.participants.map((p) => ({
 					sessionId: p.sessionId,
 					name: p.name,

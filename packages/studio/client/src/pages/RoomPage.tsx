@@ -175,6 +175,9 @@ export function RoomPage() {
 
 	const effectiveState = isClosed ? "closed" : roomState?.state
 	const participants = roomState?.participants ?? []
+	const appUrl =
+		roomState?.previewUrl ??
+		(roomState?.appPort ? `http://localhost:${roomState.appPort}` : undefined)
 
 	return (
 		<>
@@ -184,6 +187,7 @@ export function RoomPage() {
 				roomCode={roomEntry?.code}
 				state={effectiveState}
 				participants={participants}
+				appUrl={appUrl}
 				onClose={handleClose}
 				onAddAgent={() => setShowAddAgent(true)}
 				openMobileDrawer={openMobileDrawer}
@@ -231,6 +235,7 @@ function RoomHeader({
 	roomCode,
 	state,
 	participants,
+	appUrl,
 	onClose,
 	onAddAgent,
 	openMobileDrawer,
@@ -240,6 +245,7 @@ function RoomHeader({
 	roomCode?: string
 	state?: string
 	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
+	appUrl?: string
 	onClose: () => void
 	onAddAgent: () => void
 	openMobileDrawer: () => void
@@ -324,7 +330,44 @@ function RoomHeader({
 				</>
 			)}
 
+			{/* Mobile icon-only Open App button */}
+			{appUrl && (
+				<a
+					href={appUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					className="mobile-open-app-icon primary"
+					aria-label="Open App"
+				>
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
+						<title>Open App</title>
+						<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+						<polyline points="15 3 21 3 21 9" />
+						<line x1="10" y1="14" x2="21" y2="3" />
+					</svg>
+				</a>
+			)}
+
 			<span className="session-header-actions-group">
+				{appUrl && (
+					<a
+						href={appUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="session-header-action primary"
+					>
+						Open App
+					</a>
+				)}
 				<button
 					type="button"
 					className="session-header-action"

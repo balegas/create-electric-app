@@ -279,6 +279,8 @@ export interface RoomState {
 	roomId: string
 	state: "active" | "closed"
 	roundCount: number
+	previewUrl?: string
+	appPort?: number
 	participants: Array<{
 		sessionId: string
 		name: string
