@@ -88,6 +88,7 @@ export const entityName = pgTable("entity_name", {
 ### Phase 7: Deploy & Preview
 - [ ] Run migrations (drizzle-kit generate && drizzle-kit migrate)
 - [ ] pnpm dev:start
+- [ ] Send `@room DONE:` message with repo URL, branch, and summary (REQUIRED — triggers reviewer/designer)
 
 ## Design Conventions
 - UUID primary keys with defaultRandom()
