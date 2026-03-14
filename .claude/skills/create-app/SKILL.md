@@ -269,6 +269,16 @@ pnpm dev:start
 
 After starting, the app is accessible at the preview URL (shown in the UI).
 
+### Signal Completion
+
+After the dev server is running, emit a **DONE** message to the room to signal that the app is finished:
+
+```
+@room DONE: App is live and ready for preview.
+```
+
+This notifies the UI and other agents that the build pipeline has completed successfully.
+
 ## Critical Rules (from electric-app-guardrails)
 
 - `z` from `"zod/v4"` — NEVER from `"zod"` (drizzle-zod 0.8.x rejects v3 overrides)

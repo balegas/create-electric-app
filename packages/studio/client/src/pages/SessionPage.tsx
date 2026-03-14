@@ -152,11 +152,9 @@ export function SessionPage() {
 	const appPort = appStatus?.port ?? activeSession?.appPort
 	const previewUrl = appStatus?.previewUrl ?? activeSession?.previewUrl
 
-	// Show the "Open App" link once we've received either an app_status event OR a "done"
-	// log message (e.g. "Sandbox ready", "Project ready") — whichever comes first.
-	// This ensures the link appears on resume even if the app_status event had no URL.
-	const hasDoneMessage = entries.some((e) => e.kind === "log" && e.level === "done")
-	const showAppLink = appStatus != null || (hasDoneMessage && Boolean(previewUrl || appPort))
+	// Always show the "Open App" link when we have a preview URL or port available,
+	// so users can access the app at any point during the session — not just after completion.
+	const showAppLink = Boolean(previewUrl || appPort)
 
 	const [sendError, setSendError] = useState<string | null>(null)
 
