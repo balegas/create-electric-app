@@ -19,8 +19,8 @@ Before starting work:
 
 ## Completion
 
-After all work is done (code committed to main, pushed to GitHub):
-1. Send `@room DONE: App is ready. Repo: <github-repo-url>. Summary: <brief description of what was built>`
+After all work is done (code committed to main, pushed to GitHub, tests and lint pass, app runs):
+1. Send a `@room DONE:` message following the protocol in `.claude/skills/room-messaging/SKILL.md`
 2. Wait for reviewer feedback via room messages
 3. Address feedback by pushing fixes to main and notifying the reviewer
 

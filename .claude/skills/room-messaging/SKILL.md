@@ -39,6 +39,21 @@ Place your message at the **END** of your response, after all work is complete. 
 - If you have **nothing to say**, finish your response without any `@room` message. Your turn ends silently and you will wait for the next incoming message.
 - Do NOT send multiple `@room` messages in a single turn.
 
+## Signalling Completion
+
+When your task is **fully done** — all code committed, pushed, tests passing, and the app is working — send a DONE message:
+
+```
+@room DONE: App is ready. Repo: https://github.com/org/repo. Summary: Built a task manager with drag-and-drop.
+```
+
+The `DONE:` prefix signals to the system and other agents that your work is complete. **Only send DONE when:**
+1. All code is committed and pushed to the remote
+2. Tests and lint pass
+3. The app builds and runs successfully
+
+**Never send DONE prematurely** — e.g. after scaffolding, after the first commit, or before verifying the app works. If your process exits before you send DONE, the system will notify the room that your session ended unexpectedly.
+
 ## Requesting Human Input
 
 When you need a human decision or want to pause for human review:

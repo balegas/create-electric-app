@@ -2564,7 +2564,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					const updates: Partial<SessionInfo> = {
 						status: success ? "complete" : "error",
 					}
-					let repoInfo = ""
 					try {
 						const gs = await config.sandbox.gitStatus(handle, handle.projectDir)
 						if (gs.initialized) {
@@ -2578,20 +2577,18 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								lastCommitMessage: gs.lastCommitMessage ?? null,
 								lastCheckpointAt: existing?.git?.lastCheckpointAt ?? null,
 							}
-							if (existing?.git?.repoName) {
-								repoInfo = ` Repo: https://github.com/${existing.git.repoName}`
-							}
 						}
 					} catch {
 						// Sandbox may be stopped
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					// Only emit a DONE/failure message if the coder didn't already
-					// send its own @room DONE: — prevents duplicate done messages.
+					// Only emit a message if the coder didn't send its own
+					// @room DONE:. The server never auto-generates DONE — that is
+					// the coder's responsibility (see room-messaging skill).
 					if (!coderSentDone) {
 						const msg = success
-							? `@room DONE: App is ready.${repoInfo}`
+							? "@room Coder session ended without reporting completion."
 							: "@room Coder session ended unexpectedly."
 						router.handleAgentOutput(coderSession.sessionId, msg).catch((err) => {
 							console.error(
