@@ -32,7 +32,7 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          publish: pnpm publish -r --filter './packages/**' --no-git-checks --access public --provenance
+          publish: pnpm publish -r --filter '{./packages/**}' --no-git-checks --access public --provenance
           version: pnpm exec changeset version
           title: "chore: version packages"
           commit: "chore: version packages"
