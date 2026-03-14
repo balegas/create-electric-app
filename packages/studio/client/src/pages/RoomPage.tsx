@@ -146,6 +146,21 @@ export function RoomPage() {
 		}
 	}, [roomId])
 
+	if (roomId === "new") {
+		return (
+			<div className="room-empty">
+				<div className="room-working-indicator">
+					<span className="room-working-dots">
+						<span />
+						<span />
+						<span />
+					</span>
+					<span className="room-working-text">Creating room</span>
+				</div>
+			</div>
+		)
+	}
+
 	if (error) {
 		return (
 			<div className="room-error">
