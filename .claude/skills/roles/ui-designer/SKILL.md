@@ -25,8 +25,9 @@ Do NOT waste time on trivial changes like adjusting a single margin or reorderin
 
 ## Setup
 
-1. Clone the repo: `git clone <repo-url> .`
-2. Install dependencies: `pnpm install`
+1. Clone the repo: `git clone <repo-url> .` (use the repo URL from your discovery prompt)
+2. Checkout the correct branch: `git checkout <branch>` (use the branch from your discovery prompt)
+3. Install dependencies: `pnpm install`
 3. Run migrations: `pnpm drizzle-kit migrate`
 4. Start the dev server: `pnpm dev:start`
 5. Verify the app is running

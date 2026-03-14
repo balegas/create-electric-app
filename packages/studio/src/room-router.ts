@@ -22,9 +22,18 @@ export interface RoomParticipant {
 	bridge: SessionBridge
 }
 
+export interface RepoInfo {
+	/** GitHub repository URL (e.g. https://github.com/org/repo) */
+	url: string | null
+	/** Branch the coder is working on (default: main) */
+	branch: string
+}
+
 export interface RoomRouterOptions {
 	/** Maximum rounds before the room auto-closes (default: 20) */
 	maxRounds?: number
+	/** Repository information to share with all agents at discovery time */
+	repoInfo?: RepoInfo
 }
 
 interface InternalParticipant extends RoomParticipant {
@@ -39,6 +48,7 @@ export class RoomRouter {
 	private readonly maxRounds: number
 
 	private readonly _participants = new Map<string, InternalParticipant>()
+	private _repoInfo: RepoInfo | null
 	private _state: "active" | "closed" = "active"
 	private _roundCount = 0
 	private cancelSubscription: (() => void) | null = null
@@ -54,6 +64,7 @@ export class RoomRouter {
 		this.roomName = roomName
 		this.streamConfig = streamConfig
 		this.maxRounds = options?.maxRounds ?? 20
+		this._repoInfo = options?.repoInfo ?? null
 
 		const conn = getRoomStreamConnectionInfo(roomId, streamConfig)
 		this.stream = new DurableStream({
@@ -75,6 +86,13 @@ export class RoomRouter {
 
 	get roundCount(): number {
 		return this._roundCount
+	}
+
+	/**
+	 * Update the repository info (e.g. after the GitHub repo is created).
+	 */
+	setRepoInfo(info: RepoInfo): void {
+		this._repoInfo = info
 	}
 
 	/**
@@ -448,6 +466,15 @@ export class RoomRouter {
 		}
 
 		lines.push("")
+
+		if (this._repoInfo) {
+			lines.push("Repository info:")
+			if (this._repoInfo.url) {
+				lines.push(`- URL: ${this._repoInfo.url}`)
+			}
+			lines.push(`- Branch: ${this._repoInfo.branch}`)
+			lines.push("")
+		}
 
 		if (others.length > 0) {
 			lines.push("Other participants:")
