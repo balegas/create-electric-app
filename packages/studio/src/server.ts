@@ -2583,14 +2583,25 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					// Session status is visible in the UI via session state.
-					// Do NOT broadcast @room messages on session end — they
-					// cause other agents (reviewer, ui-designer) to react and
-					// generate noise. The coder's own @room DONE: is sufficient.
 					if (!coderSentDone) {
+						// Coder finished without announcing — send a fallback DONE
+						// so other agents (reviewer, ui-designer) aren't left waiting.
+						const existing = config.sessions.get(coderSession.sessionId)
+						const branch = existing?.git?.branch ?? "main"
+						const repoUrl = existing?.git?.remoteUrl ?? ""
+						const status = success ? "completed" : "ended with errors"
+						const summary = `Session ${status}. Branch: ${branch}${repoUrl ? `, Repo: ${repoUrl}` : ""}.`
 						console.log(
-							`[room:create-app:${roomId}] Coder session ended ${success ? "successfully" : "with error"} without sending DONE`,
+							`[room:create-app:${roomId}] Coder session ${status} without sending DONE — sending fallback`,
 						)
+						await router
+							.sendMessage(
+								coderSession.name,
+								`DONE: ${summary} (auto-announced by system — coder did not send DONE)`,
+							)
+							.catch((err) => {
+								console.error(`[room:create-app:${roomId}] Failed to send fallback DONE:`, err)
+							})
 					} else if (!success) {
 						console.log(
 							`[room:create-app:${roomId}] Coder session ended with error after sending DONE`,
