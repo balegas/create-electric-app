@@ -1,5 +1,13 @@
 # @electric-agent/studio
 
+## 1.13.1
+
+### Patch Changes
+
+- 3f6b96c: Fix duplicate DONE messages from coder agent. The server's onComplete handler now checks whether the coder already sent its own @room DONE: message before emitting a second one. Also updated UI designer role to ask the user before starting a UI audit when the app is complete.
+- 90b3712: Fix "Open App" link not showing on session resume for Sprites. The link now activates after the first "done" log message using the session's previewUrl as fallback, instead of relying solely on the app_status event which often lacks port/previewUrl on replay.
+- 3f6b96c: Fix UI bugs: gate color now turns blue immediately after responding (instead of losing color until agent stops), agents announce in room channel when picking up a DONE task, and room prompt bar stacks correctly on mobile with 3 elements.
+
 ## 1.13.0
 
 ### Minor Changes
