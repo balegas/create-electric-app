@@ -2497,7 +2497,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					coderClaudeConfig,
 				)
 
-				// Track whether the coder already sent a REVIEW_REQUEST or DONE message
+				// Track whether the coder already sent a REVIEW_REQUEST message
 				// so the onComplete handler doesn't emit a duplicate.
 				let coderSentAnnouncement = false
 
@@ -2517,8 +2517,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Route assistant_message output to the room router
 					if (event.type === "assistant_message" && "text" in event) {
 						const text = (event as EngineEvent & { text: string }).text
-						// Detect if the coder is sending its own DONE or REVIEW_REQUEST message
-						if (/^@room\s+(DONE|REVIEW_REQUEST):/m.test(text)) {
+						// Detect if the coder is sending its own REVIEW_REQUEST message
+						if (/^@room\s+REVIEW_REQUEST:/m.test(text)) {
 							coderSentAnnouncement = true
 						}
 						router.handleAgentOutput(coderSession.sessionId, text).catch((err) => {

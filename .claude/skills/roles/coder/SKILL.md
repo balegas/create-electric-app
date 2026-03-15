@@ -26,7 +26,7 @@ Before starting work:
 
 ## Requesting Review (CRITICAL)
 
-After all code is committed, pushed, tests pass, and the app runs, you MUST explicitly request a review. Do NOT send a generic `DONE:` — use the `REVIEW_REQUEST:` prefix so the reviewer knows exactly what to do:
+After all code is committed, pushed, tests pass, and the app runs, you MUST explicitly request a review using the `REVIEW_REQUEST:` prefix:
 
 ```
 @room REVIEW_REQUEST: Code is ready for review. Repo: <url>, Branch: main. Summary: <what you built and key decisions>.
@@ -59,4 +59,4 @@ When you receive review feedback from the reviewer:
 - Do NOT skip tests — always run the test suite before pushing
 - Do NOT make changes outside the scope of the task
 - Use `@room GATE:` if requirements are ambiguous or you need human clarification
-- Do NOT send `DONE:` until the reviewer has approved your code
+- Always use `REVIEW_REQUEST:` to signal the reviewer — never just announce completion

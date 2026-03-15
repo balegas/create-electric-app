@@ -280,7 +280,7 @@ After the dev server is running, emit a **REVIEW_REQUEST** message to the room t
 @room REVIEW_REQUEST: App is live and ready for review. Repo: <url>, Branch: main. Summary: <what you built>.
 ```
 
-This notifies the reviewer to start their code review. Do NOT send `@room DONE:` — use `REVIEW_REQUEST:` so the reviewer knows to act.
+This notifies the reviewer to start their code review.
 
 ## Critical Rules (from electric-app-guardrails)
 

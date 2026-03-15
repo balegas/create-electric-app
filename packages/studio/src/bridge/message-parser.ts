@@ -4,7 +4,6 @@
  * Convention:
  *   @room <body>          → broadcast to all participants
  *   @<name> <body>        → direct message to a specific participant
- *   @room DONE: <summary> → signal conversation completion
  *   @room REVIEW_REQUEST: <summary> → coder requests code review
  *   @room GATE: <question> → request human input
  *
@@ -17,8 +16,6 @@ export interface ParsedRoomMessage {
 	to?: string
 	/** Message body */
 	body: string
-	/** True if body starts with "DONE:" — signals conversation end */
-	isDone: boolean
 	/** True if body starts with "REVIEW_REQUEST:" — coder requests review */
 	isReviewRequest: boolean
 	/** True if body starts with "GATE:" — agent requests human input */
@@ -55,9 +52,8 @@ export function parseRoomMessage(
 	// Body runs from after "@room " to end of string (or next hit, but we want the last one)
 	const body = text.slice(last.startOfBody).trim()
 	const to = last.target === "room" ? undefined : last.target
-	const isDone = body.startsWith("DONE:")
 	const isReviewRequest = body.startsWith("REVIEW_REQUEST:")
 	const isGateRequest = body.startsWith("GATE:")
 
-	return { to, body, isDone, isReviewRequest, isGateRequest }
+	return { to, body, isReviewRequest, isGateRequest }
 }

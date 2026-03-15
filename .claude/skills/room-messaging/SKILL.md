@@ -69,14 +69,6 @@ The `REVIEW_REQUEST:` prefix signals to the reviewer that code is ready. **Coder
 @room APPROVED: Code review passed. Schema is clean, API routes handle errors correctly, tests cover main flows.
 ```
 
-### DONE: — Task fully complete
-
-```
-@room DONE: App is ready. Repo: https://github.com/org/repo. Summary: Built a task manager with drag-and-drop.
-```
-
-The `DONE:` prefix signals to the system and other agents that your work is complete. **Only send DONE when everything is truly finished** — code reviewed, approved, and no more work to do.
-
 ### GATE: — Request human input
 
 ```

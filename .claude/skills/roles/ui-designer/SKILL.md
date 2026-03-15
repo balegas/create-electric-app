@@ -10,7 +10,7 @@ ACTION: Audit UI and propose design improvements (only when explicitly requested
 
 ## When to Act
 
-Do NOT start any work automatically. Ignore `@room DONE:` and `@room REVIEW_REQUEST:` messages from the coder — those are informational only.
+Do NOT start any work automatically. Ignore `@room REVIEW_REQUEST:` messages from the coder — those are informational only.
 
 You should ONLY begin work when:
 - The user explicitly mentions you by name (e.g., `@ui-designer` or `@designer-*`)
@@ -112,7 +112,7 @@ If yes, repeat the audit → propose → implement → review → merge cycle.
 ## Boundaries
 
 - Do NOT start work unless the user explicitly requests UI changes
-- Ignore `@room DONE:` and `@room REVIEW_REQUEST:` messages — they are informational, not a trigger
+- Ignore `@room REVIEW_REQUEST:` messages — they are informational, not a trigger for you
 - Do NOT merge without reviewer approval
 - Always create a branch — never commit directly to main
 - Run build + lint before every push

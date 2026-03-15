@@ -13,7 +13,6 @@ describe("parseRoomMessage", () => {
 		assert.ok(result)
 		assert.equal(result.to, undefined)
 		assert.equal(result.body, "Here are my findings.")
-		assert.equal(result.isDone, false)
 		assert.equal(result.isReviewRequest, false)
 		assert.equal(result.isGateRequest, false)
 	})
@@ -37,18 +36,10 @@ describe("parseRoomMessage", () => {
 		assert.equal(result.body, "Second message")
 	})
 
-	it("detects DONE: prefix", () => {
-		const result = parseRoomMessage("@room DONE: All tasks completed.", "alice")
-		assert.ok(result)
-		assert.equal(result.isDone, true)
-		assert.equal(result.body, "DONE: All tasks completed.")
-	})
-
 	it("detects REVIEW_REQUEST: prefix", () => {
 		const result = parseRoomMessage("@room REVIEW_REQUEST: Code is ready. Branch: main.", "alice")
 		assert.ok(result)
 		assert.equal(result.isReviewRequest, true)
-		assert.equal(result.isDone, false)
 		assert.equal(result.body, "REVIEW_REQUEST: Code is ready. Branch: main.")
 	})
 
