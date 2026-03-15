@@ -11,7 +11,7 @@ You are building a reactive, real-time application using Electric SQL + TanStack
 
 Follow the phases below **in strict order**. Do NOT skip phases or jump ahead.
 
-**CRITICAL — ROOM ANNOUNCEMENT**: After Phase 8 (dev server running), you **MUST** send a `@room DONE:` message on its own line at the end of your response. This triggers the reviewer and UI designer to start their work. If you forget, the pipeline stalls. See Phase 8 "Signal Completion" for the exact format.
+**CRITICAL — ROOM ANNOUNCEMENT**: After Phase 8 (dev server running), you **MUST** send a `@room REVIEW_REQUEST:` message on its own line at the end of your response. This triggers the reviewer to start their review. If you forget, the pipeline stalls. See Phase 8 "Signal Completion" for the exact format.
 
 ## Phase 0: Clarification
 
@@ -88,7 +88,7 @@ export const entityName = pgTable("entity_name", {
 ### Phase 7: Deploy & Preview
 - [ ] Run migrations (drizzle-kit generate && drizzle-kit migrate)
 - [ ] pnpm dev:start
-- [ ] Send `@room DONE:` message with repo URL, branch, and summary (REQUIRED — triggers reviewer/designer)
+- [ ] Send `@room REVIEW_REQUEST:` message with repo URL, branch, and summary (REQUIRED — triggers reviewer)
 
 ## Design Conventions
 - UUID primary keys with defaultRandom()
@@ -272,15 +272,15 @@ pnpm dev:start
 
 After starting, the app is accessible at the preview URL (shown in the UI).
 
-### Signal Completion
+### Signal Completion — Request Review
 
-After the dev server is running, emit a **DONE** message to the room to signal that the app is finished:
+After the dev server is running, emit a **REVIEW_REQUEST** message to the room to signal that the app is ready for review:
 
 ```
-@room DONE: App is live and ready for preview.
+@room REVIEW_REQUEST: App is live and ready for review. Repo: <url>, Branch: main. Summary: <what you built>.
 ```
 
-This notifies the UI and other agents that the build pipeline has completed successfully.
+This notifies the reviewer to start their code review.
 
 ## Critical Rules (from electric-app-guardrails)
 

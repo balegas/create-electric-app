@@ -2101,7 +2101,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const agentDefs = [
 			{ name: `coder-${uniquePick()}`, role: "coder" },
 			{ name: `reviewer-${uniquePick()}`, role: "reviewer" },
-			{ name: `designer-${uniquePick()}`, role: "ui-designer" },
 		] as const
 
 		// Create session IDs and streams upfront for all 3 agents
@@ -2131,10 +2130,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		// Return immediately so the client can show the room + sessions
 		// The async flow handles sandbox creation, skill injection, and agent startup
-		// Sessions are created in agentDefs order: [coder, reviewer, ui-designer]
+		// Sessions are created in agentDefs order: [coder, reviewer]
 		const coderSession = sessions[0]
 		const reviewerSession = sessions[1]
-		const uiDesignerSession = sessions[2]
 		const coderBridge = getOrCreateBridge(config, coderSession.sessionId)
 
 		// Record all sessions
@@ -2275,10 +2273,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			if (!coderInfo) throw new Error("Coder session not found in registry")
 			const reviewerInfo = config.sessions.get(reviewerSession.sessionId)
 			if (!reviewerInfo) throw new Error("Reviewer session not found in registry")
-			const uiDesignerInfo = config.sessions.get(uiDesignerSession.sessionId)
-			if (!uiDesignerInfo) throw new Error("UI designer session not found in registry")
-
-			const [coderHandle, reviewerHandle, uiDesignerHandle] = await Promise.all([
+			const [coderHandle, reviewerHandle] = await Promise.all([
 				config.sandbox.create(coderSession.sessionId, {
 					projectName: coderInfo.projectName,
 					infra,
@@ -2295,20 +2290,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					ghToken,
 					...sandboxOpts(reviewerSession.sessionId),
 				}),
-				config.sandbox.create(uiDesignerSession.sessionId, {
-					projectName: uiDesignerInfo.projectName,
-					infra: { mode: "none" },
-					apiKey,
-					oauthToken,
-					ghToken,
-					...sandboxOpts(uiDesignerSession.sessionId),
-				}),
 			])
 
 			const handles = [
 				{ session: coderSession, handle: coderHandle },
 				{ session: reviewerSession, handle: reviewerHandle },
-				{ session: uiDesignerSession, handle: uiDesignerHandle },
 			]
 
 			// Update session info with sandbox details
@@ -2511,9 +2497,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					coderClaudeConfig,
 				)
 
-				// Track whether the coder already sent a DONE: message itself
+				// Track whether the coder already sent a REVIEW_REQUEST message
 				// so the onComplete handler doesn't emit a duplicate.
-				let coderSentDone = false
+				let coderSentAnnouncement = false
 
 				// Track coder events
 				coderCcBridge.onAgentEvent((event) => {
@@ -2531,9 +2517,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Route assistant_message output to the room router
 					if (event.type === "assistant_message" && "text" in event) {
 						const text = (event as EngineEvent & { text: string }).text
-						// Detect if the coder is sending its own DONE message
-						if (/^@room\s+DONE:/m.test(text)) {
-							coderSentDone = true
+						// Detect if the coder is sending its own REVIEW_REQUEST message
+						if (/^@room\s+REVIEW_REQUEST:/m.test(text)) {
+							coderSentAnnouncement = true
 						}
 						router.handleAgentOutput(coderSession.sessionId, text).catch((err) => {
 							console.error(`[room:create-app:${roomId}] handleAgentOutput error (coder):`, err)
@@ -2583,28 +2569,31 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					if (!coderSentDone) {
-						// Coder finished without announcing — send a fallback DONE
-						// so other agents (reviewer, ui-designer) aren't left waiting.
+					if (!coderSentAnnouncement) {
+						// Coder finished without announcing — send a fallback REVIEW_REQUEST
+						// so the reviewer isn't left waiting.
 						const existing = config.sessions.get(coderSession.sessionId)
 						const branch = existing?.git?.branch ?? "main"
 						const repoUrl = existing?.git?.remoteUrl ?? ""
 						const status = success ? "completed" : "ended with errors"
 						const summary = `Session ${status}. Branch: ${branch}${repoUrl ? `, Repo: ${repoUrl}` : ""}.`
 						console.log(
-							`[room:create-app:${roomId}] Coder session ${status} without sending DONE — sending fallback`,
+							`[room:create-app:${roomId}] Coder session ${status} without sending REVIEW_REQUEST — sending fallback`,
 						)
 						await router
 							.sendMessage(
 								coderSession.name,
-								`DONE: ${summary} (auto-announced by system — coder did not send DONE)`,
+								`REVIEW_REQUEST: ${summary} (auto-announced by system — coder did not send REVIEW_REQUEST)`,
 							)
 							.catch((err) => {
-								console.error(`[room:create-app:${roomId}] Failed to send fallback DONE:`, err)
+								console.error(
+									`[room:create-app:${roomId}] Failed to send fallback REVIEW_REQUEST:`,
+									err,
+								)
 							})
 					} else if (!success) {
 						console.log(
-							`[room:create-app:${roomId}] Coder session ended with error after sending DONE`,
+							`[room:create-app:${roomId}] Coder session ended with error after sending announcement`,
 						)
 					}
 				})
@@ -2646,10 +2635,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				})
 
 				// 5. Set up reviewer and ui-designer sandboxes
-				const supportAgents = [
-					{ session: reviewerSession, handle: reviewerHandle },
-					{ session: uiDesignerSession, handle: uiDesignerHandle },
-				]
+				const supportAgents = [{ session: reviewerSession, handle: reviewerHandle }]
 
 				for (const { session: agentSession, handle: agentHandle } of supportAgents) {
 					const agentBridge = getOrCreateBridge(config, agentSession.sessionId)
@@ -2706,8 +2692,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Build prompt (repo info is now passed via the room router's discovery prompt)
 					const agentPrompt =
 						agentSession.role === "reviewer"
-							? `You are "reviewer", a code review agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines. Wait for the coder to send a @room DONE: message before starting any work.`
-							: `You are "ui-designer", a UI design agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines. Do NOT start any work until a user explicitly asks you to make UI changes. Ignore @room DONE: messages — they are informational only.`
+							? `You are "reviewer", a read-only code review agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines. CRITICAL: You must NEVER modify code — only read and review. Wait for the coder to send a @room REVIEW_REQUEST: message before starting any work.`
+							: `You are "${agentSession.role}", an agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.`
 
 					// Create Claude Code bridge
 					const agentHookToken = deriveHookToken(config.streamConfig.secret, agentSession.sessionId)
@@ -2810,10 +2796,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					await router.addParticipant(participant, false)
 				}
 
-				console.log(`[room:create-app:${roomId}] All 3 agents started and added to room`)
+				console.log(`[room:create-app:${roomId}] All agents started and added to room`)
 				await router.sendMessage(
 					"system",
-					`All agents ready — ${coderSession.name} is building, ${reviewerSession.name} and ${uiDesignerSession.name} waiting.`,
+					`All agents ready — ${coderSession.name} is building, ${reviewerSession.name} waiting for review request. UI designer can be added later via "Add Agent".`,
 				)
 			}
 		}

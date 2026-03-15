@@ -215,7 +215,7 @@ export class RoomRouter {
 		}
 
 		console.log(
-			`[room-router:${this.roomId}] handleAgentOutput: parsed @room message from ${participant.name}: to=${parsed.to ?? "broadcast"} isDone=${parsed.isDone} body=${parsed.body.slice(0, 80)}`,
+			`[room-router:${this.roomId}] handleAgentOutput: parsed @room message from ${participant.name}: to=${parsed.to ?? "broadcast"} isReviewRequest=${parsed.isReviewRequest} body=${parsed.body.slice(0, 80)}`,
 		)
 
 		let finalBody = parsed.body
@@ -332,9 +332,9 @@ export class RoomRouter {
 			}
 		}
 
-		// Announce when agents pick up a DONE task (visible in room timeline)
-		const isDone = /^DONE:/m.test(msg.body)
-		if (isDone && deliverTo.length > 0) {
+		// Announce when agents pick up a task (visible in room timeline)
+		const isReviewRequest = /^REVIEW_REQUEST:/m.test(msg.body)
+		if (isReviewRequest && deliverTo.length > 0) {
 			for (const p of deliverTo) {
 				const action =
 					p.role === "reviewer"

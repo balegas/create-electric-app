@@ -52,6 +52,10 @@ export function RoomPage() {
 					return s.sessionId
 				}
 				// Store room in localStorage for sidebar
+				const findOptionalSession = (role: string) => {
+					const s = result.sessions?.find((s) => s.role === role)
+					return s?.sessionId
+				}
 				addAgentRoom({
 					id: result.roomId,
 					code: result.code,
@@ -60,7 +64,7 @@ export function RoomPage() {
 					sessions: {
 						coder: findSession("coder"),
 						reviewer: findSession("reviewer"),
-						uiDesigner: findSession("ui-designer"),
+						uiDesigner: findOptionalSession("ui-designer"),
 					},
 				})
 				// Store each agent session in localStorage for sidebar display

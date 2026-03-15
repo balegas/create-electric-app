@@ -219,7 +219,7 @@ describe("RoomRouter", () => {
 		router.close()
 	})
 
-	it("DONE: message does not auto-close the room", async () => {
+	it("REVIEW_REQUEST: message does not auto-close the room", async () => {
 		const roomId = uniqueId()
 		const conn = getRoomStreamConnectionInfo(roomId, server.config)
 		await ensureStream(conn.url, conn.headers)
@@ -232,9 +232,9 @@ describe("RoomRouter", () => {
 
 		assert.equal(router.state, "active")
 
-		await router.handleAgentOutput("sess-alice", "@room DONE: All tasks completed.")
+		await router.handleAgentOutput("sess-alice", "@room REVIEW_REQUEST: Code ready for review.")
 
-		// Room should remain active — no auto-close on DONE:
+		// Room should remain active — no auto-close on REVIEW_REQUEST:
 		assert.equal(router.state, "active")
 
 		router.close()

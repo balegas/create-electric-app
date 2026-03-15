@@ -9,7 +9,7 @@ export interface AgentRoomEntry {
 	sessions?: {
 		coder: string
 		reviewer: string
-		uiDesigner: string
+		uiDesigner?: string
 	}
 }
 
