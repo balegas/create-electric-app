@@ -2497,9 +2497,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					coderClaudeConfig,
 				)
 
-				// Track whether the coder already sent a DONE: message itself
+				// Track whether the coder already sent a REVIEW_REQUEST or DONE message
 				// so the onComplete handler doesn't emit a duplicate.
-				let coderSentDone = false
+				let coderSentAnnouncement = false
 
 				// Track coder events
 				coderCcBridge.onAgentEvent((event) => {
@@ -2519,7 +2519,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						const text = (event as EngineEvent & { text: string }).text
 						// Detect if the coder is sending its own DONE or REVIEW_REQUEST message
 						if (/^@room\s+(DONE|REVIEW_REQUEST):/m.test(text)) {
-							coderSentDone = true
+							coderSentAnnouncement = true
 						}
 						router.handleAgentOutput(coderSession.sessionId, text).catch((err) => {
 							console.error(`[room:create-app:${roomId}] handleAgentOutput error (coder):`, err)
@@ -2569,7 +2569,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					if (!coderSentDone) {
+					if (!coderSentAnnouncement) {
 						// Coder finished without announcing — send a fallback REVIEW_REQUEST
 						// so the reviewer isn't left waiting.
 						const existing = config.sessions.get(coderSession.sessionId)
@@ -2593,7 +2593,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							})
 					} else if (!success) {
 						console.log(
-							`[room:create-app:${roomId}] Coder session ended with error after sending DONE`,
+							`[room:create-app:${roomId}] Coder session ended with error after sending announcement`,
 						)
 					}
 				})
