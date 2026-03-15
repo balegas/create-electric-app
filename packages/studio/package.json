@@ -1,6 +1,6 @@
 {
 	"name": "@electric-agent/studio",
-	"version": "1.13.3",
+	"version": "1.14.0",
 	"description": "General-purpose agent studio — web UI, sandbox management, session bridges",
 	"type": "module",
 	"main": "./dist/index.js",
