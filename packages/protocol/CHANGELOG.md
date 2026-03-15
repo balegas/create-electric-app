@@ -1,5 +1,11 @@
 # @electric-agent/protocol
 
+## 1.8.1
+
+### Patch Changes
+
+- b0f6be8: Improve multi-agent coordination: add REVIEW_REQUEST protocol, enforce reviewer read-only guardrails, remove ui-designer from auto-created agents (available via Add Agent instead).
+
 ## 1.8.0
 
 ### Minor Changes

@@ -1,5 +1,16 @@
 # @electric-agent/studio
 
+## 1.14.0
+
+### Minor Changes
+
+- b0f6be8: Improve multi-agent coordination: add REVIEW_REQUEST protocol, enforce reviewer read-only guardrails, remove ui-designer from auto-created agents (available via Add Agent instead).
+
+### Patch Changes
+
+- Updated dependencies [b0f6be8]
+  - @electric-agent/protocol@1.8.1
+
 ## 1.13.3
 
 ### Patch Changes
