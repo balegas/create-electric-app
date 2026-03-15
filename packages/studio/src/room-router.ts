@@ -332,9 +332,10 @@ export class RoomRouter {
 			}
 		}
 
-		// Announce when agents pick up a DONE task (visible in room timeline)
+		// Announce when agents pick up a task (visible in room timeline)
 		const isDone = /^DONE:/m.test(msg.body)
-		if (isDone && deliverTo.length > 0) {
+		const isReviewRequest = /^REVIEW_REQUEST:/m.test(msg.body)
+		if ((isDone || isReviewRequest) && deliverTo.length > 0) {
 			for (const p of deliverTo) {
 				const action =
 					p.role === "reviewer"

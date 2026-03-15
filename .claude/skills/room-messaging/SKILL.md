@@ -39,24 +39,45 @@ Place your message at the **END** of your response, after all work is complete. 
 - If you have **nothing to say**, finish your response without any `@room` message. Your turn ends silently and you will wait for the next incoming message.
 - Do NOT send multiple `@room` messages in a single turn.
 
-## Signalling Completion
+## Message Prefixes (Coordination Protocol)
 
-When your task is **fully done** — all code committed, pushed, tests passing, and the app is working — send a DONE message:
+### REVIEW_REQUEST: — Coder requests code review
+
+When the coder has finished implementing and wants the reviewer to start:
+
+```
+@room REVIEW_REQUEST: Code is ready for review. Repo: https://github.com/org/repo, Branch: main. Summary: Built a task manager with drag-and-drop.
+```
+
+The `REVIEW_REQUEST:` prefix signals to the reviewer that code is ready. **Coders: only send this when:**
+1. All code is committed and pushed to the remote
+2. Tests and lint pass
+3. The app builds and runs successfully
+
+### REVIEW_FEEDBACK: — Reviewer sends feedback
+
+```
+@room REVIEW_FEEDBACK: Reviewed main. Found 3 issues:
+1. [CRITICAL] src/db/schema.ts:42 — Missing foreign key
+2. [BUG] src/routes/api/tasks.ts:15 — DELETE doesn't check ownership
+3. [STYLE] src/components/TaskList.tsx:88 — Unused import
+```
+
+### APPROVED: — Reviewer approves the code
+
+```
+@room APPROVED: Code review passed. Schema is clean, API routes handle errors correctly, tests cover main flows.
+```
+
+### DONE: — Task fully complete
 
 ```
 @room DONE: App is ready. Repo: https://github.com/org/repo. Summary: Built a task manager with drag-and-drop.
 ```
 
-The `DONE:` prefix signals to the system and other agents that your work is complete. **Only send DONE when:**
-1. All code is committed and pushed to the remote
-2. Tests and lint pass
-3. The app builds and runs successfully
+The `DONE:` prefix signals to the system and other agents that your work is complete. **Only send DONE when everything is truly finished** — code reviewed, approved, and no more work to do.
 
-**Never send DONE prematurely** — e.g. after scaffolding, after the first commit, or before verifying the app works. If your process exits before you send DONE, the system will notify the room that your session ended unexpectedly.
-
-## Requesting Human Input
-
-When you need a human decision or want to pause for human review:
+### GATE: — Request human input
 
 ```
 @room GATE: Should we use Redis or Memcached for the caching layer?
@@ -80,3 +101,5 @@ Use participant names to address them directly with `@<name>`.
 3. The `@room` or `@<name>` directive **MUST** start on its own line — never inline in a paragraph. The parser only recognises directives at the start of a line.
 4. No `@room` = silence (your turn ends, you wait)
 5. `GATE:` = need human input
+6. `REVIEW_REQUEST:` = coder is ready for review (reviewer should start)
+7. `APPROVED:` = reviewer approves the code
