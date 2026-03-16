@@ -254,15 +254,6 @@ export class RoomRouter {
 
 		this._roundCount++
 
-		// Auto-close after APPROVED to prevent infinite review loops
-		const isApproval = /^APPROVED:/m.test(finalBody)
-		if (isApproval) {
-			console.log(
-				`[room-router:${this.roomId}] APPROVED detected from ${participant.name}, closing room to end review cycle`,
-			)
-			this._state = "closed"
-		}
-
 		// Safety net: enforce maxRounds to prevent runaway conversations
 		if (this._roundCount >= this.maxRounds) {
 			console.log(
