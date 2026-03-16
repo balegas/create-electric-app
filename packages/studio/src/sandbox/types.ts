@@ -72,6 +72,59 @@ export interface CreateSandboxOpts {
 // NOT through the sandbox provider. The provider is pure CRUD + operations.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Shared git credential helper script
+//
+// Reads EA_SESSION_TOKEN, EA_SESSION_ID, EA_STUDIO_URL from a dedicated env
+// file (~/.git-credential-env) rather than hardcoding secrets in the script.
+// Works in both Docker (non-login bash -c) and Sprites runtimes.
+// ---------------------------------------------------------------------------
+
+export const GIT_CREDENTIAL_ENV_PATH = "/home/agent/.git-credential-env"
+
+export const GIT_CREDENTIAL_SCRIPT = `#!/bin/bash
+# git-credential-electric: fetches GitHub tokens from studio server
+if [ "$1" != "get" ]; then exit 0; fi
+
+input=$(cat)
+host=$(echo "$input" | grep "^host=" | cut -d= -f2)
+if [ "$host" != "github.com" ]; then exit 0; fi
+
+# Load credentials from env file (written during sandbox setup)
+if [ -f "${GIT_CREDENTIAL_ENV_PATH}" ]; then
+  set -a
+  . "${GIT_CREDENTIAL_ENV_PATH}"
+  set +a
+fi
+
+if [ -z "$EA_SESSION_TOKEN" ] || [ -z "$EA_SESSION_ID" ] || [ -z "$EA_STUDIO_URL" ]; then
+  echo "git-credential-electric: missing EA_SESSION_TOKEN/EA_SESSION_ID/EA_STUDIO_URL" >&2
+  exit 1
+fi
+
+response=$(curl -s -w "\\\\n%{http_code}" -X POST \\
+  -H "Authorization: Bearer $EA_SESSION_TOKEN" \\
+  "$EA_STUDIO_URL/api/sessions/$EA_SESSION_ID/github-token")
+
+http_code=$(echo "$response" | tail -1)
+body_text=$(echo "$response" | head -n -1)
+
+if [ "$http_code" != "200" ]; then
+  echo "git-credential-electric: failed to fetch token (HTTP $http_code)" >&2
+  exit 1
+fi
+
+token=$(echo "$body_text" | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
+if [ -n "$token" ] && [ "$token" != "null" ]; then
+  echo "protocol=https"
+  echo "host=github.com"
+  echo "username=x-access-token"
+  echo "password=$token"
+else
+  echo "git-credential-electric: invalid token response" >&2
+  exit 1
+fi`
+
 export interface SandboxProvider {
 	/** The runtime type this provider manages */
 	readonly runtime: SandboxRuntime

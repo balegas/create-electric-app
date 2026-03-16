@@ -1,11 +1,13 @@
 import { type Sprite, SpritesClient } from "@fly/sprites"
 import { ensureBootstrapped } from "./sprites-bootstrap.js"
-import type {
-	CreateSandboxOpts,
-	GitStatus,
-	InfraConfig,
-	SandboxHandle,
-	SandboxProvider,
+import {
+	type CreateSandboxOpts,
+	GIT_CREDENTIAL_ENV_PATH,
+	GIT_CREDENTIAL_SCRIPT,
+	type GitStatus,
+	type InfraConfig,
+	type SandboxHandle,
+	type SandboxProvider,
 } from "./types.js"
 
 /** Shell-quote a string for safe interpolation in bash commands. */
@@ -234,45 +236,21 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		sessionToken: string,
 		studioUrl: string,
 	): Promise<void> {
-		// Embed actual values directly in the script — env vars from profile.d
-		// may not be available when git invokes the credential helper
-		const script = `#!/bin/bash
-# git-credential-electric: fetches GitHub tokens from studio server
-if [ "$1" != "get" ]; then exit 0; fi
+		// Write credentials to a dedicated env file — the credential helper sources
+		// it at runtime. This keeps secrets out of the script itself.
+		const envFile = [
+			`EA_SESSION_TOKEN=${sessionToken}`,
+			`EA_SESSION_ID=${sessionId}`,
+			`EA_STUDIO_URL=${studioUrl}`,
+		].join("\n")
+		const envB64 = Buffer.from(envFile).toString("base64")
+		await sprite.execFile("bash", [
+			"-c",
+			`echo ${envB64} | base64 -d > ${GIT_CREDENTIAL_ENV_PATH} && chmod 600 ${GIT_CREDENTIAL_ENV_PATH}`,
+		])
 
-input=$(cat)
-host=$(echo "$input" | grep "^host=" | cut -d= -f2)
-if [ "$host" != "github.com" ]; then exit 0; fi
-
-SESSION_TOKEN="${sessionToken}"
-SESSION_ID="${sessionId}"
-STUDIO_URL="${studioUrl}"
-
-response=$(curl -s -w "\\n%{http_code}" -X POST \\
-  -H "Authorization: Bearer $SESSION_TOKEN" \\
-  "$STUDIO_URL/api/sessions/$SESSION_ID/github-token")
-
-http_code=$(echo "$response" | tail -1)
-body_text=$(echo "$response" | head -n -1)
-
-if [ "$http_code" != "200" ]; then
-  echo "git-credential-electric: failed to fetch token (HTTP $http_code)" >&2
-  exit 1
-fi
-
-token=$(echo "$body_text" | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
-if [ -n "$token" ] && [ "$token" != "null" ]; then
-  echo "protocol=https"
-  echo "host=github.com"
-  echo "username=x-access-token"
-  echo "password=$token"
-else
-  echo "git-credential-electric: invalid token response" >&2
-  exit 1
-fi`
-
-		// Write credential helper script
-		const scriptB64 = Buffer.from(script).toString("base64")
+		// Write shared credential helper script
+		const scriptB64 = Buffer.from(GIT_CREDENTIAL_SCRIPT).toString("base64")
 		await sprite.execFile("bash", [
 			"-c",
 			`echo ${scriptB64} | base64 -d > /usr/local/bin/git-credential-electric && chmod +x /usr/local/bin/git-credential-electric`,

@@ -63,11 +63,15 @@ The `REVIEW_REQUEST:` prefix signals to the reviewer that code is ready. **Coder
 3. [STYLE] src/components/TaskList.tsx:88 — Unused import
 ```
 
-### APPROVED: — Reviewer approves the code
+### APPROVED: — Reviewer approves the code (TERMINAL — cycle ends)
 
 ```
 @room APPROVED: Code review passed. Schema is clean, API routes handle errors correctly, tests cover main flows.
 ```
+
+**When the coder receives APPROVED:** Do NOT send any further `@room` messages. The review cycle is complete. Finish your turn silently (no `@room` directive). Sending another REVIEW_REQUEST after APPROVED creates an infinite loop.
+
+**When the reviewer sends APPROVED:** This is your final message for this review cycle. Do not send further messages unless a new REVIEW_REQUEST arrives.
 
 ### GATE: — Request human input
 

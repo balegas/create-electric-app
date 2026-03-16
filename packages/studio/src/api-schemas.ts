@@ -80,7 +80,6 @@ export const createAppRoomSchema = z.object({
 export const addAgentSchema = z.object({
 	name: z.string().max(MAX_SHORT).optional(),
 	role: z.string().max(MAX_SHORT).optional(),
-	gated: z.boolean().optional(),
 	initialPrompt: z.string().max(MAX_TEXT).optional(),
 	apiKey: optionalKey,
 	oauthToken: optionalKey,

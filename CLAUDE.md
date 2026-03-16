@@ -176,7 +176,8 @@ You do NOT need to set up database connections or configure Electric. Just defin
 
 ### Prod Mode (NODE_ENV=production, STUDIO_DEV_MODE unset)
 - Claude API key: pre-configured via ANTHROPIC_API_KEY env var on server
-- GitHub: repos created in `electric-apps` org via GitHub App (credential helper in sandbox)
+- GitHub: repos auto-created in `electric-apps` org via GitHub App (see below)
+- Git credential helper installed in sandbox (fetches tokens from studio server)
 - Rate limiting: MAX_TOTAL_SESSIONS + MAX_SESSIONS_PER_IP_PER_HOUR + MAX_SESSION_COST_USD
 - UI: no credential fields, no "Start from repo"
 - POST /api/sessions/resume: returns 403
@@ -187,6 +188,39 @@ You do NOT need to set up database connections or configure Electric. Just defin
 - Full UI with all credential fields
 - No rate limiting
 - Can start from existing repos
+- GitHub App auto-repo-creation still works if GITHUB_APP_ID is set (see below)
+
+### GitHub Repo Auto-Creation (CRITICAL for multi-agent workflows)
+
+When all three GitHub App env vars are set (`GITHUB_APP_ID`, `GITHUB_INSTALLATION_ID`, `GITHUB_PRIVATE_KEY`), the server automatically:
+
+1. Creates a public repo in the `electric-apps` GitHub org after sandbox setup
+2. Runs `git init -b main && git remote add origin <repo-url>` inside the sandbox
+3. Installs a git credential helper that fetches installation tokens from the studio server
+4. Writes CLAUDE.md with `git.mode = "pre-created"` — the agent only commits and pushes
+
+**This is required for multi-agent workflows** — agents coordinate via the GitHub repo (coder pushes, reviewer pulls).
+
+**Without these vars**: no repo is auto-created; in dev mode the agent creates its own repo via `gh repo create` using the user's GH_TOKEN.
+
+**Conditions that enable each feature:**
+| Feature | Condition |
+|---------|-----------|
+| Auto repo creation | `GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY` (any mode) |
+| Git credential helper in sandbox | `!devMode \|\| GITHUB_APP_ID` (prod mode always; dev mode only if GitHub App configured) |
+| `/api/sessions/:id/github-token` | `!devMode` (prod mode only, validates session token) |
+
+**Using GitHub App locally with Docker** (`STUDIO_DEV_MODE=1 + SANDBOX_RUNTIME=docker`):
+
+To enable auto-repo-creation for local Docker development (needed for multi-agent), add the GitHub App secrets to your `.env`:
+
+```bash
+GITHUB_APP_ID=<app-id>
+GITHUB_INSTALLATION_ID=<installation-id>
+GITHUB_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+```
+
+These are the same values set as Fly secrets on the production app. The `.env` file is loaded by `dotenv` at startup and is gitignored.
 
 ### Environment Variables (Prod)
 | Variable | Description | Default |
@@ -195,12 +229,17 @@ You do NOT need to set up database connections or configure Electric. Just defin
 | MAX_SESSIONS_PER_IP_PER_HOUR | Per-IP session rate limit | 5 |
 | MAX_SESSION_COST_USD | Per-session cost budget | 5 |
 
-### Fly Secrets (Prod — GitHub App)
+### GitHub App Secrets
 | Secret | Description |
 |--------|-------------|
 | GITHUB_APP_ID | GitHub App numeric ID |
 | GITHUB_INSTALLATION_ID | Installation ID for electric-apps org |
 | GITHUB_PRIVATE_KEY | PEM private key for JWT signing |
+
+These must be set in three places:
+- **Fly.io production**: `fly secrets set` on the `electric-agent` app
+- **GitHub Actions**: repository secrets (used by `deploy-pr.yml` for PR preview apps)
+- **Local dev**: `.env` file (for Docker mode with multi-agent workflows)
 
 ## Dev Server & Migrations
 ### Dev Server (CRITICAL — use pnpm scripts ONLY)

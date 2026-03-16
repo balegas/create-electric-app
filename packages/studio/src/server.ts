@@ -164,9 +164,12 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 const sessionCreationsByIp = new Map<string, number[]>()
 
 // GitHub App config (prod mode — repo creation in electric-apps org)
-const GITHUB_APP_ID = process.env.GITHUB_APP_ID
-const GITHUB_INSTALLATION_ID = process.env.GITHUB_INSTALLATION_ID
-const GITHUB_PRIVATE_KEY = process.env.GITHUB_PRIVATE_KEY?.replace(/\\n/g, "\n")
+// These are read lazily (inside startWebServer) so that dotenv has time to
+// load .env before they are accessed. ESM import hoisting causes module-level
+// process.env reads to execute before dotenv.config() in the entry point.
+let GITHUB_APP_ID: string | undefined
+let GITHUB_INSTALLATION_ID: string | undefined
+let GITHUB_PRIVATE_KEY: string | undefined
 const GITHUB_ORG = "electric-apps"
 
 // Rate limiting for GitHub token endpoint
@@ -1213,7 +1216,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			await bridge.emit({
 				type: "log",
-				level: "done",
+				level: "system",
 				message: `Sandbox ready (${config.sandbox.runtime})`,
 				ts: ts(),
 			})
@@ -1255,7 +1258,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						console.log(`[session:${sessionId}] Project setup complete`)
 						await bridge.emit({
 							type: "log",
-							level: "done",
+							level: "system",
 							message: "Project ready",
 							ts: ts(),
 						})
@@ -1331,7 +1334,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 								await bridge.emit({
 									type: "log",
-									level: "done",
+									level: "system",
 									message: `GitHub repo created: ${repo.htmlUrl}`,
 									ts: ts(),
 								})
@@ -1428,7 +1431,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			if (repoConfig) {
 				await bridge.emit({
 					type: "log",
-					level: "done",
+					level: "system",
 					message: `GitHub repo: ${repoConfig.account}/${repoConfig.repoName} (${repoConfig.visibility}) — will be created after scaffolding`,
 					ts: ts(),
 				})
@@ -1505,16 +1508,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			console.log(`[session:${sessionId}] Starting bridge listener...`)
 			await bridge.start()
-			console.log(`[session:${sessionId}] Bridge started, sending 'new' command...`)
-
-			// 5. Send the new command via the bridge
-			await bridge.sendCommand({
-				command: "new",
-				description: body.description,
-				projectName,
-				baseDir: "/home/agent/workspace",
-			})
-			console.log(`[session:${sessionId}] Command sent, waiting for agent...`)
+			console.log(`[session:${sessionId}] Bridge started, waiting for agent...`)
 		}
 
 		asyncFlow().catch(async (err) => {
@@ -1616,6 +1610,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		if (config.devMode) {
 			return c.json({ error: "Not available in dev mode" }, 403)
+		}
+
+		// Validate session token from the credential helper
+		const bearer = c.req.header("Authorization")?.replace("Bearer ", "")
+		if (!bearer || !validateSessionToken(config.streamConfig.secret, sessionId, bearer)) {
+			return c.json({ error: "Unauthorized" }, 401)
 		}
 
 		if (!GITHUB_APP_ID || !GITHUB_INSTALLATION_ID || !GITHUB_PRIVATE_KEY) {
@@ -2328,7 +2328,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			await coderBridge.emit({
 				type: "log",
-				level: "done",
+				level: "system",
 				message: "All sandboxes ready",
 				ts: ts(),
 			})
@@ -2359,7 +2359,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					await coderBridge.emit({
 						type: "log",
-						level: "done",
+						level: "system",
 						message: "Project ready",
 						ts: ts(),
 					})
@@ -2420,7 +2420,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 							await coderBridge.emit({
 								type: "log",
-								level: "done",
+								level: "system",
 								message: `GitHub repo created: ${repo.htmlUrl}`,
 								ts: ts(),
 							})
@@ -2600,15 +2600,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					role: "coder",
 					bridge: coderCcBridge,
 				}
-				await router.addParticipant(coderParticipant, false)
-
-				// Send the initial command to the coder
-				await coderCcBridge.sendCommand({
-					command: "new",
-					description: body.description,
-					projectName: coderInfo.projectName,
-					baseDir: "/home/agent/workspace",
-				})
+				await router.addParticipant(coderParticipant)
 
 				// Store the repoUrl for reviewer/ui-designer prompts
 				// (we continue setting up those agents now)
@@ -2765,21 +2757,20 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 					await agentBridge.emit({
 						type: "log",
-						level: "done",
+						level: "system",
 						message: `Sandbox ready for "${agentSession.name}"`,
 						ts: ts(),
 					})
 
 					await ccBridge.start()
 
-					// Add as room participant (not gated — messages flow freely)
 					const participant: RoomParticipant = {
 						sessionId: agentSession.sessionId,
 						name: agentSession.name,
 						role: agentSession.role,
 						bridge: ccBridge,
 					}
-					await router.addParticipant(participant, false)
+					await router.addParticipant(participant)
 				}
 
 				console.log(`[room:create-app:${roomId}] All agents started and added to room`)
@@ -3119,7 +3110,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 				await bridge.emit({
 					type: "log",
-					level: "done",
+					level: "system",
 					message: `Sandbox ready for "${agentName}"`,
 					ts: ts(),
 				})
@@ -3133,7 +3124,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					role: body.role,
 					bridge: ccBridge,
 				}
-				await router.addParticipant(participant, body.gated ?? false)
+				await router.addParticipant(participant)
 
 				// If there's an initial prompt, send it directly to this agent only (not broadcast)
 				if (body.initialPrompt) {
@@ -3228,7 +3219,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				name: body.name,
 				bridge,
 			}
-			await router.addParticipant(participant, false)
+			await router.addParticipant(participant)
 
 			// If there's an initial prompt, send it directly to this agent
 			if (body.initialPrompt) {
@@ -3683,7 +3674,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			await bridge.emit({
 				type: "log",
-				level: "done",
+				level: "system",
 				message: "Repository cloned",
 				ts: ts(),
 			})
@@ -3826,16 +3817,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			console.log(`[session:${sessionId}] Starting bridge listener...`)
 			await ccBridge.start()
-			console.log(`[session:${sessionId}] Bridge started, sending 'new' command...`)
-
-			const newCmd: Record<string, unknown> = {
-				command: "new",
-				description: resumePrompt,
-				projectName: repoName,
-				baseDir: "/home/agent/workspace",
-			}
-			await ccBridge.sendCommand(newCmd)
-			console.log(`[session:${sessionId}] Command sent, waiting for agent...`)
+			console.log(`[session:${sessionId}] Bridge started, waiting for agent...`)
 		}
 
 		asyncFlow().catch(async (err) => {
@@ -3893,6 +3875,18 @@ export async function startWebServer(opts: {
 	const devMode = opts.devMode ?? process.env.STUDIO_DEV_MODE === "1"
 	if (devMode) {
 		console.log("[studio] Dev mode enabled")
+	}
+
+	// Read GitHub App config from env — must happen here (not at module level)
+	// because dotenv.config() in the entry point runs after ESM imports resolve.
+	GITHUB_APP_ID = process.env.GITHUB_APP_ID
+	GITHUB_INSTALLATION_ID = process.env.GITHUB_INSTALLATION_ID
+	GITHUB_PRIVATE_KEY = process.env.GITHUB_PRIVATE_KEY?.replace(/\\n/g, "\n")
+
+	if (GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY) {
+		console.log(`[studio] GitHub App configured: appId=${GITHUB_APP_ID} org=${GITHUB_ORG}`)
+	} else {
+		console.log("[studio] GitHub App not configured — auto repo creation disabled")
 	}
 	// Hydrate session registry from durable stream (survives restarts)
 	const registry = await Registry.create(opts.streamConfig)

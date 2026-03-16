@@ -72,17 +72,36 @@ The app MUST use the Electric theme in `__root.tsx`:
 
 ## Present Findings
 
-Send a `@room GATE:` message to the user with:
-- What looks good (patterns already well-implemented)
-- What needs improvement (specific violations with file:line references)
-- Quick wins (highest visual impact changes)
-- Your proposed improvement plan
+Use `AskUserQuestion` to present your findings and let the user pick which improvements to make. Structure your question with:
 
-Wait for the user's response before proceeding.
+- A **header** summarizing the audit (e.g., "UI Audit — 5 improvements found")
+- Each improvement as a **multiSelect option** with:
+  - `label`: Short name of the improvement (e.g., "Replace raw HTML buttons with Radix Button")
+  - `description`: File:line reference + what changes and why (e.g., "src/components/TaskList.tsx:42 — raw `<button>` elements lack consistent styling and accessibility")
+- Group by impact: list high-impact changes first
+
+**Example pattern:**
+
+```
+AskUserQuestion(
+  header: "UI Audit — 5 improvements found",
+  question: "Select which improvements you'd like me to implement:",
+  multiSelect: true,
+  options: [
+    { label: "Add Card surfaces for depth", description: "src/routes/index.tsx:28 — Content floats on bare background. Wrapping in Card variant='surface' adds visual hierarchy." },
+    { label: "Fix typography hierarchy", description: "src/routes/index.tsx:15 — Page title uses <h1> instead of Heading size='7'. Section headers need size differentiation." },
+    { label: "Replace raw HTML inputs", description: "src/components/AddForm.tsx:12-18 — Raw <input> and <button> should use Radix TextField and Button for consistent styling." },
+    { label: "Add empty state", description: "src/components/ItemList.tsx:31 — No empty state when list is empty. Add illustration or message." },
+    { label: "Apply Electric brand theme", description: "src/routes/__root.tsx:8 — Theme missing accentColor='violet' and grayColor='mauve'." }
+  ]
+)
+```
+
+Only implement the improvements the user selects. If the user selects none, stay silent.
 
 ## Implement Improvements
 
-If the user approves:
+After the user selects improvements:
 1. Create a feature branch: `git checkout -b ui-improvements`
 2. Make the UI changes
 3. Run build and lint: `pnpm run build && pnpm run check`
@@ -104,8 +123,17 @@ After the reviewer approves:
 
 ## Iterate
 
-Ask the user if they want more UI improvements:
-`@room GATE: UI improvements are merged. Would you like me to make additional changes?`
+After improvements are merged, use `AskUserQuestion` to ask:
+
+```
+AskUserQuestion(
+  question: "UI improvements merged. Want me to look for more?",
+  options: [
+    { label: "Yes — run another audit" },
+    { label: "No — looks good" }
+  ]
+)
+```
 
 If yes, repeat the audit → propose → implement → review → merge cycle.
 
@@ -116,4 +144,4 @@ If yes, repeat the audit → propose → implement → review → merge cycle.
 - Do NOT merge without reviewer approval
 - Always create a branch — never commit directly to main
 - Run build + lint before every push
-- Use `@room GATE:` for user decisions
+- Use `AskUserQuestion` to present choices to the user — never implement without user selection

@@ -36,18 +36,13 @@ export interface RoomRouterOptions {
 	repoInfo?: RepoInfo
 }
 
-interface InternalParticipant extends RoomParticipant {
-	/** If true, outbound messages require human approval via agent session gate */
-	gated: boolean
-}
-
 export class RoomRouter {
 	readonly roomId: string
 	private readonly roomName: string
 	private readonly streamConfig: StreamConfig
 	private readonly maxRounds: number
 
-	private readonly _participants = new Map<string, InternalParticipant>()
+	private readonly _participants = new Map<string, RoomParticipant>()
 	private _repoInfo: RepoInfo | null
 	private _state: "active" | "closed" = "active"
 	private _roundCount = 0
@@ -99,9 +94,8 @@ export class RoomRouter {
 	 * Add an agent to the room.
 	 * Reads stream history for discovery context, sends discovery prompt to agent.
 	 */
-	async addParticipant(participant: RoomParticipant, gated = false): Promise<void> {
-		const internal: InternalParticipant = { ...participant, gated }
-		this._participants.set(participant.sessionId, internal)
+	async addParticipant(participant: RoomParticipant): Promise<void> {
+		this._participants.set(participant.sessionId, participant)
 
 		// Read stream history for discovery context (non-live replay)
 		const { roster, recentMessages } = await this.readStreamHistory()
@@ -203,7 +197,7 @@ export class RoomRouter {
 			.map((p) => p.name)
 
 		console.log(
-			`[room-router:${this.roomId}] handleAgentOutput: participant=${participant.name} gated=${participant.gated} knownNames=${knownNames.join(",")} text=${text.slice(0, 120)}`,
+			`[room-router:${this.roomId}] handleAgentOutput: participant=${participant.name} knownNames=${knownNames.join(",")} text=${text.slice(0, 120)}`,
 		)
 
 		const parsed = parseRoomMessage(text, participant.name, knownNames)
@@ -219,10 +213,9 @@ export class RoomRouter {
 		)
 
 		let finalBody = parsed.body
-		const isGateRequest = parsed.isGateRequest
 
-		// Gated agent or explicit gate request: block until human approves
-		if (participant.gated || isGateRequest) {
+		// Explicit GATE: request: block until human approves
+		if (parsed.isGateRequest) {
 			const gateId = `room-msg-${crypto.randomUUID()}`
 
 			// Emit gate event on the agent's session stream
@@ -260,6 +253,23 @@ export class RoomRouter {
 		await this.sendMessage(participant.name, finalBody, parsed.to)
 
 		this._roundCount++
+
+		// Auto-close after APPROVED to prevent infinite review loops
+		const isApproval = /^APPROVED:/m.test(finalBody)
+		if (isApproval) {
+			console.log(
+				`[room-router:${this.roomId}] APPROVED detected from ${participant.name}, closing room to end review cycle`,
+			)
+			this._state = "closed"
+		}
+
+		// Safety net: enforce maxRounds to prevent runaway conversations
+		if (this._roundCount >= this.maxRounds) {
+			console.log(
+				`[room-router:${this.roomId}] maxRounds (${this.maxRounds}) reached, auto-closing room`,
+			)
+			this._state = "closed"
+		}
 	}
 
 	/**
@@ -319,7 +329,7 @@ export class RoomRouter {
 		// System messages are for the room UI only — don't deliver to agents
 		if (msg.from === "system") return
 
-		const deliverTo: InternalParticipant[] = []
+		const deliverTo: RoomParticipant[] = []
 
 		if (msg.to) {
 			// Direct message: find the specific recipient by name

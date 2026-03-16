@@ -1,13 +1,13 @@
 ---
 name: create-app
-description: Create a new Electric SQL + TanStack DB application from a natural-language description. Guides through clarification, planning, data model validation, and code generation. Use this when asked to create, build, or generate a new reactive/local-first app.
+description: Create a new Electric SQL + TanStack DB application from a natural-language description. Guides through clarification, planning, data model validation, and code generation. Use this when asked to create, build, or generate a new reactive real-time app.
 argument-hint: <app description>
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion, Agent, WebSearch, TodoWrite
 ---
 
 # Create Electric SQL App
 
-You are building a **local-first, real-time Electric SQL application** using:
+You are building a **reactive, real-time Electric SQL application** using:
 - **Electric SQL** — Postgres-to-client sync via shapes
 - **TanStack DB** — reactive collections, live queries, optimistic mutations
 - **Drizzle ORM** — schema definitions and migrations
@@ -42,7 +42,7 @@ Write a `PLAN.md` file with this structure:
 # [App Name] — Implementation Plan
 
 ## App Description
-[1-2 sentences describing a local-first, real-time Electric SQL application]
+[1-2 sentences describing a reactive, real-time Electric SQL application]
 
 ## Data Model
 

@@ -56,6 +56,10 @@ jobs:
             DS_SECRET="${{ secrets.DS_SECRET }}"
             GH_TOKEN="${{ secrets.GH_TOKEN }}"
             FLY_API_TOKEN="${{ secrets.SPRITES_API_TOKEN }}"
+            GITHUB_APP_ID="${{ secrets.GITHUB_APP_ID }}"
+            GITHUB_INSTALLATION_ID="${{ secrets.GITHUB_INSTALLATION_ID }}"
+            GITHUB_PRIVATE_KEY="${{ secrets.GITHUB_PRIVATE_KEY }}"
+            ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}"
           )
 
           # When agent code changed, point sprites at the pkg-pr-new preview

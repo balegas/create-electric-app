@@ -160,7 +160,7 @@ cat > "$PROJECT_DIR/CLAUDE.md" << 'CLAUDEMD_EOF'
 # Local Sandbox Project
 
 ## Project Context
-This is a local-first, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start. Electric syncs Postgres data to the client via shapes; TanStack DB provides reactive collections and optimistic mutations.
+This is a reactive, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start. Electric syncs Postgres data to the client via shapes; TanStack DB provides reactive collections and optimistic mutations.
 
 ## Local Environment
 You are running on a local machine with Docker for Postgres + Electric.

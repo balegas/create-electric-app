@@ -343,7 +343,6 @@ export function addAgentToRoom(
 	config: {
 		name?: string
 		role?: string
-		gated?: boolean
 		initialPrompt?: string
 	},
 ) {

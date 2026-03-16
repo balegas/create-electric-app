@@ -672,7 +672,6 @@ function AddAgentModal({
 	const { sessions } = useAppContext()
 	const [mode, setMode] = useState<"new" | "existing">("new")
 	const [role, setRole] = useState("")
-	const [gated, setGated] = useState(false)
 	const [initialPrompt, setInitialPrompt] = useState("")
 	const [selectedSessionId, setSelectedSessionId] = useState("")
 	const [adding, setAdding] = useState(false)
@@ -699,7 +698,6 @@ function AddAgentModal({
 			} else {
 				const result = await addAgentToRoom(roomId, {
 					role: role.trim() || undefined,
-					gated,
 					initialPrompt: initialPrompt.trim() || undefined,
 				})
 				if (result.sessionToken) {
@@ -721,7 +719,7 @@ function AddAgentModal({
 		} finally {
 			setAdding(false)
 		}
-	}, [roomId, mode, role, gated, initialPrompt, selectedSessionId, availableSessions, onAdded])
+	}, [roomId, mode, role, initialPrompt, selectedSessionId, availableSessions, onAdded])
 
 	const canSubmit = mode === "existing" ? !!selectedSessionId : true
 
@@ -782,14 +780,6 @@ function AddAgentModal({
 									placeholder="Optional message to send after agent joins"
 									rows={3}
 								/>
-							</label>
-							<label className="room-form-checkbox">
-								<input
-									type="checkbox"
-									checked={gated}
-									onChange={(e) => setGated(e.target.checked)}
-								/>
-								Gated (require approval for outbound messages)
 							</label>
 						</>
 					)}
