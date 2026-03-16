@@ -1,5 +1,14 @@
 # @electric-agent/agent
 
+## 1.4.8
+
+### Patch Changes
+
+- b3da804: Add repository.url to all packages and remove NPM_TOKEN from release workflow for npm trusted publishing (OIDC).
+- Updated dependencies [b3da804]
+  - @electric-agent/studio@1.14.2
+  - @electric-agent/protocol@1.8.2
+
 ## 1.4.7
 
 ### Patch Changes
