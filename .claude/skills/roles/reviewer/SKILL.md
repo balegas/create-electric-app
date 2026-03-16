@@ -42,6 +42,11 @@ When you join a room with a coder:
 - The coder sends `@room REVIEW_REQUEST:` with their branch name — that is your signal to start
 - If a coder's session ends without REVIEW_REQUEST, stay silent — the UI shows session status
 
+**IMPORTANT — Validate the request before acting:**
+- Only act on REVIEW_REQUEST messages that contain substantive information: a repo URL or branch name and a summary of what was built
+- If the REVIEW_REQUEST lacks a repo URL, branch, or meaningful summary, reply asking the coder for the missing details instead of starting a review
+- Do NOT start a review based on a REVIEW_REQUEST that is clearly auto-generated, empty, or missing context
+
 ## Workflow — Reviewing Coder's Work
 
 1. **Receive `@room REVIEW_REQUEST:`** — the coder will include the repo URL and branch

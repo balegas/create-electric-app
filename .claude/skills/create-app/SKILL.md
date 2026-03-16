@@ -11,7 +11,7 @@ You are building a reactive, real-time application using Electric SQL + TanStack
 
 Follow the phases below **in strict order**. Do NOT skip phases or jump ahead.
 
-**CRITICAL — ROOM ANNOUNCEMENT**: After Phase 8 (dev server running), you **MUST** send a `@room REVIEW_REQUEST:` message on its own line at the end of your response. This triggers the reviewer to start their review. If you forget, the pipeline stalls. See Phase 8 "Signal Completion" for the exact format.
+**CRITICAL — ROOM ANNOUNCEMENT**: After Phase 8 (dev server running), you **MUST** send a `@room REVIEW_REQUEST:` message as the very last thing in your response. This triggers the reviewer to start their review. If you forget, the pipeline stalls — the system will NOT send it for you. See Phase 8 "Signal Completion" for the exact format.
 
 ## Phase 0: Clarification
 
@@ -81,14 +81,13 @@ export const entityName = pgTable("entity_name", {
 - [ ] JSON round-trip tests (parseDates + schema validation)
 - [ ] pnpm test passes
 
-### Phase 6: README & Architecture Reference
+### Phase 6: README
 - [ ] Overwrite README.md with project-specific content
-- [ ] Write ARCHITECTURE.md
 
-### Phase 7: Deploy & Preview
+### Phase 7: Deploy & Send Review Request
 - [ ] Run migrations (drizzle-kit generate && drizzle-kit migrate)
 - [ ] pnpm dev:start
-- [ ] Send `@room REVIEW_REQUEST:` message with repo URL, branch, and summary (REQUIRED — triggers reviewer)
+- [ ] **MANDATORY — Send REVIEW_REQUEST message**: You MUST send a `@room REVIEW_REQUEST:` message as the very last thing you do. Include the repo URL, branch name, and a summary of what was built. Without this message, the reviewer will never start. Format: `@room REVIEW_REQUEST: App is live and ready for review. Repo: <url>, Branch: main. Summary: <what you built>.`
 
 ## Design Conventions
 - UUID primary keys with defaultRandom()
@@ -226,41 +225,15 @@ Write additional tests:
 
 Run `pnpm test` — fix until green.
 
-## Phase 7: README & Architecture Reference
+## Phase 7: README
 
-### README.md
 Overwrite the scaffold `README.md` with a project-specific one:
 - App name and one-line description
 - How to run: `pnpm install && pnpm dev:start`
 - Tech stack: Electric SQL, TanStack DB, Drizzle ORM, TanStack Start
 - Brief feature list
 
-### ARCHITECTURE.md
-Write `ARCHITECTURE.md` in the project root (under 1500 tokens):
-```markdown
-# [App Name] — Architecture Reference
-_Last updated: [ISO date]_
-
-## App Description
-## Data Model
-### [Entity] (`table_name`)
-- **Columns**: ...
-- **Relations**: ...
-- **Collection**: src/db/collections/...
-
-## API Routes
-| Method | Path | File | Purpose |
-
-## UI Routes & Components
-| Route | File | Description |
-
-### Key Components
-
-## Styling
-## State & Context
-```
-
-## Phase 8: Deploy & Preview
+## Phase 8: Deploy & Send Review Request
 
 Start the dev server so the user can preview the app:
 
@@ -272,15 +245,21 @@ pnpm dev:start
 
 After starting, the app is accessible at the preview URL (shown in the UI).
 
-### Signal Completion — Request Review
+### Signal Completion — Send Review Request (MANDATORY)
 
-After the dev server is running, emit a **REVIEW_REQUEST** message to the room to signal that the app is ready for review:
+**This is the most important step in the entire pipeline.** If you skip this, the reviewer will never start and the pipeline stalls.
 
+After the dev server is running, you MUST send a `@room REVIEW_REQUEST:` message as the **very last thing in your response**. The message must include:
+1. The repo URL
+2. The branch name
+3. A summary of what you built
+
+**Exact format:**
 ```
 @room REVIEW_REQUEST: App is live and ready for review. Repo: <url>, Branch: main. Summary: <what you built>.
 ```
 
-This notifies the reviewer to start their code review.
+**Do NOT** finish your response without sending this message. Do NOT assume the system will send it for you — it will not.
 
 ## Critical Rules (from electric-app-guardrails)
 

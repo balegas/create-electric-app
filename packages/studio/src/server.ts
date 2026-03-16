@@ -81,11 +81,26 @@ interface ServerConfig {
 	/** Bridge mode — always "claude-code" */
 	bridgeMode: BridgeMode
 	/**
-	 * Enable dev-only endpoints (e.g. macOS Keychain credential reading).
+	 * Enable dev-only endpoints (e.g. resume from repo, manual credential input).
 	 * Set via `devMode: true` in startWebServer opts or `STUDIO_DEV_MODE=1` env var.
-	 * SECURITY: Never enable in production — the keychain endpoint exposes OAuth tokens.
 	 */
 	devMode: boolean
+}
+
+/** Read OAuth token from macOS Keychain (Claude Code credentials). */
+function readKeychainOAuthToken(): string | null {
+	if (process.platform !== "darwin") return null
+	try {
+		const raw = execFileSync(
+			"security",
+			["find-generic-password", "-s", "Claude Code-credentials", "-w"],
+			{ encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] },
+		).trim()
+		const parsed = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
+		return parsed.claudeAiOauth?.accessToken ?? null
+	} catch {
+		return null
+	}
 }
 
 /** Active session bridges — one per running session */
@@ -1002,14 +1017,16 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createSessionSchema)
 		if (isResponse(body)) return body
 
-		// In prod mode, use server-side API key; ignore user-provided credentials
+		// Resolve Claude credentials — try OAuth from keychain first, then API key
 		const apiKey = config.devMode
 			? body.apiKey || process.env.ANTHROPIC_API_KEY
 			: process.env.ANTHROPIC_API_KEY
 		const oauthToken = config.devMode
 			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
-			: undefined
+			: (readKeychainOAuthToken() ?? undefined)
 		const ghToken = config.devMode ? body.ghToken : undefined
+		const authType = oauthToken ? "oauth-keychain" : apiKey ? "api-key" : "none"
+		console.log(`[auth] Using ${authType} for Claude credentials`)
 
 		// Block freeform sessions in production mode
 		if (body.freeform && !config.devMode) {
@@ -2020,14 +2037,16 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createAppRoomSchema)
 		if (isResponse(body)) return body
 
-		// In prod mode, use server-side API key; ignore user-provided credentials
+		// Resolve Claude credentials — try OAuth from keychain first, then API key
 		const apiKey = config.devMode
 			? body.apiKey || process.env.ANTHROPIC_API_KEY
 			: process.env.ANTHROPIC_API_KEY
 		const oauthToken = config.devMode
 			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
-			: undefined
+			: (readKeychainOAuthToken() ?? undefined)
 		const ghToken = config.devMode ? body.ghToken : undefined
+		const authType = oauthToken ? "oauth-keychain" : apiKey ? "api-key" : "none"
+		console.log(`[auth] Using ${authType} for Claude credentials`)
 
 		// Rate-limit session creation in production mode
 		if (!config.devMode) {
@@ -2497,10 +2516,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					coderClaudeConfig,
 				)
 
-				// Track whether the coder already sent a REVIEW_REQUEST message
-				// so the onComplete handler doesn't emit a duplicate.
-				let coderSentAnnouncement = false
-
 				// Track coder events
 				coderCcBridge.onAgentEvent((event) => {
 					if (event.type === "session_start") {
@@ -2517,10 +2532,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Route assistant_message output to the room router
 					if (event.type === "assistant_message" && "text" in event) {
 						const text = (event as EngineEvent & { text: string }).text
-						// Detect if the coder is sending its own REVIEW_REQUEST message
-						if (/^@room\s+REVIEW_REQUEST:/m.test(text)) {
-							coderSentAnnouncement = true
-						}
 						router.handleAgentOutput(coderSession.sessionId, text).catch((err) => {
 							console.error(`[room:create-app:${roomId}] handleAgentOutput error (coder):`, err)
 						})
@@ -2569,33 +2580,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					if (!coderSentAnnouncement) {
-						// Coder finished without announcing — send a fallback REVIEW_REQUEST
-						// so the reviewer isn't left waiting.
-						const existing = config.sessions.get(coderSession.sessionId)
-						const branch = existing?.git?.branch ?? "main"
-						const repoUrl = existing?.git?.remoteUrl ?? ""
-						const status = success ? "completed" : "ended with errors"
-						const summary = `Session ${status}. Branch: ${branch}${repoUrl ? `, Repo: ${repoUrl}` : ""}.`
-						console.log(
-							`[room:create-app:${roomId}] Coder session ${status} without sending REVIEW_REQUEST — sending fallback`,
-						)
-						await router
-							.sendMessage(
-								coderSession.name,
-								`REVIEW_REQUEST: ${summary} (auto-announced by system — coder did not send REVIEW_REQUEST)`,
-							)
-							.catch((err) => {
-								console.error(
-									`[room:create-app:${roomId}] Failed to send fallback REVIEW_REQUEST:`,
-									err,
-								)
-							})
-					} else if (!success) {
-						console.log(
-							`[room:create-app:${roomId}] Coder session ended with error after sending announcement`,
-						)
-					}
+					const status = success ? "completed" : "ended with errors"
+					console.log(`[room:create-app:${roomId}] Coder session ${status}`)
 				})
 
 				await coderBridge.emit({
@@ -3601,32 +3587,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 	})
 
-	// Read Claude credentials from macOS Keychain (dev convenience).
-	// Disabled by default — enable via devMode: true or STUDIO_DEV_MODE=1.
-	if (config.devMode) {
-		app.get("/api/credentials/keychain", (c) => {
-			if (process.platform !== "darwin") {
-				return c.json({ apiKey: null })
-			}
-			try {
-				const raw = execFileSync(
-					"security",
-					["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-					{ encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] },
-				).trim()
-				const parsed = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
-				const token = parsed.claudeAiOauth?.accessToken ?? null
-				if (token) {
-					console.log(`[dev] Loaded OAuth token from keychain (length: ${token.length})`)
-				} else {
-					console.log("[dev] No OAuth token found in keychain")
-				}
-				return c.json({ oauthToken: token })
-			} catch {
-				return c.json({ oauthToken: null })
-			}
-		})
-	}
+	// Read Claude credentials from macOS Keychain.
+	app.get("/api/credentials/keychain", (c) => {
+		const token = readKeychainOAuthToken()
+		if (token) {
+			console.log(`[keychain] Loaded OAuth token (length: ${token.length})`)
+		}
+		return c.json({ oauthToken: token })
+	})
 
 	// Resume a project from a GitHub repo (dev mode only)
 	app.post("/api/sessions/resume", async (c) => {
@@ -3917,15 +3885,14 @@ export async function startWebServer(opts: {
 	streamConfig: StreamConfig
 	bridgeMode?: BridgeMode
 	/**
-	 * Enable dev-only endpoints (e.g. macOS Keychain credential reading).
+	 * Enable dev-only endpoints (e.g. resume from repo, manual credential input).
 	 * Can also be enabled via the `STUDIO_DEV_MODE=1` environment variable.
-	 * SECURITY: Never enable in production — the keychain endpoint exposes OAuth tokens.
 	 */
 	devMode?: boolean
 }): Promise<void> {
 	const devMode = opts.devMode ?? process.env.STUDIO_DEV_MODE === "1"
 	if (devMode) {
-		console.log("[studio] Dev mode enabled — keychain endpoint active")
+		console.log("[studio] Dev mode enabled")
 	}
 	// Hydrate session registry from durable stream (survives restarts)
 	const registry = await Registry.create(opts.streamConfig)
