@@ -1,5 +1,12 @@
 # @electric-agent/studio
 
+## 1.14.1
+
+### Patch Changes
+
+- c1515e6: Fix CI publish filter that prevented pnpm from finding workspace packages
+- 9631599: Remove auto-announced fallback REVIEW_REQUEST messages when coder finishes without sending one. Add reviewer guardrails to validate REVIEW_REQUEST content before starting review. Remove ARCHITECTURE.md from create-app plan and make final REVIEW_REQUEST step mandatory and explicit.
+
 ## 1.14.0
 
 ### Minor Changes
