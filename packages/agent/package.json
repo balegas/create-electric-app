@@ -2,6 +2,11 @@
 	"name": "@electric-agent/agent",
 	"version": "1.4.6",
 	"description": "CLI tool that turns natural-language app descriptions into running reactive Electric SQL + TanStack DB applications",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/balegas/create-electric-app",
+		"directory": "packages/agent"
+	},
 	"type": "module",
 	"bin": {
 		"electric-agent": "./dist/index.js"

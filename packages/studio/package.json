@@ -2,6 +2,11 @@
 	"name": "@electric-agent/studio",
 	"version": "1.14.0",
 	"description": "General-purpose agent studio — web UI, sandbox management, session bridges",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/balegas/create-electric-app",
+		"directory": "packages/studio"
+	},
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
