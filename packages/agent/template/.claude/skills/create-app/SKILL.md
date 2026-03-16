@@ -61,8 +61,8 @@ Write a `PLAN.md` file with this structure:
 - [ ] Phase 4: Collections & API routes
 - [ ] Phase 5: UI components
 - [ ] Phase 6: Build, lint & test
-- [ ] Phase 7: README.md & ARCHITECTURE.md
-- [ ] Phase 8: Deploy & preview
+- [ ] Phase 7: README.md
+- [ ] Phase 8: Deploy & send `@room REVIEW_REQUEST:` (MANDATORY — pipeline stalls without it)
 
 ## Design Conventions
 - UUID primary keys with defaultRandom()
@@ -207,7 +207,7 @@ Fix until green.
 
 ---
 
-## Phase 7: Deploy & Preview
+## Phase 7: Deploy & Send Review Request
 
 Run migrations and start the dev server:
 ```bash
@@ -219,7 +219,22 @@ pnpm dev:start
 
 After the app is running, write:
 1. `README.md` — overwrite the scaffold README with a project-specific one: app name, one-line description, screenshot placeholder, how to run (`pnpm install && pnpm dev:start`), tech stack (Electric SQL, TanStack DB, Drizzle, TanStack Start), and a brief feature list.
-2. `ARCHITECTURE.md` — brief reference: entities, routes, components.
+
+### Signal Completion — Send Review Request (MANDATORY)
+
+**This is the most important step in the entire pipeline.** If you skip this, the reviewer will never start and the pipeline stalls.
+
+After the dev server is running, you MUST send a `@room REVIEW_REQUEST:` message as the **very last thing in your response**. The message must include:
+1. The repo URL
+2. The branch name
+3. A summary of what you built
+
+**Exact format:**
+```
+@room REVIEW_REQUEST: App is live and ready for review. Repo: <url>, Branch: main. Summary: <what you built>.
+```
+
+**Do NOT** finish your response without sending this message. Do NOT assume the system will send it for you — it will not.
 
 ---
 
