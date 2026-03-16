@@ -1,5 +1,14 @@
 # @electric-agent/agent
 
+## 1.4.7
+
+### Patch Changes
+
+- 9631599: Remove auto-announced fallback REVIEW_REQUEST messages when coder finishes without sending one. Add reviewer guardrails to validate REVIEW_REQUEST content before starting review. Remove ARCHITECTURE.md from create-app plan and make final REVIEW_REQUEST step mandatory and explicit.
+- Updated dependencies [c1515e6]
+- Updated dependencies [9631599]
+  - @electric-agent/studio@1.14.1
+
 ## 1.4.6
 
 ### Patch Changes
