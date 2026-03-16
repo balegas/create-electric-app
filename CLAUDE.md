@@ -68,7 +68,8 @@ The skill enforces the correct phase order:
 5. UI components
 6. Build & lint
 7. Final tests
-8. Architecture reference (ARCHITECTURE.md)
+8. README
+9. Deploy & send `@room REVIEW_REQUEST:` (MANDATORY — pipeline stalls without it)
 
 Do NOT skip phases or code ad-hoc. Always follow the skill's structured pipeline.
 
