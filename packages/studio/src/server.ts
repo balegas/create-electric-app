@@ -1020,14 +1020,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createSessionSchema)
 		if (isResponse(body)) return body
 
-		// Resolve Claude credentials — try OAuth from keychain first, then API key
-		const apiKey = config.devMode
-			? body.apiKey || process.env.ANTHROPIC_API_KEY
-			: process.env.ANTHROPIC_API_KEY
+		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
 		const oauthToken = config.devMode
 			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
 			: (readKeychainOAuthToken() ?? undefined)
-		const ghToken = config.devMode ? body.ghToken : undefined
+		const ghToken = body.ghToken
 		const authType = oauthToken ? "oauth-keychain" : apiKey ? "api-key" : "none"
 		console.log(`[auth] Using ${authType} for Claude credentials`)
 
@@ -2037,14 +2035,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createAppRoomSchema)
 		if (isResponse(body)) return body
 
-		// Resolve Claude credentials — try OAuth from keychain first, then API key
-		const apiKey = config.devMode
-			? body.apiKey || process.env.ANTHROPIC_API_KEY
-			: process.env.ANTHROPIC_API_KEY
+		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
 		const oauthToken = config.devMode
 			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
 			: (readKeychainOAuthToken() ?? undefined)
-		const ghToken = config.devMode ? body.ghToken : undefined
+		const ghToken = body.ghToken
 		const authType = oauthToken ? "oauth-keychain" : apiKey ? "api-key" : "none"
 		console.log(`[auth] Using ${authType} for Claude credentials`)
 
@@ -2941,13 +2937,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				return c.json({ error: "Service at capacity, please try again later" }, 503)
 			}
 		}
-		const apiKey = config.devMode
-			? body.apiKey || process.env.ANTHROPIC_API_KEY
-			: process.env.ANTHROPIC_API_KEY
+		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
 		const oauthToken = config.devMode
 			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
 			: undefined
-		const ghToken = config.devMode ? body.ghToken : undefined
+		const ghToken = body.ghToken
 
 		const sessionId = crypto.randomUUID()
 		const randomSuffix = sessionId.slice(0, 6)
