@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { InfraConfigGate } from "../components/GatePrompt"
+import { Markdown } from "../components/Markdown"
 import { getAvatarColor } from "../components/SessionListItem"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
 import { useAppContext } from "../layouts/AppShell"
@@ -429,49 +430,6 @@ function RoomParticipantPrefix({
 	)
 }
 
-function escapeRegExp(str: string) {
-	return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-function RoomMessageBody({
-	body,
-	participants,
-}: {
-	body: string
-	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
-}) {
-	const navigate = useNavigate()
-	const nameMap = new Map(participants.map((p) => [p.name, p.sessionId]))
-
-	if (nameMap.size === 0) return <>{body}</>
-
-	const namePattern = [...nameMap.keys()].map(escapeRegExp).join("|")
-	const regex = new RegExp(`(${namePattern})`, "g")
-	const parts = body.split(regex)
-
-	return (
-		<>
-			{parts.map((part, i) => {
-				const sessionId = nameMap.get(part)
-				if (sessionId) {
-					return (
-						<button
-							key={`${part}-${i}`}
-							type="button"
-							className="room-inline-link"
-							onClick={() => navigate(`/session/${sessionId}`)}
-							title={`Go to ${part}'s session`}
-						>
-							{part}
-						</button>
-					)
-				}
-				return <span key={`text-${i}`}>{part}</span>
-			})}
-		</>
-	)
-}
-
 function RoomEventList({
 	events,
 	participants,
@@ -527,27 +485,45 @@ function RoomEventList({
 									<span className="prefix" style={{ color: "var(--orange)" }}>
 										[system]
 									</span>
+									<span>{event.body}</span>
+									{time}
+								</div>
+							)
+						}
+						if (event.body.length <= 300) {
+							return (
+								<div key={key} className="console-entry">
+									<RoomParticipantPrefix name={event.from} participants={participants} />
+									{event.to && (
+										<>
+											<span className="room-message-arrow">&rarr;</span>
+											<RoomParticipantPrefix name={event.to} participants={participants} />
+										</>
+									)}
 									<span>
-										<RoomMessageBody body={event.body} participants={participants} />
+										<Markdown inline>{event.body}</Markdown>
 									</span>
 									{time}
 								</div>
 							)
 						}
 						return (
-							<div key={key} className="console-entry">
-								<RoomParticipantPrefix name={event.from} participants={participants} />
-								{event.to && (
-									<>
-										<span className="room-message-arrow">&rarr;</span>
-										<RoomParticipantPrefix name={event.to} participants={participants} />
-									</>
-								)}
-								<span>
-									<RoomMessageBody body={event.body} participants={participants} />
-								</span>
-								{time}
-							</div>
+							<details key={key} className="tool-inline">
+								<summary>
+									<RoomParticipantPrefix name={event.from} participants={participants} />
+									{event.to && (
+										<>
+											<span className="room-message-arrow">&rarr;</span>
+											<RoomParticipantPrefix name={event.to} participants={participants} />
+										</>
+									)}
+									<span className="tool-inline-summary">{event.body.slice(0, 120)}...</span>
+									{time}
+								</summary>
+								<div className="tool-inline-body">
+									<Markdown>{event.body}</Markdown>
+								</div>
+							</details>
 						)
 					case "participant_joined": {
 						const joinedName = event.participant?.displayName ?? "Unknown"
