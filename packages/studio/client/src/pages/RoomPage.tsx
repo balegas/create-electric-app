@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { InfraConfigGate } from "../components/GatePrompt"
 import { getAvatarColor } from "../components/SessionListItem"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
 import { useAppContext } from "../layouts/AppShell"
@@ -28,6 +29,7 @@ export function RoomPage() {
 	const [error, setError] = useState<string | null>(null)
 	const [showAddAgent, setShowAddAgent] = useState(false)
 	const [sending, setSending] = useState(false)
+	const [infraGateResolved, setInfraGateResolved] = useState(false)
 	const loadedRef = useRef(false)
 
 	// Handle /room/new — create a multi-agent app room
@@ -166,6 +168,9 @@ export function RoomPage() {
 	const appUrl =
 		roomState?.previewUrl ??
 		(roomState?.appPort ? `http://localhost:${roomState.appPort}` : undefined)
+	const pendingInfraGate = roomState?.pendingInfraGate
+	const resolvedInfraDetails = roomState?.resolvedInfraDetails
+
 	return (
 		<>
 			<RoomHeader
@@ -186,6 +191,38 @@ export function RoomPage() {
 						participants={participants}
 						provisioning={!!roomEntry?.sessions && participants.length < 3}
 					/>
+					{pendingInfraGate && !infraGateResolved && (
+						<div style={{ padding: "0 16px 16px" }}>
+							<InfraConfigGate
+								sessionId={pendingInfraGate.sessionId}
+								event={{
+									type: "infra_config_prompt" as const,
+									projectName: pendingInfraGate.projectName,
+									ghAccounts: [],
+									runtime: pendingInfraGate.runtime,
+									ts: new Date().toISOString(),
+								}}
+								onResolved={() => setInfraGateResolved(true)}
+							/>
+						</div>
+					)}
+					{!pendingInfraGate && resolvedInfraDetails && (
+						<div style={{ padding: "0 16px 16px" }}>
+							<InfraConfigGate
+								sessionId=""
+								event={{
+									type: "infra_config_prompt" as const,
+									projectName: "",
+									ghAccounts: [],
+									runtime: "",
+									ts: new Date().toISOString(),
+								}}
+								onResolved={() => {}}
+								resolved
+								resolvedDetails={resolvedInfraDetails}
+							/>
+						</div>
+					)}
 				</div>
 
 				<RoomInput

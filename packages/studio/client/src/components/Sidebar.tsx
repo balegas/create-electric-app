@@ -92,21 +92,22 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 
 	const handleRemoveRoom = useCallback(
 		(roomId: string) => {
+			// Delete all sessions that belong to this room
 			const room = agentRooms.find((r) => r.id === roomId)
-			if (room?.sessions) {
-				const sessionIds = [
-					room.sessions.coder,
-					room.sessions.reviewer,
-					room.sessions.uiDesigner,
-				].filter(Boolean)
-				for (const sid of sessionIds) {
-					handleDeleteSession(sid)
+			for (const s of sessions) {
+				const belongsToRoom =
+					room?.sessions &&
+					(room.sessions.coder === s.id ||
+						room.sessions.reviewer === s.id ||
+						room.sessions.uiDesigner === s.id)
+				if (belongsToRoom) {
+					handleDeleteSession(s.id)
 				}
 			}
 			removeAgentRoom(roomId)
 			refreshAgentRooms()
 		},
-		[agentRooms, handleDeleteSession, refreshAgentRooms],
+		[sessions, agentRooms, handleDeleteSession, refreshAgentRooms],
 	)
 
 	const handleJoinRoom = useCallback(async () => {

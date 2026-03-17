@@ -2185,29 +2185,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Write user prompt to coder's stream
 		await coderBridge.emit({ type: "user_prompt", message: body.description, ts: ts() })
 
-		// Gather GitHub accounts for the infra config gate (dev mode only)
-		let ghAccounts: { login: string; type: "user" | "org" }[] = []
-		if (config.devMode && ghToken && isGhAuthenticated(ghToken)) {
-			try {
-				ghAccounts = ghListAccounts(ghToken)
-			} catch {
-				// gh not available
-			}
-		}
-
-		// Emit infra config gate on coder's stream
-		const coderProjectName =
-			config.sessions.get(coderSession.sessionId)?.projectName ?? coderSession.name
-		await coderBridge.emit({
-			type: "infra_config_prompt",
-			projectName: coderProjectName,
-			ghAccounts,
-			runtime: config.sandbox.runtime,
-			ts: ts(),
-		})
-
-		// Create the gate synchronously so it's visible to room state polls immediately.
-		// The Promise is awaited inside asyncFlow.
+		// Create the infra gate synchronously so it's visible to room state polls
+		// immediately. The gate is resolved from the room page UI.
 		console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
 		const infraGatePromise = createGate<
 			InfraConfig & {
@@ -2221,10 +2200,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Async flow: wait for gate, create sandboxes, start agents
 		const asyncFlow = async () => {
 			// 1. Wait for infra config gate on coder's session
-			await router.sendMessage(
-				"system",
-				`Waiting for setup — open ${coderSession.name}'s session to confirm infrastructure.`,
-			)
+			await router.sendMessage("system", "Waiting for setup — confirm infrastructure to continue.")
 			let infra: InfraConfig
 			let repoConfig: {
 				account: string
