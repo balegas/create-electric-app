@@ -1,5 +1,20 @@
 # @electric-agent/agent
 
+## 1.4.9
+
+### Patch Changes
+
+- 50fa113: Room improvements: fix review loop, remove per-agent gating, update messaging
+
+  - Fix coder-reviewer infinite loop: coder skill now distinguishes REVIEW_FEEDBACK from APPROVED, room router auto-closes on APPROVED, maxRounds enforced
+  - Remove per-agent `gated` option from addParticipant and UI (GATE: prefix for human input still works)
+  - Update "local-first" references to "reactive, real-time" to match Electric SQL's current positioning
+  - UI designer skill uses AskUserQuestion with multiSelect for presenting improvement suggestions
+
+- Updated dependencies [50fa113]
+  - @electric-agent/studio@1.15.0
+  - @electric-agent/protocol@1.8.3
+
 ## 1.4.8
 
 ### Patch Changes
