@@ -177,7 +177,7 @@
 }
 
 .sidebar-sessions > .sidebar-section-label:first-child {
-	padding-top: 4px;
+	padding-top: 12px;
 }
 
 /* Session content: console + prompt */
