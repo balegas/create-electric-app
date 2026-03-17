@@ -2077,6 +2077,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		await router.start()
 		roomRouters.set(roomId, router)
 
+		// NOTE: pending sessions are registered below after session IDs are created
+
 		// Save to room registry
 		const code = generateInviteCode()
 		await config.rooms.addRoom({
@@ -2138,6 +2140,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
 			sessions.push({ name: agentDef.name, role: agentDef.role, sessionId, sessionToken })
 		}
+
+		// Register sessions as pending so the room state endpoint can find their gates
+		router.addPendingSessions(
+			sessions.map((s) => ({ sessionId: s.sessionId, name: s.name, role: s.role })),
+		)
 
 		const roomToken = deriveRoomToken(config.streamConfig.secret, roomId)
 		console.log(
@@ -2876,16 +2883,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				appPort = handle?.port ?? session?.appPort
 			}
 
-			// Check if any participant has a pending infra_config gate
-			const infraGateParticipant = router.participants.find((p) =>
-				hasGate(p.sessionId, "infra_config"),
-			)
-			const pendingInfraGate = infraGateParticipant
+			// Check if any participant or pending session has a pending infra_config gate
+			const allSessions = [
+				...router.participants.map((p) => ({ sessionId: p.sessionId, name: p.name })),
+				...router.pendingSessions.map((s) => ({ sessionId: s.sessionId, name: s.name })),
+			]
+			const infraGateSession = allSessions.find((s) => hasGate(s.sessionId, "infra_config"))
+			const pendingInfraGate = infraGateSession
 				? {
-						sessionId: infraGateParticipant.sessionId,
+						sessionId: infraGateSession.sessionId,
 						projectName:
-							config.sessions.get(infraGateParticipant.sessionId)?.projectName ??
-							infraGateParticipant.name,
+							config.sessions.get(infraGateSession.sessionId)?.projectName ?? infraGateSession.name,
 						runtime: config.sandbox.runtime,
 					}
 				: undefined

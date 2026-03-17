@@ -43,6 +43,10 @@ export class RoomRouter {
 	private readonly maxRounds: number
 
 	private readonly _participants = new Map<string, RoomParticipant>()
+	private readonly _pendingSessions = new Map<
+		string,
+		{ sessionId: string; name: string; role: string }
+	>()
 	private _repoInfo: RepoInfo | null
 	private _state: "active" | "closed" = "active"
 	private _roundCount = 0
@@ -84,6 +88,23 @@ export class RoomRouter {
 	}
 
 	/**
+	 * Sessions that belong to this room but haven't joined as participants yet
+	 * (e.g. waiting for infra gate to resolve before sandbox creation).
+	 */
+	get pendingSessions(): Array<{ sessionId: string; name: string; role: string }> {
+		return [...this._pendingSessions.values()]
+	}
+
+	/**
+	 * Register sessions that will eventually become participants.
+	 */
+	addPendingSessions(sessions: Array<{ sessionId: string; name: string; role: string }>): void {
+		for (const s of sessions) {
+			this._pendingSessions.set(s.sessionId, s)
+		}
+	}
+
+	/**
 	 * Update the repository info (e.g. after the GitHub repo is created).
 	 */
 	setRepoInfo(info: RepoInfo): void {
@@ -96,6 +117,7 @@ export class RoomRouter {
 	 */
 	async addParticipant(participant: RoomParticipant): Promise<void> {
 		this._participants.set(participant.sessionId, participant)
+		this._pendingSessions.delete(participant.sessionId)
 
 		// Read stream history for discovery context (non-live replay)
 		const { roster, recentMessages } = await this.readStreamHistory()
