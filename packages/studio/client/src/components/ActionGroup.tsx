@@ -46,19 +46,34 @@ function countLabel(items: ActionGroupEntry[]): string {
 		.every((i) => (i.entry as ToolEntry).tool_response !== null)
 
 	if (allDone) {
-		return `${toolCount} action${toolCount !== 1 ? "s" : ""}`
+		return `${toolCount} tool${toolCount !== 1 ? "s" : ""}`
 	}
-	return `${toolCount} action${toolCount !== 1 ? "s" : ""}...`
+	return `${toolCount} tool${toolCount !== 1 ? "s" : ""}...`
 }
 
 export function ActionGroup({ items }: ActionGroupProps) {
 	const [expanded, setExpanded] = useState(false)
-
 	const toolItems = items.filter((i) => i.entry.kind === "tool_use")
 	const allDone = toolItems.every((i) => (i.entry as ToolEntry).tool_response !== null)
-	const tailItems = toolItems.slice(-3)
 	const totalDuration = aggregateDuration(items)
 
+	// Small groups: show all tools inline, no collapsing
+	if (toolItems.length <= 3) {
+		return (
+			<div className="tool-group">
+				{toolItems.map(({ entry, index: i, duration }) => (
+					<ToolExecution
+						key={entry.tool_use_id || `gi-${i}`}
+						entry={entry as ToolEntry}
+						duration={duration}
+					/>
+				))}
+			</div>
+		)
+	}
+
+	// Larger groups: collapsible with header
+	const tailItems = toolItems.slice(-3)
 	return (
 		<div className="tool-group">
 			<div className="tool-group-header" onClick={() => setExpanded((v) => !v)}>

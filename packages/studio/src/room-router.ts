@@ -503,7 +503,7 @@ export class RoomRouter {
 			"If you have nothing to say, finish without @room — your turn ends silently.",
 			"To request human input: @room GATE: <question>",
 			"",
-			"Do NOT greet or introduce yourself. Wait silently until you have actionable work to do or a substantive message to share.",
+			"Do NOT greet or make small talk. Announce your presence (see room-messaging skill), then wait for actionable work.",
 		)
 
 		return lines.join("\n")

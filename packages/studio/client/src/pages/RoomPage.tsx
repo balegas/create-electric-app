@@ -519,13 +519,20 @@ function RoomEventList({
 								<span className="room-message-time">{new Date(event.ts).toLocaleTimeString()}</span>
 							</div>
 						)
-					case "participant_joined":
+					case "participant_joined": {
+						const joinedName = event.participant?.displayName ?? "Unknown"
+						const joinedP = participants.find((p) => p.name === joinedName)
+						const roleLabel = joinedP?.role ? ` (${joinedP.role})` : ""
 						return (
 							<div key={key} className="room-event room-system-event">
-								<span>{event.participant?.displayName ?? "Unknown"} joined the room</span>
+								<span>
+									{joinedName}
+									{roleLabel} joined the room
+								</span>
 								<span className="room-message-time">{new Date(event.ts).toLocaleTimeString()}</span>
 							</div>
 						)
+					}
 					case "participant_left":
 						return (
 							<div key={key} className="room-event room-system-event">
@@ -547,7 +554,12 @@ function RoomEventList({
 				<div className="waiting-indicator">
 					<span className="spinner-inline" />
 					<span className="waiting-label">
-						{workingAgents.map((a) => a.name).join(", ")}{" "}
+						{workingAgents.map((a, i) => (
+							<span key={a.sessionId}>
+								{i > 0 && ", "}
+								<ParticipantLink name={a.name} participants={participants} />
+							</span>
+						))}{" "}
 						{workingAgents.length === 1 ? "is" : "are"} working
 					</span>
 				</div>

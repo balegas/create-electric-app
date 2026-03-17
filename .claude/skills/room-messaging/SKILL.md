@@ -90,6 +90,30 @@ When you first join a room, you receive:
 
 Use participant names to address them directly with `@<name>`.
 
+Do NOT greet or make small talk. Announce your presence (see below), then wait for actionable work.
+
+## Announcing Presence
+
+When you first join a room and receive your discovery prompt, send a brief announcement of your role and readiness. This helps other participants and the user understand who is in the room.
+
+**Format:**
+```
+@room Ready. Role: <your role>. <one sentence about what you do>.
+```
+
+**Examples:**
+```
+@room Ready. Role: coder. I build and push code on the main branch.
+```
+```
+@room Ready. Role: reviewer. I review code for correctness, security, and quality.
+```
+```
+@room Ready. Role: ui-designer. I audit and improve the app's visual design when requested.
+```
+
+Keep it to one line. Do NOT greet or introduce yourself beyond this announcement.
+
 ## Key Rules
 
 1. Always respond to incoming messages before doing other work

@@ -221,9 +221,7 @@ export function Settings({
 						<label htmlFor={ghInputId} style={{ margin: 0 }}>
 							Personal Access Token
 						</label>
-						<span className={`settings-status ${hasGhToken ? "active" : "missing"}`}>
-							{hasGhToken ? "Connected" : "Not connected"}
-						</span>
+						{hasGhToken && <span className="settings-status active">Connected</span>}
 					</div>
 					<div className="settings-input-row">
 						<input
@@ -247,18 +245,7 @@ export function Settings({
 						)}
 					</div>
 					<div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
-						Required scopes: <code>repo</code>, <code>read:user</code>. Create one at{" "}
-						<a
-							href="https://github.com/settings/tokens/new?scopes=repo,read:user"
-							target="_blank"
-							rel="noopener noreferrer"
-							style={{ color: "var(--brand-1)" }}
-						>
-							github.com/settings/tokens
-						</a>
-					</div>
-					<div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
-						Without a PAT, apps are created as public repos in{" "}
+						Apps are created in{" "}
 						<a
 							href="https://github.com/electric-apps"
 							target="_blank"
@@ -267,7 +254,16 @@ export function Settings({
 						>
 							github.com/electric-apps
 						</a>
-						.
+						. Add a{" "}
+						<a
+							href="https://github.com/settings/tokens/new?scopes=repo,read:user"
+							target="_blank"
+							rel="noopener noreferrer"
+							style={{ color: "var(--brand-1)" }}
+						>
+							PAT
+						</a>{" "}
+						to create repos under your own account.
 					</div>
 				</div>
 
