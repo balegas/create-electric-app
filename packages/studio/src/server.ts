@@ -2206,11 +2206,22 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			ts: ts(),
 		})
 
+		// Create the gate synchronously so it's visible to room state polls immediately.
+		// The Promise is awaited inside asyncFlow.
+		console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
+		const infraGatePromise = createGate<
+			InfraConfig & {
+				repoAccount?: string
+				repoName?: string
+				repoVisibility?: "public" | "private"
+				claimId?: string
+			}
+		>(coderSession.sessionId, "infra_config")
+
 		// Async flow: wait for gate, create sandboxes, start agents
 		const asyncFlow = async () => {
 			// 1. Wait for infra config gate on coder's session
 			await router.sendMessage("system", `Waiting for setup — confirm infrastructure to continue.`)
-			console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
 			let infra: InfraConfig
 			let repoConfig: {
 				account: string
@@ -2220,14 +2231,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			let claimId: string | undefined
 
 			try {
-				const gateValue = await createGate<
-					InfraConfig & {
-						repoAccount?: string
-						repoName?: string
-						repoVisibility?: "public" | "private"
-						claimId?: string
-					}
-				>(coderSession.sessionId, "infra_config")
+				const gateValue = await infraGatePromise
 
 				console.log(`[room:create-app:${roomId}] Infra gate resolved: mode=${gateValue.mode}`)
 
