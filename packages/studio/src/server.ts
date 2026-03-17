@@ -37,7 +37,7 @@ import {
 import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
-import { createGate, rejectAllGates, resolveGate } from "./gate.js"
+import { createGate, hasGate, rejectAllGates, resolveGate } from "./gate.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
 import { createOrgRepo, getInstallationToken } from "./github-app.js"
 import { generateInviteCode } from "./invite-code.js"
@@ -2077,6 +2077,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		await router.start()
 		roomRouters.set(roomId, router)
 
+		// NOTE: pending sessions are registered below after session IDs are created
+
 		// Save to room registry
 		const code = generateInviteCode()
 		await config.rooms.addRoom({
@@ -2138,6 +2140,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const sessionToken = deriveSessionToken(config.streamConfig.secret, sessionId)
 			sessions.push({ name: agentDef.name, role: agentDef.role, sessionId, sessionToken })
 		}
+
+		// Register sessions as pending so the room state endpoint can find their gates
+		router.addPendingSessions(
+			sessions.map((s) => ({ sessionId: s.sessionId, name: s.name, role: s.role })),
+		)
 
 		const roomToken = deriveRoomToken(config.streamConfig.secret, roomId)
 		console.log(
@@ -2202,10 +2209,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Async flow: wait for gate, create sandboxes, start agents
 		const asyncFlow = async () => {
 			// 1. Wait for infra config gate on coder's session
-			await router.sendMessage(
-				"system",
-				`Waiting for setup — open ${coderSession.name}'s session to confirm infrastructure.`,
-			)
+			await router.sendMessage("system", `Waiting for setup — confirm infrastructure to continue.`)
 			console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
 			let infra: InfraConfig
 			let repoConfig: {
@@ -2879,12 +2883,28 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				appPort = handle?.port ?? session?.appPort
 			}
 
+			// Check if any participant or pending session has a pending infra_config gate
+			const allSessions = [
+				...router.participants.map((p) => ({ sessionId: p.sessionId, name: p.name })),
+				...router.pendingSessions.map((s) => ({ sessionId: s.sessionId, name: s.name })),
+			]
+			const infraGateSession = allSessions.find((s) => hasGate(s.sessionId, "infra_config"))
+			const pendingInfraGate = infraGateSession
+				? {
+						sessionId: infraGateSession.sessionId,
+						projectName:
+							config.sessions.get(infraGateSession.sessionId)?.projectName ?? infraGateSession.name,
+						runtime: config.sandbox.runtime,
+					}
+				: undefined
+
 			return c.json({
 				roomId,
 				state: router.state,
 				roundCount: router.roundCount,
 				previewUrl,
 				appPort,
+				pendingInfraGate,
 				participants: router.participants.map((p) => ({
 					sessionId: p.sessionId,
 					name: p.name,

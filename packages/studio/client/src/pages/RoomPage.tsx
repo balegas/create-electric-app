@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { InfraConfigGate } from "../components/GatePrompt"
 import { getAvatarColor } from "../components/SessionListItem"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
 import { useAppContext } from "../layouts/AppShell"
@@ -29,6 +30,7 @@ export function RoomPage() {
 	const [error, setError] = useState<string | null>(null)
 	const [showAddAgent, setShowAddAgent] = useState(false)
 	const [sending, setSending] = useState(false)
+	const [infraGateResolved, setInfraGateResolved] = useState(false)
 	const loadedRef = useRef(false)
 
 	// Handle /room/new — create a multi-agent app room
@@ -154,7 +156,7 @@ export function RoomPage() {
 			<div className="room-empty">
 				<div className="waiting-indicator">
 					<span className="spinner-inline" />
-					<span className="waiting-label">Creating room</span>
+					<span className="waiting-label">Setting up</span>
 				</div>
 			</div>
 		)
@@ -163,7 +165,7 @@ export function RoomPage() {
 	if (error) {
 		return (
 			<div className="room-error">
-				<h2>Cannot load room</h2>
+				<h2>Error</h2>
 				<p>{error}</p>
 				<button type="button" className="btn" onClick={() => navigate("/")}>
 					Go Home
@@ -177,6 +179,7 @@ export function RoomPage() {
 	const appUrl =
 		roomState?.previewUrl ??
 		(roomState?.appPort ? `http://localhost:${roomState.appPort}` : undefined)
+	const pendingInfraGate = roomState?.pendingInfraGate
 
 	return (
 		<>
@@ -199,6 +202,21 @@ export function RoomPage() {
 						participants={participants}
 						provisioning={!!roomEntry?.sessions && participants.length < 3}
 					/>
+					{pendingInfraGate && !infraGateResolved && (
+						<div style={{ padding: "0 16px 16px" }}>
+							<InfraConfigGate
+								sessionId={pendingInfraGate.sessionId}
+								event={{
+									type: "infra_config_prompt" as const,
+									projectName: pendingInfraGate.projectName,
+									ghAccounts: [],
+									runtime: pendingInfraGate.runtime,
+									ts: new Date().toISOString(),
+								}}
+								onResolved={() => setInfraGateResolved(true)}
+							/>
+						</div>
+					)}
 				</div>
 
 				<RoomInput
@@ -284,7 +302,7 @@ function RoomHeader({
 				</svg>
 			</button>
 
-			<span className="session-header-name">{roomName || `Room ${roomId?.slice(0, 8)}`}</span>
+			<span className="session-header-name">{roomName || roomId?.slice(0, 8)}</span>
 
 			{state === "active" && (
 				<span className="session-header-status" style={{ color: "var(--green)" }}>
@@ -367,7 +385,7 @@ function RoomHeader({
 				</button>
 				{state === "active" && (
 					<button type="button" className="session-header-action" onClick={onClose}>
-						Close Room
+						Close
 					</button>
 				)}
 				{appUrl && (
@@ -538,7 +556,7 @@ function RoomEventList({
 								</span>
 								<span>
 									{joinedName}
-									{roleLabel} joined the room
+									{roleLabel} joined
 								</span>
 								{time}
 							</div>
@@ -560,7 +578,7 @@ function RoomEventList({
 									[system]
 								</span>
 								<span>
-									Room closed by {event.closedBy}
+									Closed by {event.closedBy}
 									{event.summary && <> — {event.summary}</>}
 								</span>
 							</div>
@@ -646,7 +664,7 @@ function RoomInput({
 				onChange={(e) => setTarget(e.target.value)}
 				disabled={disabled}
 			>
-				<option value="broadcast">@room (broadcast)</option>
+				<option value="broadcast">broadcast</option>
 				{participants.map((p) => (
 					<option key={p.sessionId} value={p.name}>
 						@{p.name}
@@ -666,7 +684,7 @@ function RoomInput({
 						handleSubmit()
 					}
 				}}
-				placeholder={disabled ? "Room closed" : "Send a message..."}
+				placeholder={disabled ? "Closed" : "Send a message..."}
 				disabled={disabled}
 				rows={1}
 			/>
@@ -720,7 +738,7 @@ function AddAgentModal({
 				id: result.sessionId,
 				projectName: result.participantName,
 				sandboxProjectDir: "",
-				description: role.trim() || `Agent in room ${roomId.slice(0, 8)}`,
+				description: role.trim() || `Agent ${roomId.slice(0, 8)}`,
 				createdAt: new Date().toISOString(),
 				lastActiveAt: new Date().toISOString(),
 				status: "running",
@@ -736,7 +754,7 @@ function AddAgentModal({
 	return (
 		<div className="modal-overlay" onClick={onClose}>
 			<div className="modal-card" onClick={(e) => e.stopPropagation()}>
-				<div className="modal-title">Add Agent to Room</div>
+				<div className="modal-title">Add Agent</div>
 				<div className="modal-body">
 					<label className="room-form-label">
 						Name

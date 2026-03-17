@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAppContext } from "../layouts/AppShell"
 import { addAgentRoom, removeAgentRoom } from "../lib/agent-room-store"
-import { createAgentRoom, joinAgentRoom } from "../lib/api"
+import { joinAgentRoom } from "../lib/api"
 import { DeleteModal, getAvatarColor, SessionListItem } from "./SessionListItem"
 
 interface SidebarProps {
@@ -48,7 +48,7 @@ function LinkIcon() {
 			width="14"
 			height="14"
 		>
-			<title>Join room</title>
+			<title>Join app</title>
 			<path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5l-1 1" />
 			<path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5l1-1" />
 		</svg>
@@ -61,8 +61,6 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 	const navigate = useNavigate()
 	const location = useLocation()
 
-	const [createRoomOpen, setCreateRoomOpen] = useState(false)
-	const [roomName, setRoomName] = useState("")
 	const [joinRoomOpen, setJoinRoomOpen] = useState(false)
 	const [joinRoomCode, setJoinRoomCode] = useState("")
 	const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null)
@@ -70,8 +68,6 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 	// Close inline inputs when sidebar collapses
 	useEffect(() => {
 		if (collapsed) {
-			setCreateRoomOpen(false)
-			setRoomName("")
 			setJoinRoomOpen(false)
 			setJoinRoomCode("")
 		}
@@ -101,22 +97,6 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 		},
 		[refreshAgentRooms],
 	)
-
-	const handleCreateRoom = useCallback(async () => {
-		const trimmed = roomName.trim()
-		if (!trimmed) return
-		try {
-			const { roomId, code } = await createAgentRoom(trimmed)
-			addAgentRoom({ id: roomId, code, name: trimmed, createdAt: new Date().toISOString() })
-			refreshAgentRooms()
-			setRoomName("")
-			setCreateRoomOpen(false)
-			navigate(`/room/${roomId}`)
-			onMobileClose?.()
-		} catch (err) {
-			console.error("Failed to create room:", err)
-		}
-	}, [roomName, navigate, onMobileClose, refreshAgentRooms])
 
 	const handleJoinRoom = useCallback(async () => {
 		const trimmed = joinRoomCode.trim()
@@ -229,48 +209,6 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						</div>
 					)
 				})}
-
-				{createRoomOpen && !collapsed ? (
-					<div className="sidebar-join-input">
-						<input
-							type="text"
-							placeholder="App name..."
-							value={roomName}
-							onChange={(e) => setRoomName(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter") handleCreateRoom()
-								if (e.key === "Escape") {
-									setCreateRoomOpen(false)
-									setRoomName("")
-								}
-							}}
-						/>
-						<button
-							type="button"
-							className="sidebar-join-go"
-							onClick={handleCreateRoom}
-							disabled={!roomName.trim()}
-						>
-							Go
-						</button>
-					</div>
-				) : (
-					<div
-						className="session-item"
-						onClick={() => {
-							if (collapsed) {
-								onToggle()
-							}
-							setCreateRoomOpen(true)
-						}}
-						title="Create app"
-					>
-						<span className="session-avatar new-project-avatar">+</span>
-						<div className="session-item-details">
-							<div className="session-item-name">Create</div>
-						</div>
-					</div>
-				)}
 
 				{joinRoomOpen && !collapsed ? (
 					<div className="sidebar-join-input">
