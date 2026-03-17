@@ -21,6 +21,7 @@
 .console-entry .prefix {
 	font-weight: 600;
 	margin-right: 6px;
+	white-space: nowrap;
 }
 
 .console-entry .prefix.plan {
