@@ -41,6 +41,7 @@ COPY --from=builder /opt/electric-agent/packages/agent/package.json packages/age
 COPY --from=builder /opt/electric-agent/packages/agent/dist packages/agent/dist
 COPY --from=builder /opt/electric-agent/packages/agent/playbooks packages/agent/playbooks
 COPY --from=builder /opt/electric-agent/packages/agent/template packages/agent/template
+COPY --from=builder /opt/electric-agent/.claude .claude
 RUN pnpm install --prod --frozen-lockfile
 
 # Link the CLI globally so `electric-agent` is on PATH
