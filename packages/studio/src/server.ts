@@ -2267,13 +2267,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			// 2. Create sandboxes in parallel
 			// Coder gets full scaffold, reviewer/ui-designer get minimal
-			await router.sendMessage("system", "Creating sandboxes")
-			await coderBridge.emit({
-				type: "log",
-				level: "build",
-				message: "Creating sandboxes for all agents...",
-				ts: ts(),
-			})
+			await router.sendMessage("system", "Creating sandboxes for all agents")
 
 			const sandboxOpts = (sid: string) => ({
 				...((!config.devMode || GITHUB_APP_ID) && {
