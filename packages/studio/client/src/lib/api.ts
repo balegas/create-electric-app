@@ -11,15 +11,23 @@ export function setDevMode(mode: boolean) {
 	_devMode = mode
 }
 
-/** Return user-provided credentials (if set) for inclusion in request bodies. */
+/** Return user-provided credentials (if set) for inclusion in request bodies.
+ *  In dev mode: sends OAuth token (preferred) or API key, plus GH token.
+ *  In prod mode: sends API key and GH token as lowest-priority overrides
+ *  (server gives precedence to env vars and keychain). */
 function credentialFields(): { apiKey?: string; oauthToken?: string; ghToken?: string } {
-	if (!_devMode) return {}
 	const fields: { apiKey?: string; oauthToken?: string; ghToken?: string } = {}
 	const apiKey = getApiKey()
 	const oauthToken = getOauthToken()
 	const ghToken = getGhToken()
-	if (oauthToken) fields.oauthToken = oauthToken
-	else if (apiKey) fields.apiKey = apiKey
+	if (_devMode) {
+		// Dev: full credential flow — OAuth takes priority over API key
+		if (oauthToken) fields.oauthToken = oauthToken
+		else if (apiKey) fields.apiKey = apiKey
+	} else {
+		// Prod: only send API key as fallback (server uses env/keychain first)
+		if (apiKey) fields.apiKey = apiKey
+	}
 	if (ghToken) fields.ghToken = ghToken
 	return fields
 }
@@ -343,7 +351,6 @@ export function addAgentToRoom(
 	config: {
 		name?: string
 		role?: string
-		gated?: boolean
 		initialPrompt?: string
 	},
 ) {

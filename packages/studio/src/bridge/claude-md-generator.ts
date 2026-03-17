@@ -93,7 +93,7 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 // ---------------------------------------------------------------------------
 
 const PROJECT_CONTEXT =
-	"## Project Context\nThis is a local-first, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start. Electric syncs Postgres data to the client via shapes; TanStack DB provides reactive collections and optimistic mutations."
+	"## Project Context\nThis is a reactive, real-time application built with Electric SQL + TanStack DB + Drizzle ORM + TanStack Start. Electric syncs Postgres data to the client via shapes; TanStack DB provides reactive collections and optimistic mutations."
 
 const SCAFFOLD_STRUCTURE = `## Scaffold Structure
 The project is scaffolded from a known template. Key files you should know about:

@@ -3,12 +3,14 @@ import fs from "node:fs"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
-import type {
-	CreateSandboxOpts,
-	GitStatus,
-	InfraConfig,
-	SandboxHandle,
-	SandboxProvider,
+import {
+	type CreateSandboxOpts,
+	GIT_CREDENTIAL_ENV_PATH,
+	GIT_CREDENTIAL_SCRIPT,
+	type GitStatus,
+	type InfraConfig,
+	type SandboxHandle,
+	type SandboxProvider,
 } from "./types.js"
 
 // ---------------------------------------------------------------------------
@@ -188,7 +190,7 @@ function execInContainer(
 	if (!containerId) throw new Error("No running container")
 	return execFileSync("docker", ["exec", containerId, "sh", "-c", command], {
 		encoding: "utf-8",
-		timeout: opts?.timeout ?? 30_000,
+		timeout: opts?.timeout ?? 60_000,
 		stdio: ["ignore", "pipe", "pipe"],
 	})
 }
@@ -355,46 +357,21 @@ export class DockerSandboxProvider implements SandboxProvider {
 		sessionToken: string,
 		studioUrl: string,
 	): void {
-		// Embed actual values directly in the script — profile.d files
-		// are not sourced in non-login shells (e.g. when git calls the helper)
-		const script = `#!/bin/bash
-# git-credential-electric: fetches GitHub tokens from studio server
-if [ "$1" != "get" ]; then exit 0; fi
+		// Write credentials to a dedicated env file — the credential helper sources
+		// it at runtime. This keeps secrets out of the script itself and works in
+		// non-login shells (docker exec bash -c) where profile.d is not sourced.
+		const envFile = [
+			`EA_SESSION_TOKEN=${sessionToken}`,
+			`EA_SESSION_ID=${sessionId}`,
+			`EA_STUDIO_URL=${studioUrl}`,
+		].join("\n")
+		const envB64 = Buffer.from(envFile).toString("base64")
+		execInContainer(
+			state,
+			`echo ${envB64} | base64 -d > ${GIT_CREDENTIAL_ENV_PATH} && chmod 600 ${GIT_CREDENTIAL_ENV_PATH}`,
+		)
 
-input=$(cat)
-host=$(echo "$input" | grep "^host=" | cut -d= -f2)
-if [ "$host" != "github.com" ]; then exit 0; fi
-
-SESSION_TOKEN="${sessionToken}"
-SESSION_ID="${sessionId}"
-STUDIO_URL="${studioUrl}"
-
-response=$(curl -s -w "\\\\n%{http_code}" -X POST \\
-  -H "Authorization: Bearer $SESSION_TOKEN" \\
-  "$STUDIO_URL/api/sessions/$SESSION_ID/github-token")
-
-http_code=$(echo "$response" | tail -1)
-body_text=$(echo "$response" | head -n -1)
-
-if [ "$http_code" != "200" ]; then
-  echo "git-credential-electric: failed to fetch token (HTTP $http_code)" >&2
-  exit 1
-fi
-
-token=$(echo "$body_text" | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
-if [ -n "$token" ] && [ "$token" != "null" ]; then
-  echo "protocol=https"
-  echo "host=github.com"
-  echo "username=x-access-token"
-  echo "password=$token"
-else
-  echo "git-credential-electric: invalid token response" >&2
-  exit 1
-fi`
-
-		// Write credential helper script via base64 to avoid quoting issues
-		// Use /home/agent/bin since the container user may not have write access to /usr/local/bin
-		const scriptB64 = Buffer.from(script).toString("base64")
+		const scriptB64 = Buffer.from(GIT_CREDENTIAL_SCRIPT).toString("base64")
 		execInContainer(
 			state,
 			`mkdir -p /home/agent/bin && echo ${scriptB64} | base64 -d > /home/agent/bin/git-credential-electric && chmod +x /home/agent/bin/git-credential-electric`,

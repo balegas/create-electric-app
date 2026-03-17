@@ -31,6 +31,8 @@ COPY --from=builder /opt/app/packages/studio/package.json packages/studio/
 COPY --from=builder /opt/app/packages/agent/dist packages/agent/dist
 COPY --from=builder /opt/app/packages/agent/package.json packages/agent/
 COPY --from=builder /opt/app/packages/agent/playbooks packages/agent/playbooks
+COPY --from=builder /opt/app/packages/agent/template packages/agent/template
+COPY --from=builder /opt/app/.claude .claude
 COPY --from=builder /opt/app/node_modules ./node_modules
 # pnpm uses per-package node_modules with symlinks — must copy these too
 COPY --from=builder /opt/app/packages/protocol/node_modules packages/protocol/node_modules

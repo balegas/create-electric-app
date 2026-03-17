@@ -8,6 +8,7 @@ const LEVEL_LABELS: Record<string, string> = {
 	build: "[build]",
 	fix: "[fix]",
 	done: "[done]",
+	system: "[system]",
 	error: "[error]",
 	verbose: "[verbose]",
 }

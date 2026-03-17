@@ -180,6 +180,10 @@ export function useSession(sessionId: string | null) {
 				previewUrl: event.previewUrl,
 			})
 		}
+		// Reset isComplete when a new turn starts (user_prompt = iterate command)
+		if (event.type === "user_prompt") {
+			setIsComplete(false)
+		}
 		if (event.type === "session_end") {
 			setIsComplete(true)
 			// Accumulate cost from each run

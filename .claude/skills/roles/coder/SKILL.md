@@ -39,9 +39,9 @@ The `REVIEW_REQUEST:` prefix tells the reviewer to start their review. **Only se
 
 **Never send REVIEW_REQUEST prematurely** — e.g. after scaffolding, after the first commit, or before verifying the app works.
 
-## Responding to Review Feedback
+## Responding to REVIEW_FEEDBACK
 
-When you receive review feedback from the reviewer:
+When you receive a `REVIEW_FEEDBACK:` message from the reviewer:
 1. Read and acknowledge each comment
 2. Fix each issue in code
 3. Run tests and lint again
@@ -53,6 +53,17 @@ When you receive review feedback from the reviewer:
 ```
 
 **The loop**: code → push → REVIEW_REQUEST → feedback → fix → push → REVIEW_REQUEST → re-review → approval
+
+## Responding to APPROVED (CRITICAL — STOP HERE)
+
+When you receive an `APPROVED:` message from the reviewer, **your work is done**.
+
+- Do NOT send another `REVIEW_REQUEST:`
+- Do NOT send any `@room` message
+- Simply finish your response silently — no `@room` directive at all
+- Your turn ends and you wait for new instructions (if any)
+
+**APPROVED means the review cycle is complete. Any further messages restart the cycle unnecessarily.**
 
 ## Boundaries
 

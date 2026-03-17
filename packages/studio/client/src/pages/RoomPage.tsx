@@ -6,7 +6,6 @@ import { useAppContext } from "../layouts/AppShell"
 import { addAgentRoom, getAgentRooms } from "../lib/agent-room-store"
 import {
 	addAgentToRoom,
-	addSessionToRoom,
 	closeAgentRoom,
 	createAppRoom,
 	getAgentRoomState,
@@ -153,13 +152,9 @@ export function RoomPage() {
 	if (roomId === "new") {
 		return (
 			<div className="room-empty">
-				<div className="room-working-indicator">
-					<span className="room-working-dots">
-						<span />
-						<span />
-						<span />
-					</span>
-					<span className="room-working-text">Creating room</span>
+				<div className="waiting-indicator">
+					<span className="spinner-inline" />
+					<span className="waiting-label">Creating room</span>
 				</div>
 			</div>
 		)
@@ -362,6 +357,19 @@ function RoomHeader({
 			)}
 
 			<span className="session-header-actions-group">
+				<button
+					type="button"
+					className="session-header-action"
+					onClick={onAddAgent}
+					disabled={state === "closed"}
+				>
+					Add Agent
+				</button>
+				{state === "active" && (
+					<button type="button" className="session-header-action" onClick={onClose}>
+						Close Room
+					</button>
+				)}
 				{appUrl && (
 					<a
 						href={appUrl}
@@ -372,25 +380,12 @@ function RoomHeader({
 						Open App
 					</a>
 				)}
-				<button
-					type="button"
-					className="session-header-action"
-					onClick={onAddAgent}
-					disabled={state === "closed"}
-				>
-					+ Agent
-				</button>
-				{state === "active" && (
-					<button type="button" className="session-header-action" onClick={onClose}>
-						Close Room
-					</button>
-				)}
 			</span>
 		</div>
 	)
 }
 
-function ParticipantLink({
+function RoomParticipantPrefix({
 	name,
 	participants,
 }: {
@@ -399,15 +394,15 @@ function ParticipantLink({
 }) {
 	const navigate = useNavigate()
 	const participant = participants.find((p) => p.name === name)
-	if (!participant) return <span className="room-message-from">{name}</span>
+	if (!participant) return <span className="prefix task">[{name}]</span>
 	return (
 		<button
 			type="button"
-			className="room-message-from room-message-from-link"
+			className="prefix task room-prefix-link"
 			onClick={() => navigate(`/session/${participant.sessionId}`)}
 			title={`Go to ${name}'s session`}
 		>
-			{name}
+			[{name}]
 		</button>
 	)
 }
@@ -481,13 +476,9 @@ function RoomEventList({
 		return (
 			<div className="room-empty">
 				{provisioning ? (
-					<div className="room-working-indicator">
-						<span className="room-working-dots">
-							<span />
-							<span />
-							<span />
-						</span>
-						<span className="room-working-text">Setting up agents</span>
+					<div className="waiting-indicator">
+						<span className="spinner-inline" />
+						<span className="waiting-label">Setting up agents</span>
 					</div>
 				) : (
 					<p>No messages yet.</p>
@@ -500,36 +491,78 @@ function RoomEventList({
 		<div className="room-event-list">
 			{events.map((event, i) => {
 				const key = `${event.ts}-${i}`
+				const time = (
+					<span key={`t-${key}`} className="duration" style={{ whiteSpace: "nowrap" }}>
+						{new Date(event.ts).toLocaleTimeString()}
+					</span>
+				)
 				switch (event.type) {
 					case "agent_message":
+						if (event.from === "system") {
+							if (event.body.includes("Project ready")) return null
+							return (
+								<div key={key} className="console-entry">
+									<span className="prefix" style={{ color: "var(--orange)" }}>
+										[system]
+									</span>
+									<span>
+										<RoomMessageBody body={event.body} participants={participants} />
+									</span>
+									{time}
+								</div>
+							)
+						}
 						return (
-							<div key={key} className="room-event room-message">
-								<ParticipantLink name={event.from} participants={participants} />
-								{event.to && <span className="room-message-to">&rarr; {event.to}</span>}
-								<span className="room-message-body">
+							<div key={key} className="console-entry">
+								<RoomParticipantPrefix name={event.from} participants={participants} />
+								{event.to && (
+									<>
+										<span className="room-message-arrow">&rarr;</span>
+										<RoomParticipantPrefix name={event.to} participants={participants} />
+									</>
+								)}
+								<span>
 									<RoomMessageBody body={event.body} participants={participants} />
 								</span>
-								<span className="room-message-time">{new Date(event.ts).toLocaleTimeString()}</span>
+								{time}
 							</div>
 						)
-					case "participant_joined":
+					case "participant_joined": {
+						const joinedName = event.participant?.displayName ?? "Unknown"
+						const joinedP = participants.find((p) => p.name === joinedName)
+						const roleLabel = joinedP?.role ? ` (${joinedP.role})` : ""
 						return (
-							<div key={key} className="room-event room-system-event">
-								<span>{event.participant?.displayName ?? "Unknown"} joined the room</span>
-								<span className="room-message-time">{new Date(event.ts).toLocaleTimeString()}</span>
+							<div key={key} className="console-entry">
+								<span className="prefix" style={{ color: "var(--orange)" }}>
+									[system]
+								</span>
+								<span>
+									{joinedName}
+									{roleLabel} joined the room
+								</span>
+								{time}
 							</div>
 						)
+					}
 					case "participant_left":
 						return (
-							<div key={key} className="room-event room-system-event">
+							<div key={key} className="console-entry">
+								<span className="prefix" style={{ color: "var(--orange)" }}>
+									[system]
+								</span>
 								<span>Participant left</span>
 							</div>
 						)
 					case "room_closed":
 						return (
-							<div key={key} className="room-event room-system-event room-closed-event">
-								<span>Room closed by {event.closedBy}</span>
-								{event.summary && <span> — {event.summary}</span>}
+							<div key={key} className="console-entry">
+								<span className="prefix" style={{ color: "var(--orange)" }}>
+									[system]
+								</span>
+								<span>
+									Room closed by {event.closedBy}
+									{event.summary && <> — {event.summary}</>}
+								</span>
 							</div>
 						)
 					default:
@@ -537,13 +570,9 @@ function RoomEventList({
 				}
 			})}
 			{workingAgents.length > 0 && (
-				<div className="room-working-indicator">
-					<span className="room-working-dots">
-						<span />
-						<span />
-						<span />
-					</span>
-					<span className="room-working-text">
+				<div className="waiting-indicator">
+					<span className="spinner-inline" />
+					<span className="waiting-label">
 						{workingAgents.map((a) => a.name).join(", ")}{" "}
 						{workingAgents.length === 1 ? "is" : "are"} working
 					</span>
@@ -669,144 +698,90 @@ function AddAgentModal({
 	onClose: () => void
 	onAdded: () => void
 }) {
-	const { sessions } = useAppContext()
-	const [mode, setMode] = useState<"new" | "existing">("new")
+	const [name, setName] = useState("")
 	const [role, setRole] = useState("")
-	const [gated, setGated] = useState(false)
 	const [initialPrompt, setInitialPrompt] = useState("")
-	const [selectedSessionId, setSelectedSessionId] = useState("")
 	const [adding, setAdding] = useState(false)
 	const [addError, setAddError] = useState<string | null>(null)
-
-	// Show sessions that are still usable (running or complete — sandbox is still alive)
-	const availableSessions = sessions.filter(
-		(s) => s.status === "running" || s.status === "complete",
-	)
 
 	const handleAdd = useCallback(async () => {
 		setAdding(true)
 		setAddError(null)
 		try {
-			if (mode === "existing") {
-				if (!selectedSessionId) return
-				const session = availableSessions.find((s) => s.id === selectedSessionId)
-				const displayName = session?.projectName ?? selectedSessionId.slice(0, 8)
-				await addSessionToRoom(roomId, {
-					sessionId: selectedSessionId,
-					name: displayName,
-					initialPrompt: initialPrompt.trim() || undefined,
-				})
-			} else {
-				const result = await addAgentToRoom(roomId, {
-					role: role.trim() || undefined,
-					gated,
-					initialPrompt: initialPrompt.trim() || undefined,
-				})
-				if (result.sessionToken) {
-					setSessionToken(result.sessionId, result.sessionToken)
-				}
-				addSession({
-					id: result.sessionId,
-					projectName: result.participantName,
-					sandboxProjectDir: "",
-					description: role.trim() || `Agent in room ${roomId.slice(0, 8)}`,
-					createdAt: new Date().toISOString(),
-					lastActiveAt: new Date().toISOString(),
-					status: "running",
-				})
+			const result = await addAgentToRoom(roomId, {
+				name: name.trim() || undefined,
+				role: role.trim() || undefined,
+				initialPrompt: initialPrompt.trim() || undefined,
+			})
+			if (result.sessionToken) {
+				setSessionToken(result.sessionId, result.sessionToken)
 			}
+			addSession({
+				id: result.sessionId,
+				projectName: result.participantName,
+				sandboxProjectDir: "",
+				description: role.trim() || `Agent in room ${roomId.slice(0, 8)}`,
+				createdAt: new Date().toISOString(),
+				lastActiveAt: new Date().toISOString(),
+				status: "running",
+			})
 			onAdded()
 		} catch (err) {
 			setAddError(err instanceof Error ? err.message : "Failed to add agent")
 		} finally {
 			setAdding(false)
 		}
-	}, [roomId, mode, role, gated, initialPrompt, selectedSessionId, availableSessions, onAdded])
-
-	const canSubmit = mode === "existing" ? !!selectedSessionId : true
+	}, [roomId, name, role, initialPrompt, onAdded])
 
 	return (
 		<div className="modal-overlay" onClick={onClose}>
 			<div className="modal-card" onClick={(e) => e.stopPropagation()}>
 				<div className="modal-title">Add Agent to Room</div>
 				<div className="modal-body">
-					<div className="room-form-toggle">
-						<button
-							type="button"
-							className={`room-form-toggle-btn ${mode === "new" ? "active" : ""}`}
-							onClick={() => setMode("new")}
-						>
-							New Agent
-						</button>
-						<button
-							type="button"
-							className={`room-form-toggle-btn ${mode === "existing" ? "active" : ""}`}
-							onClick={() => setMode("existing")}
-						>
-							Existing Session
-						</button>
-					</div>
-					{mode === "existing" ? (
-						<label className="room-form-label">
-							Session *
-							<select
-								value={selectedSessionId}
-								onChange={(e) => setSelectedSessionId(e.target.value)}
-							>
-								<option value="">Select a session...</option>
-								{availableSessions.map((s) => (
-									<option key={s.id} value={s.id}>
-										{s.projectName} ({s.id.slice(0, 8)})
-									</option>
-								))}
-							</select>
-						</label>
-					) : (
-						<>
-							<label className="room-form-label">
-								Role
-								<select value={role} onChange={(e) => setRole(e.target.value)}>
-									<option value="">No role (generic participant)</option>
-									{BUILT_IN_ROLES.map((r) => (
-										<option key={r.value} value={r.value}>
-											{r.label} — {r.description}
-										</option>
-									))}
-								</select>
-							</label>
-							<label className="room-form-label">
-								Initial Prompt
-								<textarea
-									value={initialPrompt}
-									onChange={(e) => setInitialPrompt(e.target.value)}
-									placeholder="Optional message to send after agent joins"
-									rows={3}
-								/>
-							</label>
-							<label className="room-form-checkbox">
-								<input
-									type="checkbox"
-									checked={gated}
-									onChange={(e) => setGated(e.target.checked)}
-								/>
-								Gated (require approval for outbound messages)
-							</label>
-						</>
-					)}
+					<label className="room-form-label">
+						Name
+						<input
+							type="text"
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							placeholder="e.g. coder-2, ui-auditor"
+						/>
+					</label>
+					<label className="room-form-label">
+						Role
+						<select value={role} onChange={(e) => setRole(e.target.value)}>
+							<option value="">No role (generic participant)</option>
+							{BUILT_IN_ROLES.map((r) => (
+								<option key={r.value} value={r.value}>
+									{r.label} — {r.description}
+								</option>
+							))}
+						</select>
+					</label>
+					<label className="room-form-label">
+						Initial Prompt
+						<textarea
+							value={initialPrompt}
+							onChange={(e) => setInitialPrompt(e.target.value)}
+							placeholder="Optional message to send after agent joins"
+							rows={3}
+						/>
+					</label>
 					{addError && <p className="room-form-error">{addError}</p>}
 				</div>
 				<div className="modal-actions">
 					<button type="button" className="modal-btn" onClick={onClose}>
 						Cancel
 					</button>
-					<button
-						type="button"
-						className="modal-btn primary"
-						onClick={handleAdd}
-						disabled={!canSubmit || adding}
-					>
-						{adding ? "Adding..." : mode === "existing" ? "Join Room" : "Add Agent"}
+					<button type="button" className="modal-btn primary" onClick={handleAdd} disabled={adding}>
+						{adding ? "Adding..." : "Add Agent"}
 					</button>
+					{adding && (
+						<div className="waiting-indicator">
+							<span className="spinner-inline" />
+							<span className="waiting-label">Initializing agent...</span>
+						</div>
+					)}
 				</div>
 			</div>
 		</div>

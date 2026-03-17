@@ -21,6 +21,7 @@
 .console-entry .prefix {
 	font-weight: 600;
 	margin-right: 6px;
+	white-space: nowrap;
 }
 
 .console-entry .prefix.plan {
@@ -39,6 +40,9 @@
 	color: var(--yellow);
 }
 .console-entry .prefix.done {
+	color: var(--green);
+}
+.console-entry .prefix.system {
 	color: var(--green);
 }
 .console-entry .prefix.error {
@@ -238,7 +242,10 @@
 
 /* Waiting indicator */
 .waiting-indicator {
+	display: flex;
+	align-items: center;
 	gap: 6px;
+	font-size: 13px;
 	color: var(--text-subtle);
 	animation: fade-pulse 2s ease-in-out infinite;
 }

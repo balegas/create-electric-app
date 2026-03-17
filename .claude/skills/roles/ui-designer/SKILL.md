@@ -72,24 +72,45 @@ The app MUST use the Electric theme in `__root.tsx`:
 
 ## Present Findings
 
-Send a `@room GATE:` message to the user with:
-- What looks good (patterns already well-implemented)
-- What needs improvement (specific violations with file:line references)
-- Quick wins (highest visual impact changes)
-- Your proposed improvement plan
+Use `AskUserQuestion` to present your findings and let the user pick which improvements to make.
 
-Wait for the user's response before proceeding.
+**Rules for presenting improvements:**
+- **Human-readable labels** — Short, plain-language names anyone can understand. No code syntax in labels.
+- **Concise descriptions** — Lead with the visual impact, put file:line references at the end.
+- **Curate ruthlessly** — Present only the top 3-5 highest-impact improvements as individual options.
+- **Group the rest** — Bundle all remaining minor improvements into a single "Small improvements" option with a description listing what's included.
+
+**Example pattern:**
+
+```
+AskUserQuestion(
+  header: "UI Audit",
+  question: "Select which improvements you'd like me to implement:",
+  multiSelect: true,
+  options: [
+    { label: "Add depth with card surfaces", description: "Wrap content areas in subtle card panels to create visual layers and depth. (src/routes/index.tsx)" },
+    { label: "Fix heading hierarchy", description: "Use proper heading sizes for page title and section headers to establish clear visual structure. (src/routes/index.tsx)" },
+    { label: "Replace raw HTML with Radix components", description: "Swap plain <input> and <button> elements for styled Radix UI components. (src/components/AddForm.tsx)" },
+    { label: "Small improvements", description: "Add empty state illustration, apply Electric brand theme colors, fix strikethrough styling on completed items." }
+  ]
+)
+```
+
+Only implement the improvements the user selects. If the user selects none, stay silent.
+
+**IMPORTANT:** Do NOT print a summary or ask "Which of these would you like me to implement?" as text output. The `AskUserQuestion` tool handles the presentation — just call it and wait for the response. Do not duplicate the question in your assistant message.
 
 ## Implement Improvements
 
-If the user approves:
-1. Create a feature branch: `git checkout -b ui-improvements`
-2. Make the UI changes
-3. Run build and lint: `pnpm run build && pnpm run check`
-4. Commit with meaningful message
-5. Push: `git push -u origin ui-improvements`
-6. Create PR: `gh pr create --title "UI improvements" --body "<description>"`
-7. Notify the reviewer: `@reviewer UI improvements PR is ready for review: <PR URL>`
+After the user selects improvements:
+1. Announce to the room what you're implementing: `@room Implementing: <list of selected improvements>`
+2. Create a feature branch: `git checkout -b ui-improvements`
+3. Make the UI changes
+4. Run build and lint: `pnpm run build && pnpm run check`
+5. Commit with meaningful message
+6. Push: `git push -u origin ui-improvements`
+7. Create PR: `gh pr create --title "UI improvements" --body "<description>"`
+8. Notify the coder directly (if you know their name) or broadcast: `@room UI improvements PR is ready for review: <PR URL>`
 
 ## Wait for Review
 
@@ -104,8 +125,17 @@ After the reviewer approves:
 
 ## Iterate
 
-Ask the user if they want more UI improvements:
-`@room GATE: UI improvements are merged. Would you like me to make additional changes?`
+After improvements are merged, use `AskUserQuestion` to ask:
+
+```
+AskUserQuestion(
+  question: "UI improvements merged. Want me to look for more?",
+  options: [
+    { label: "Yes — run another audit" },
+    { label: "No — looks good" }
+  ]
+)
+```
 
 If yes, repeat the audit → propose → implement → review → merge cycle.
 
@@ -116,4 +146,4 @@ If yes, repeat the audit → propose → implement → review → merge cycle.
 - Do NOT merge without reviewer approval
 - Always create a branch — never commit directly to main
 - Run build + lint before every push
-- Use `@room GATE:` for user decisions
+- Use `AskUserQuestion` to present choices to the user — never implement without user selection

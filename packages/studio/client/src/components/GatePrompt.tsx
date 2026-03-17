@@ -460,11 +460,8 @@ function AskUserQuestionGate({
 
 	function buildSummary(answersPayload: Record<string, string>): string {
 		const entries = Object.entries(answersPayload).filter(([, v]) => v)
-		if (entries.length === 1) return entries[0][1].slice(0, 80)
-		return entries
-			.map(([, a]) => a.slice(0, 40))
-			.join("; ")
-			.slice(0, 120)
+		if (entries.length === 1) return entries[0][1]
+		return entries.map(([, a]) => a).join("; ")
 	}
 
 	// For single-question + single-select: instant submit on click
@@ -510,9 +507,13 @@ function AskUserQuestionGate({
 		})
 	}
 
-	// Resolved state
+	// Resolved state — show selected options as a list
 	if (resolved) {
-		const displaySummary = resolvedSummary || ""
+		// Parse the comma-separated summary back into individual selections
+		const selectedLabels = (resolvedSummary || "")
+			.split(",")
+			.map((s) => s.trim())
+			.filter(Boolean)
 		return (
 			<div className="gate-prompt">
 				<h3>Question</h3>
@@ -522,7 +523,16 @@ function AskUserQuestionGate({
 						<p className="gate-summary">{q.question}</p>
 					</div>
 				))}
-				<div className="gate-answer-summary">{displaySummary}</div>
+				{selectedLabels.length > 0 && (
+					<div className="gate-resolved-selections">
+						{selectedLabels.map((label) => (
+							<div key={label} className="gate-resolved-item">
+								<span className="gate-resolved-check">&#10003;</span>
+								<span>{label}</span>
+							</div>
+						))}
+					</div>
+				)}
 			</div>
 		)
 	}

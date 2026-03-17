@@ -63,11 +63,15 @@ The `REVIEW_REQUEST:` prefix signals to the reviewer that code is ready. **Coder
 3. [STYLE] src/components/TaskList.tsx:88 — Unused import
 ```
 
-### APPROVED: — Reviewer approves the code
+### APPROVED: — Reviewer approves the code (TERMINAL — cycle ends)
 
 ```
 @room APPROVED: Code review passed. Schema is clean, API routes handle errors correctly, tests cover main flows.
 ```
+
+**When the coder receives APPROVED:** Do NOT send any further `@room` messages. The review cycle is complete. Finish your turn silently (no `@room` directive). Sending another REVIEW_REQUEST after APPROVED creates an infinite loop.
+
+**When the reviewer sends APPROVED:** This is your final message for this review cycle. Do not send further messages unless a new REVIEW_REQUEST arrives.
 
 ### GATE: — Request human input
 
@@ -85,6 +89,30 @@ When you first join a room, you receive:
 - Recent conversation history (if any)
 
 Use participant names to address them directly with `@<name>`.
+
+Do NOT greet or make small talk. Announce your presence (see below), then wait for actionable work.
+
+## Announcing Presence
+
+When you first join a room and receive your discovery prompt, send a brief announcement of your role and readiness. This helps other participants and the user understand who is in the room.
+
+**Format:**
+```
+@room Ready. Role: <your role>. <one sentence about what you do>.
+```
+
+**Examples:**
+```
+@room Ready. Role: coder. I build and push code on the main branch.
+```
+```
+@room Ready. Role: reviewer. I review code for correctness, security, and quality.
+```
+```
+@room Ready. Role: ui-designer. I audit and improve the app's visual design when requested.
+```
+
+Keep it to one line. Do NOT greet or introduce yourself beyond this announcement.
 
 ## Key Rules
 

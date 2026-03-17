@@ -95,4 +95,4 @@ Please fix and send another REVIEW_REQUEST when ready.
 - Be specific in feedback: file, line number, what to change and why
 - Focus on substance over style — don't nitpick formatting if a linter handles it
 - Use `@room GATE:` if you find a critical issue that needs human decision
-- Use `APPROVED:` prefix when the code passes review
+- Use `APPROVED:` prefix when the code passes review — this ends the review cycle, do NOT send further messages after APPROVED
