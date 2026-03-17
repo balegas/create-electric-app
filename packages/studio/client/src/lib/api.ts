@@ -289,6 +289,11 @@ export interface RoomState {
 	roundCount: number
 	previewUrl?: string
 	appPort?: number
+	pendingInfraGate?: {
+		sessionId: string
+		projectName: string
+		runtime: string
+	}
 	participants: Array<{
 		sessionId: string
 		name: string

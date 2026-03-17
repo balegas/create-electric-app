@@ -37,7 +37,7 @@ import {
 import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
-import { createGate, rejectAllGates, resolveGate } from "./gate.js"
+import { createGate, hasGate, rejectAllGates, resolveGate } from "./gate.js"
 import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
 import { createOrgRepo, getInstallationToken } from "./github-app.js"
 import { generateInviteCode } from "./invite-code.js"
@@ -2202,10 +2202,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Async flow: wait for gate, create sandboxes, start agents
 		const asyncFlow = async () => {
 			// 1. Wait for infra config gate on coder's session
-			await router.sendMessage(
-				"system",
-				`Waiting for setup — open ${coderSession.name}'s session to confirm infrastructure.`,
-			)
+			await router.sendMessage("system", `Waiting for setup — confirm infrastructure to continue.`)
 			console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
 			let infra: InfraConfig
 			let repoConfig: {
@@ -2879,12 +2876,27 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				appPort = handle?.port ?? session?.appPort
 			}
 
+			// Check if any participant has a pending infra_config gate
+			const infraGateParticipant = router.participants.find((p) =>
+				hasGate(p.sessionId, "infra_config"),
+			)
+			const pendingInfraGate = infraGateParticipant
+				? {
+						sessionId: infraGateParticipant.sessionId,
+						projectName:
+							config.sessions.get(infraGateParticipant.sessionId)?.projectName ??
+							infraGateParticipant.name,
+						runtime: config.sandbox.runtime,
+					}
+				: undefined
+
 			return c.json({
 				roomId,
 				state: router.state,
 				roundCount: router.roundCount,
 				previewUrl,
 				appPort,
+				pendingInfraGate,
 				participants: router.participants.map((p) => ({
 					sessionId: p.sessionId,
 					name: p.name,

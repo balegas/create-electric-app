@@ -12,7 +12,7 @@ interface GatePromptProps {
 	onResolved: (index: number, summary?: string) => void
 }
 
-function InfraConfigGate({
+export function InfraConfigGate({
 	sessionId,
 	event,
 	onResolved,
