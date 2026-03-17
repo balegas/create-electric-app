@@ -2221,7 +2221,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Async flow: wait for gate, create sandboxes, start agents
 		const asyncFlow = async () => {
 			// 1. Wait for infra config gate on coder's session
-			await router.sendMessage("system", `Waiting for setup — confirm infrastructure to continue.`)
+			await router.sendMessage(
+				"system",
+				`Waiting for setup — open ${coderSession.name}'s session to confirm infrastructure.`,
+			)
 			let infra: InfraConfig
 			let repoConfig: {
 				account: string
@@ -2288,6 +2291,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					infraDetails.Repository = `${repoConfig.account}/${repoConfig.repoName}`
 				}
 				router.setResolvedInfraDetails(infraDetails)
+
+				// Notify room about the resolved infrastructure
+				const summaryParts = Object.entries(infraDetails).map(([k, v]) => `${k}: ${v}`)
+				await router.sendMessage("system", `Infrastructure confirmed — ${summaryParts.join(", ")}`)
 			} catch (err) {
 				console.log(`[room:create-app:${roomId}] Infra gate error (defaulting to local):`, err)
 				infra = { mode: "local" }
@@ -2570,9 +2577,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					if (event.type === "gate_resolved") {
 						config.sessions.update(coderSession.sessionId, { needsInput: false })
-						router
-							.sendMessage("system", `${coderSession.name} received input — resuming.`)
-							.catch(() => {})
+						const summary = (event as EngineEvent & { summary?: string }).summary
+						const msg = summary
+							? `${coderSession.name} received input: ${summary}`
+							: `${coderSession.name} received input — resuming.`
+						router.sendMessage("system", msg).catch(() => {})
 					}
 				})
 
@@ -2763,9 +2772,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						}
 						if (event.type === "gate_resolved") {
 							config.sessions.update(agentSession.sessionId, { needsInput: false })
-							router
-								.sendMessage("system", `${agentSession.name} received input — resuming.`)
-								.catch(() => {})
+							const summary = (event as EngineEvent & { summary?: string }).summary
+							const msg = summary
+								? `${agentSession.name} received input: ${summary}`
+								: `${agentSession.name} received input — resuming.`
+							router.sendMessage("system", msg).catch(() => {})
 						}
 					})
 
