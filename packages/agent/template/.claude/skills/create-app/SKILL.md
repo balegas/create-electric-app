@@ -28,11 +28,7 @@ Evaluate the description provided in `$ARGUMENTS`.
 - 50-79: Recognizable app type but light on specifics
 - 0-49: Too vague to proceed
 
-**If the description scores below 70**, gather missing details:
-- **In a room** (you have room messaging): use `@room GATE: <question>` to ask the human. The conversation pauses until they respond. Frame your question clearly — e.g., `@room GATE: Should the task manager support multiple boards or a single flat list? Also, do tasks need due dates and assignees?`
-- **Solo session** (no room): use AskUserQuestion to gather missing details. You can use any combination of formats — single or multiple questions, multiSelect for picking features, headers to group topics, or free-text for open-ended input.
-
-Choose whatever format best fits the gaps in the description. Keep questions specific to the described app type.
+**If the description scores below 70**, use AskUserQuestion to gather missing details. Choose whatever format best fits the gaps — single or multiple questions, multiSelect for picking features, headers to group topics, or free-text for open-ended input.
 
 **If the description scores 70+**, proceed immediately.
 
