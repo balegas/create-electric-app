@@ -1,5 +1,27 @@
 # @electric-agent/studio
 
+## 1.18.0
+
+### Minor Changes
+
+- 884a450: Room improvements: move infra gate to room page, cascade-delete agents, persist sessions, markdown messages.
+
+  - Infrastructure configuration is now a room-level concern — the gate renders inline in the room page instead of requiring navigation to a coder session
+  - Deleting a room cascades to delete all associated agent sessions
+  - Room-session mappings are persisted to durable stream so rooms survive server restarts (interrupted rooms show correct status)
+  - Room messages render with markdown formatting (code blocks, headings, lists)
+  - Pre-create sprite checkpoints in CI after deploy to eliminate slow bootstrap
+  - Fix plan approval regression: revert clarification to use AskUserQuestion instead of non-blocking @room GATE
+  - Fix infra gate race condition: create gate before async flow so it's visible immediately
+  - Gate resolution broadcasts summary to room as system message
+
+- 884a450: Persist room-session mappings to durable stream so rooms survive server restarts. Rooms interrupted by a deploy now show "Interrupted" status with participant avatars instead of appearing as "Closed" with empty participants.
+
+### Patch Changes
+
+- 6b19d68: Switch room messages to inline flow layout so agent name and message text appear on the same line with natural text wrapping.
+- 754b620: Show resolved infrastructure details in room page after gate is confirmed, instead of hiding the gate component entirely.
+
 ## 1.17.2
 
 ### Patch Changes
