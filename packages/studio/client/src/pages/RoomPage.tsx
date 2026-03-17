@@ -7,7 +7,6 @@ import { useAppContext } from "../layouts/AppShell"
 import { addAgentRoom, getAgentRooms } from "../lib/agent-room-store"
 import {
 	addAgentToRoom,
-	closeAgentRoom,
 	createAppRoom,
 	getAgentRoomState,
 	type RoomState,
@@ -141,16 +140,6 @@ export function RoomPage() {
 		}
 	}, [roomId, refreshSessions])
 
-	const handleClose = useCallback(async () => {
-		if (!roomId) return
-		try {
-			await closeAgentRoom(roomId)
-			setRoomState((prev) => (prev ? { ...prev, state: "closed" } : prev))
-		} catch (err) {
-			console.error("Failed to close room:", err)
-		}
-	}, [roomId])
-
 	if (roomId === "new") {
 		return (
 			<div className="room-empty">
@@ -190,7 +179,6 @@ export function RoomPage() {
 				state={effectiveState}
 				participants={participants}
 				appUrl={appUrl}
-				onClose={handleClose}
 				onAddAgent={() => setShowAddAgent(true)}
 				openMobileDrawer={openMobileDrawer}
 			/>
@@ -253,7 +241,6 @@ function RoomHeader({
 	state,
 	participants,
 	appUrl,
-	onClose,
 	onAddAgent,
 	openMobileDrawer,
 }: {
@@ -263,7 +250,6 @@ function RoomHeader({
 	state?: string
 	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
 	appUrl?: string
-	onClose: () => void
 	onAddAgent: () => void
 	openMobileDrawer: () => void
 }) {
@@ -383,11 +369,6 @@ function RoomHeader({
 				>
 					Add Agent
 				</button>
-				{state === "active" && (
-					<button type="button" className="session-header-action" onClick={onClose}>
-						Close
-					</button>
-				)}
 				{appUrl && (
 					<a
 						href={appUrl}
