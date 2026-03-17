@@ -98,16 +98,19 @@ AskUserQuestion(
 
 Only implement the improvements the user selects. If the user selects none, stay silent.
 
+**IMPORTANT:** Do NOT print a summary or ask "Which of these would you like me to implement?" as text output. The `AskUserQuestion` tool handles the presentation — just call it and wait for the response. Do not duplicate the question in your assistant message.
+
 ## Implement Improvements
 
 After the user selects improvements:
-1. Create a feature branch: `git checkout -b ui-improvements`
-2. Make the UI changes
-3. Run build and lint: `pnpm run build && pnpm run check`
-4. Commit with meaningful message
-5. Push: `git push -u origin ui-improvements`
-6. Create PR: `gh pr create --title "UI improvements" --body "<description>"`
-7. Notify the reviewer: `@reviewer UI improvements PR is ready for review: <PR URL>`
+1. Announce to the room what you're implementing: `@room Implementing: <list of selected improvements>`
+2. Create a feature branch: `git checkout -b ui-improvements`
+3. Make the UI changes
+4. Run build and lint: `pnpm run build && pnpm run check`
+5. Commit with meaningful message
+6. Push: `git push -u origin ui-improvements`
+7. Create PR: `gh pr create --title "UI improvements" --body "<description>"`
+8. Notify the coder directly (if you know their name) or broadcast: `@room UI improvements PR is ready for review: <PR URL>`
 
 ## Wait for Review
 
