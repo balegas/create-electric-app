@@ -43,6 +43,11 @@
 	.app-shell.sidebar-collapsed .sidebar-brand,
 	.app-shell.sidebar-collapsed .sidebar-section-label {
 		display: block;
+		font-size: 11px;
+		height: auto;
+		background: none;
+		padding: 8px 12px 4px;
+		margin: 0;
 	}
 
 	.app-shell.sidebar-collapsed .session-item {
