@@ -1,5 +1,12 @@
 # @electric-agent/agent
 
+## 1.4.11
+
+### Patch Changes
+
+- Updated dependencies [b6e765d]
+  - @electric-agent/studio@1.17.0
+
 ## 1.4.10
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @electric-agent/studio
 
+## 1.17.0
+
+### Minor Changes
+
+- b6e765d: Remove "Create Room" sidebar button, replace "room" terminology with "broadcast" in chat, and allow infrastructure confirmation directly from the app/room page instead of requiring navigation to individual session pages.
+
 ## 1.16.0
 
 ### Minor Changes
