@@ -285,7 +285,7 @@ export async function resumeFromGithub(repoUrl: string, branch?: string) {
 
 export interface RoomState {
 	roomId: string
-	state: "active" | "closed"
+	state: "active" | "closed" | "interrupted"
 	roundCount: number
 	previewUrl?: string
 	appPort?: number

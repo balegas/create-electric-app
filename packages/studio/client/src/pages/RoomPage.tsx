@@ -313,6 +313,11 @@ function RoomHeader({
 					Active
 				</span>
 			)}
+			{state === "interrupted" && (
+				<span className="session-header-status" style={{ color: "var(--yellow)" }}>
+					Interrupted
+				</span>
+			)}
 			{state === "closed" && (
 				<span className="session-header-status" style={{ color: "var(--text-subtle)" }}>
 					Closed

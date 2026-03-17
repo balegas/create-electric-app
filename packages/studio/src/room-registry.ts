@@ -8,6 +8,8 @@ export interface RoomInfo {
 	name: string
 	createdAt: string
 	revoked: boolean
+	/** Session IDs belonging to this room (populated after agents are created) */
+	sessions?: Array<{ sessionId: string; name: string; role: string }>
 }
 
 // --- Room Registry Events (persisted to Durable Streams) ---
@@ -15,6 +17,12 @@ export interface RoomInfo {
 type RoomRegistryEvent =
 	| { type: "room_created"; room: RoomInfo; ts: string }
 	| { type: "room_revoked"; roomId: string; ts: string }
+	| {
+			type: "room_sessions_set"
+			roomId: string
+			sessions: Array<{ sessionId: string; name: string; role: string }>
+			ts: string
+	  }
 
 /**
  * Durable Streams-backed room registry.
@@ -102,6 +110,13 @@ export class RoomRegistry {
 				}
 				break
 			}
+			case "room_sessions_set": {
+				const room = this.rooms.get(event.roomId)
+				if (room) {
+					room.sessions = event.sessions
+				}
+				break
+			}
 		}
 	}
 
@@ -127,6 +142,18 @@ export class RoomRegistry {
 
 	getRoomByCode(code: string): RoomInfo | undefined {
 		return this.roomsByCode.get(code)
+	}
+
+	async setRoomSessions(
+		roomId: string,
+		sessions: Array<{ sessionId: string; name: string; role: string }>,
+	): Promise<void> {
+		await this.append({
+			type: "room_sessions_set",
+			roomId,
+			sessions,
+			ts: new Date().toISOString(),
+		})
 	}
 
 	async revokeRoom(id: string): Promise<boolean> {

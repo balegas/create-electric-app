@@ -2142,9 +2142,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 
 		// Register sessions as pending so the room state endpoint can find their gates
-		router.addPendingSessions(
-			sessions.map((s) => ({ sessionId: s.sessionId, name: s.name, role: s.role })),
-		)
+		const sessionMappings = sessions.map((s) => ({
+			sessionId: s.sessionId,
+			name: s.name,
+			role: s.role,
+		}))
+		router.addPendingSessions(sessionMappings)
+
+		// Persist session-room mapping to durable stream (survives restarts)
+		config.rooms.setRoomSessions(roomId, sessionMappings).catch((err) => {
+			console.error(`[room:create-app] Failed to persist room sessions:`, err)
+		})
 
 		const roomToken = deriveRoomToken(config.streamConfig.secret, roomId)
 		console.log(
@@ -2940,18 +2948,25 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const roomEntry = config.rooms.getRoom(roomId)
 		if (!roomEntry) return c.json({ error: "Room not found" }, 404)
 
-		// Return basic room state without live participants
-		// Sessions are still readable via their individual SSE streams
+		// Check if any sessions were running before the restart
+		const registrySessions = roomEntry.sessions ?? []
+		const hasRunningSessions = registrySessions.some(
+			(s) => config.sessions.get(s.sessionId)?.status === "running",
+		)
+
+		// Return room state with session info from registry
+		// "interrupted" = room was active before restart but lost its in-memory state
 		return c.json({
 			roomId,
-			state: "closed" as const,
+			state: (hasRunningSessions ? "interrupted" : "closed") as string,
 			roundCount: 0,
-			participants: [] as Array<{
-				sessionId: string
-				name: string
-				role?: string
-				running: boolean
-			}>,
+			participants: registrySessions.map((s) => ({
+				sessionId: s.sessionId,
+				name: s.name,
+				role: s.role,
+				running: false,
+				needsInput: false,
+			})),
 		})
 	})
 
