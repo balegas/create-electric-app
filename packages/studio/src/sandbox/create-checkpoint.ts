@@ -1,0 +1,84 @@
+/**
+ * CLI script to pre-create a sprite checkpoint for the current studio version.
+ *
+ * Run after publishing / deploying so the first sprite creation in prod
+ * restores from checkpoint instantly instead of running a full bootstrap.
+ *
+ * Usage:
+ *   FLY_API_TOKEN=... npx tsx packages/studio/src/sandbox/create-checkpoint.ts
+ */
+
+import { SpritesClient } from "@fly/sprites"
+import { bootstrapSprite } from "./sprites-bootstrap.js"
+
+const SPRITE_NAME = "ea-checkpoint-builder"
+
+async function consumeStream(response: Response): Promise<void> {
+	if (!response.body) return
+	const reader = response.body.getReader()
+	try {
+		while (true) {
+			const { done } = await reader.read()
+			if (done) break
+		}
+	} finally {
+		reader.releaseLock()
+	}
+}
+
+async function main() {
+	const token = process.env.FLY_API_TOKEN
+	if (!token) {
+		console.error("FLY_API_TOKEN is required")
+		process.exit(1)
+	}
+
+	// Read the studio version to build the checkpoint comment
+	const { createRequire } = await import("node:module")
+	const require = createRequire(import.meta.url)
+	const { version } = require("../../package.json") as { version: string }
+	const comment = `bootstrapped:${version}`
+
+	const client = new SpritesClient(token)
+
+	// Check if checkpoint already exists (using any sprite)
+	console.log(`Checking for existing checkpoint: "${comment}"`)
+	const tempSprite = await client.createSprite(SPRITE_NAME, {
+		ramMB: 2048,
+		cpus: 2,
+		region: "ord",
+	})
+
+	try {
+		const checkpoints = await tempSprite.listCheckpoints()
+		const existing = checkpoints.find((cp) => cp.comment === comment)
+		if (existing) {
+			console.log(`Checkpoint already exists: ${existing.id}`)
+			await tempSprite.delete()
+			return
+		}
+
+		// Run full bootstrap
+		console.log(`No checkpoint for version ${version}, running bootstrap...`)
+		await bootstrapSprite(tempSprite)
+
+		// Create checkpoint
+		console.log(`Creating checkpoint "${comment}"...`)
+		const response = await tempSprite.createCheckpoint(comment)
+		await consumeStream(response)
+		console.log(`Checkpoint created successfully`)
+	} finally {
+		// Clean up
+		try {
+			await tempSprite.delete()
+			console.log(`Temporary sprite deleted`)
+		} catch {
+			console.warn(`Failed to delete temporary sprite ${SPRITE_NAME}`)
+		}
+	}
+}
+
+main().catch((err) => {
+	console.error("Failed to create checkpoint:", err)
+	process.exit(1)
+})
