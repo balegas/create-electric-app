@@ -688,6 +688,7 @@
 	font-size: 13px;
 	font-family: var(--font-sans);
 	min-width: 160px;
+	align-self: stretch;
 }
 
 .room-target-select:disabled {
