@@ -497,6 +497,26 @@
 	color: var(--text-subtle);
 }
 
+.session-item-app-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--text-subtle);
+	font-size: 11px;
+	cursor: pointer;
+	max-width: 100px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.session-item-app-link:hover {
+	color: var(--brand-1);
+}
+
 .session-item-delete {
 	opacity: 1;
 	padding: 4px 6px;

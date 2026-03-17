@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { createPortal } from "react-dom"
 import { useEscapeKey, useKeyboardShortcut } from "../hooks/useKeyboardShortcut"
+import type { AgentRoomEntry } from "../lib/agent-room-store"
 import type { SessionInfo } from "../lib/api"
 
 interface SessionListItemProps {
@@ -8,6 +9,10 @@ interface SessionListItemProps {
 	active: boolean
 	onClick: () => void
 	onDelete: () => void
+	/** The room (app) this agent belongs to, if any */
+	parentRoom?: AgentRoomEntry
+	/** Navigate to the parent room */
+	onNavigateToRoom?: () => void
 }
 
 // Pastel palette — 12 distinct colors that work on dark backgrounds
@@ -82,7 +87,14 @@ export function DeleteModal({
 	)
 }
 
-export function SessionListItem({ session, active, onClick, onDelete }: SessionListItemProps) {
+export function SessionListItem({
+	session,
+	active,
+	onClick,
+	onDelete,
+	parentRoom,
+	onNavigateToRoom,
+}: SessionListItemProps) {
 	const [showDeleteModal, setShowDeleteModal] = useState(false)
 
 	const statusRingClass = session.needsInput
@@ -111,6 +123,33 @@ export function SessionListItem({ session, active, onClick, onDelete }: SessionL
 					<div className="session-item-name">{session.projectName}</div>
 					<div className="session-item-meta">
 						<span>{formatTimeAgo(session.lastActiveAt)}</span>
+						{parentRoom && onNavigateToRoom && (
+							<button
+								type="button"
+								className="session-item-app-link"
+								onClick={(e) => {
+									e.stopPropagation()
+									onNavigateToRoom()
+								}}
+								title={`Go to app: ${parentRoom.name}`}
+							>
+								<svg
+									viewBox="0 0 16 16"
+									fill="none"
+									stroke="currentColor"
+									strokeWidth="1.5"
+									strokeLinecap="round"
+									strokeLinejoin="round"
+									width="12"
+									height="12"
+								>
+									<title>{`App: ${parentRoom.name}`}</title>
+									<path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5l-1 1" />
+									<path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5l1-1" />
+								</svg>
+								{parentRoom.name}
+							</button>
+						)}
 					</div>
 				</div>
 				<button
@@ -120,7 +159,7 @@ export function SessionListItem({ session, active, onClick, onDelete }: SessionL
 						e.stopPropagation()
 						setShowDeleteModal(true)
 					}}
-					title="Delete session"
+					title="Delete agent"
 				>
 					&times;
 				</button>

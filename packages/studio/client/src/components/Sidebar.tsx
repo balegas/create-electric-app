@@ -158,7 +158,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 			</div>
 
 			<div className="sidebar-sessions">
-				<div className="sidebar-section-label">Sessions</div>
+				<div className="sidebar-section-label">Apps</div>
 
 				<div className="session-item" onClick={() => handleNavigate("/")} title="New Electric App">
 					<span className="session-avatar new-project-avatar">+</span>
@@ -166,33 +166,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						<div className="session-item-name">New Electric App</div>
 					</div>
 				</div>
-				{devMode && (
-					<div
-						className="session-item"
-						onClick={() => handleNavigate("/?mode=session")}
-						title="Claude Session"
-					>
-						<span className="session-avatar new-project-avatar">
-							<svg
-								viewBox="0 0 16 16"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="1.5"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								width="14"
-								height="14"
-							>
-								<title>Claude Session</title>
-								<path d="M13 2.5l-9.5 9.5-1 3 3-1 9.5-9.5-2-2z" />
-								<path d="M10.5 5l2 2" />
-							</svg>
-						</span>
-						<div className="session-item-details">
-							<div className="session-item-name">Claude Session</div>
-						</div>
-					</div>
-				)}
+
 				{pendingProject && (
 					<div className="session-item session-item-pending" title={pendingProject.name}>
 						<span className="session-avatar session-avatar-pending" />
@@ -204,17 +178,6 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						</div>
 					</div>
 				)}
-				{sortedSessions.map((s) => (
-					<SessionListItem
-						key={s.id}
-						session={s}
-						active={s.id === activeSessionId}
-						onClick={() => handleNavigate(`/session/${s.id}`)}
-						onDelete={() => handleDeleteSession(s.id)}
-					/>
-				))}
-
-				<div className="sidebar-section-label">Rooms</div>
 
 				{agentRooms.map((r) => {
 					const color = getAvatarColor(r.id)
@@ -271,7 +234,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 					<div className="sidebar-join-input">
 						<input
 							type="text"
-							placeholder="Room name..."
+							placeholder="App name..."
 							value={roomName}
 							onChange={(e) => setRoomName(e.target.value)}
 							onKeyDown={(e) => {
@@ -300,7 +263,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 							}
 							setCreateRoomOpen(true)
 						}}
-						title="Create room"
+						title="Create app"
 					>
 						<span className="session-avatar new-project-avatar">+</span>
 						<div className="session-item-details">
@@ -342,7 +305,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 							}
 							setJoinRoomOpen(true)
 						}}
-						title="Join room"
+						title="Join app"
 					>
 						<span className="session-avatar new-project-avatar">
 							<LinkIcon />
@@ -352,6 +315,58 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
 						</div>
 					</div>
 				)}
+
+				<div className="sidebar-section-label">Agents</div>
+
+				{devMode && (
+					<div
+						className="session-item"
+						onClick={() => handleNavigate("/?mode=session")}
+						title="Claude Session"
+					>
+						<span className="session-avatar new-project-avatar">
+							<svg
+								viewBox="0 0 16 16"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth="1.5"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								width="14"
+								height="14"
+							>
+								<title>Claude Session</title>
+								<path d="M13 2.5l-9.5 9.5-1 3 3-1 9.5-9.5-2-2z" />
+								<path d="M10.5 5l2 2" />
+							</svg>
+						</span>
+						<div className="session-item-details">
+							<div className="session-item-name">Claude Session</div>
+						</div>
+					</div>
+				)}
+				{sortedSessions.map((s) => {
+					const parentRoom = agentRooms.find(
+						(r) =>
+							r.sessions &&
+							(r.sessions.coder === s.id ||
+								r.sessions.reviewer === s.id ||
+								r.sessions.uiDesigner === s.id),
+					)
+					return (
+						<SessionListItem
+							key={s.id}
+							session={s}
+							active={s.id === activeSessionId}
+							onClick={() => handleNavigate(`/session/${s.id}`)}
+							onDelete={() => handleDeleteSession(s.id)}
+							parentRoom={parentRoom}
+							onNavigateToRoom={
+								parentRoom ? () => handleNavigate(`/room/${parentRoom.id}`) : undefined
+							}
+						/>
+					)
+				})}
 			</div>
 
 			<div className="sidebar-collapse">
