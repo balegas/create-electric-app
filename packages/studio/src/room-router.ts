@@ -48,6 +48,7 @@ export class RoomRouter {
 		{ sessionId: string; name: string; role: string }
 	>()
 	private _repoInfo: RepoInfo | null
+	private _resolvedInfraDetails: Record<string, string> | null = null
 	private _state: "active" | "closed" = "active"
 	private _roundCount = 0
 	private cancelSubscription: (() => void) | null = null
@@ -102,6 +103,17 @@ export class RoomRouter {
 		for (const s of sessions) {
 			this._pendingSessions.set(s.sessionId, s)
 		}
+	}
+
+	/**
+	 * Resolved infrastructure details (shown in room after gate resolves).
+	 */
+	get resolvedInfraDetails(): Record<string, string> | null {
+		return this._resolvedInfraDetails
+	}
+
+	setResolvedInfraDetails(details: Record<string, string>): void {
+		this._resolvedInfraDetails = details
 	}
 
 	/**

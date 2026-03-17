@@ -294,6 +294,7 @@ export interface RoomState {
 		projectName: string
 		runtime: string
 	}
+	resolvedInfraDetails?: Record<string, string>
 	participants: Array<{
 		sessionId: string
 		name: string

@@ -2265,9 +2265,29 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						},
 					})
 				}
+				// Store resolved details for the room state API
+				const modeLabels: Record<string, string> = {
+					claim: "Provisioned (Cloud)",
+					local: "Local (Docker)",
+					cloud: "Electric Cloud (BYO)",
+				}
+				const infraDetails: Record<string, string> = {
+					Infrastructure: modeLabels[gateValue.mode] ?? gateValue.mode,
+				}
+				if (gateValue.mode === "cloud" || gateValue.mode === "claim") {
+					if (gateValue.sourceId) infraDetails["Source ID"] = gateValue.sourceId
+				}
+				if (gateValue.mode === "claim" && claimId) {
+					infraDetails["Claim link"] = `https://dashboard.electric-sql.cloud/claim?uuid=${claimId}`
+				}
+				if (repoConfig) {
+					infraDetails.Repository = `${repoConfig.account}/${repoConfig.repoName}`
+				}
+				router.setResolvedInfraDetails(infraDetails)
 			} catch (err) {
 				console.log(`[room:create-app:${roomId}] Infra gate error (defaulting to local):`, err)
 				infra = { mode: "local" }
+				router.setResolvedInfraDetails({ Infrastructure: "Local (Docker)" })
 			}
 
 			// 2. Create sandboxes in parallel
@@ -2905,6 +2925,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				previewUrl,
 				appPort,
 				pendingInfraGate,
+				resolvedInfraDetails: router.resolvedInfraDetails ?? undefined,
 				participants: router.participants.map((p) => ({
 					sessionId: p.sessionId,
 					name: p.name,

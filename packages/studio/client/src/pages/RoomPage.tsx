@@ -169,6 +169,7 @@ export function RoomPage() {
 		roomState?.previewUrl ??
 		(roomState?.appPort ? `http://localhost:${roomState.appPort}` : undefined)
 	const pendingInfraGate = roomState?.pendingInfraGate
+	const resolvedInfraDetails = roomState?.resolvedInfraDetails
 
 	return (
 		<>
@@ -202,6 +203,23 @@ export function RoomPage() {
 									ts: new Date().toISOString(),
 								}}
 								onResolved={() => setInfraGateResolved(true)}
+							/>
+						</div>
+					)}
+					{!pendingInfraGate && resolvedInfraDetails && (
+						<div style={{ padding: "0 16px 16px" }}>
+							<InfraConfigGate
+								sessionId=""
+								event={{
+									type: "infra_config_prompt" as const,
+									projectName: "",
+									ghAccounts: [],
+									runtime: "",
+									ts: new Date().toISOString(),
+								}}
+								onResolved={() => {}}
+								resolved
+								resolvedDetails={resolvedInfraDetails}
 							/>
 						</div>
 					)}
