@@ -639,6 +639,12 @@
 /* Room entries reuse .console-entry from console.css for uniform styling.
    Only room-specific overrides live here. */
 
+.room-event-list .console-entry .prefix {
+	display: inline-block;
+	min-width: 120px;
+	text-align: left;
+}
+
 .room-prefix-link {
 	background: none;
 	border: none;
