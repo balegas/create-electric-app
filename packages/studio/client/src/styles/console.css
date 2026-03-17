@@ -241,6 +241,8 @@
 
 /* Waiting indicator */
 .waiting-indicator {
+	display: flex;
+	align-items: center;
 	gap: 6px;
 	color: var(--text-subtle);
 	animation: fade-pulse 2s ease-in-out infinite;
