@@ -343,6 +343,11 @@
 	word-break: break-all;
 }
 
+.gate-prompt a {
+	color: var(--brand-1);
+	word-break: break-all;
+}
+
 /* Free-form answer display (resolved state) */
 .gate-answer-summary {
 	font-family: var(--font-sans);

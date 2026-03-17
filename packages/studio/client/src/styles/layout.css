@@ -176,6 +176,10 @@
 	padding: 0 4px;
 }
 
+.sidebar-sessions > .sidebar-section-label:first-child {
+	padding-top: 4px;
+}
+
 /* Session content: console + prompt */
 .session-content {
 	display: flex;
