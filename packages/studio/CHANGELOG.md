@@ -1,5 +1,11 @@
 # @electric-agent/studio
 
+## 1.17.2
+
+### Patch Changes
+
+- 8e064a7: Fix room message alignment by giving actor name prefixes a fixed min-width so message content aligns vertically across entries.
+
 ## 1.17.1
 
 ### Patch Changes
