@@ -497,7 +497,9 @@ function RoomEventList({
 							if (event.body.includes("Project ready")) return null
 							return (
 								<div key={key} className="room-event room-system-event">
-									<span>{event.body}</span>
+									<span>
+										<RoomMessageBody body={event.body} participants={participants} />
+									</span>
 									<span className="room-message-time">
 										{new Date(event.ts).toLocaleTimeString()}
 									</span>
