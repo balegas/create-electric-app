@@ -56,7 +56,7 @@ export function ActionGroup({ items }: ActionGroupProps) {
 
 	const toolItems = items.filter((i) => i.entry.kind === "tool_use")
 	const allDone = toolItems.every((i) => (i.entry as ToolEntry).tool_response !== null)
-	const tail = toolItems.length > 0 ? toolItems[toolItems.length - 1] : items[items.length - 1]
+	const tailItems = toolItems.slice(-3)
 	const totalDuration = aggregateDuration(items)
 
 	return (
@@ -85,11 +85,17 @@ export function ActionGroup({ items }: ActionGroupProps) {
 				</div>
 			)}
 
-			{!expanded && tail && (
+			{!expanded && tailItems.length > 0 && (
 				<div className="tool-group-tail">
-					{tail.entry.kind === "tool_use" ? (
-						<ToolExecution entry={tail.entry as ToolEntry} duration={tail.duration} />
-					) : null}
+					{tailItems.map(({ entry, index: i, duration }) =>
+						entry.kind === "tool_use" ? (
+							<ToolExecution
+								key={entry.tool_use_id || `gt-${i}`}
+								entry={entry as ToolEntry}
+								duration={duration}
+							/>
+						) : null,
+					)}
 				</div>
 			)}
 		</div>

@@ -72,27 +72,26 @@ The app MUST use the Electric theme in `__root.tsx`:
 
 ## Present Findings
 
-Use `AskUserQuestion` to present your findings and let the user pick which improvements to make. Structure your question with:
+Use `AskUserQuestion` to present your findings and let the user pick which improvements to make.
 
-- A **header** summarizing the audit (e.g., "UI Audit — 5 improvements found")
-- Each improvement as a **multiSelect option** with:
-  - `label`: Short name of the improvement (e.g., "Replace raw HTML buttons with Radix Button")
-  - `description`: File:line reference + what changes and why (e.g., "src/components/TaskList.tsx:42 — raw `<button>` elements lack consistent styling and accessibility")
-- Group by impact: list high-impact changes first
+**Rules for presenting improvements:**
+- **Human-readable labels** — Short, plain-language names anyone can understand. No code syntax in labels.
+- **Concise descriptions** — Lead with the visual impact, put file:line references at the end.
+- **Curate ruthlessly** — Present only the top 3-5 highest-impact improvements as individual options.
+- **Group the rest** — Bundle all remaining minor improvements into a single "Small improvements" option with a description listing what's included.
 
 **Example pattern:**
 
 ```
 AskUserQuestion(
-  header: "UI Audit — 5 improvements found",
+  header: "UI Audit",
   question: "Select which improvements you'd like me to implement:",
   multiSelect: true,
   options: [
-    { label: "Add Card surfaces for depth", description: "src/routes/index.tsx:28 — Content floats on bare background. Wrapping in Card variant='surface' adds visual hierarchy." },
-    { label: "Fix typography hierarchy", description: "src/routes/index.tsx:15 — Page title uses <h1> instead of Heading size='7'. Section headers need size differentiation." },
-    { label: "Replace raw HTML inputs", description: "src/components/AddForm.tsx:12-18 — Raw <input> and <button> should use Radix TextField and Button for consistent styling." },
-    { label: "Add empty state", description: "src/components/ItemList.tsx:31 — No empty state when list is empty. Add illustration or message." },
-    { label: "Apply Electric brand theme", description: "src/routes/__root.tsx:8 — Theme missing accentColor='violet' and grayColor='mauve'." }
+    { label: "Add depth with card surfaces", description: "Wrap content areas in subtle card panels to create visual layers and depth. (src/routes/index.tsx)" },
+    { label: "Fix heading hierarchy", description: "Use proper heading sizes for page title and section headers to establish clear visual structure. (src/routes/index.tsx)" },
+    { label: "Replace raw HTML with Radix components", description: "Swap plain <input> and <button> elements for styled Radix UI components. (src/components/AddForm.tsx)" },
+    { label: "Small improvements", description: "Add empty state illustration, apply Electric brand theme colors, fix strikethrough styling on completed items." }
   ]
 )
 ```

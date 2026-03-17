@@ -257,6 +257,18 @@ export function Settings({
 							github.com/settings/tokens
 						</a>
 					</div>
+					<div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
+						Without a PAT, apps are created as public repos in{" "}
+						<a
+							href="https://github.com/electric-apps"
+							target="_blank"
+							rel="noopener noreferrer"
+							style={{ color: "var(--brand-1)" }}
+						>
+							github.com/electric-apps
+						</a>
+						.
+					</div>
 				</div>
 
 				{/* Debug (dev mode only) */}
