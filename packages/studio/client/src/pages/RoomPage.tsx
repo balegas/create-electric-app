@@ -407,6 +407,28 @@ function ParticipantLink({
 	)
 }
 
+function RoomParticipantPrefix({
+	name,
+	participants,
+}: {
+	name: string
+	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
+}) {
+	const navigate = useNavigate()
+	const participant = participants.find((p) => p.name === name)
+	if (!participant) return <span className="room-message-prefix">[{name}]</span>
+	return (
+		<button
+			type="button"
+			className="room-message-prefix room-message-prefix-link"
+			onClick={() => navigate(`/session/${participant.sessionId}`)}
+			title={`Go to ${name}'s session`}
+		>
+			[{name}]
+		</button>
+	)
+}
+
 function escapeRegExp(str: string) {
 	return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -496,8 +518,9 @@ function RoomEventList({
 						if (event.from === "system") {
 							if (event.body.includes("Project ready")) return null
 							return (
-								<div key={key} className="room-event room-system-event">
-									<span>
+								<div key={key} className="room-event room-message">
+									<span className="room-message-prefix system">[system]</span>
+									<span className="room-message-body">
 										<RoomMessageBody body={event.body} participants={participants} />
 									</span>
 									<span className="room-message-time">
@@ -508,11 +531,11 @@ function RoomEventList({
 						}
 						return (
 							<div key={key} className="room-event room-message">
-								<ParticipantLink name={event.from} participants={participants} />
+								<RoomParticipantPrefix name={event.from} participants={participants} />
 								{event.to && (
 									<>
 										<span className="room-message-arrow">&rarr;</span>
-										<ParticipantLink name={event.to} participants={participants} />
+										<RoomParticipantPrefix name={event.to} participants={participants} />
 									</>
 								)}
 								<span className="room-message-body">
@@ -526,8 +549,9 @@ function RoomEventList({
 						const joinedP = participants.find((p) => p.name === joinedName)
 						const roleLabel = joinedP?.role ? ` (${joinedP.role})` : ""
 						return (
-							<div key={key} className="room-event room-system-event">
-								<span>
+							<div key={key} className="room-event room-message">
+								<span className="room-message-prefix system">[system]</span>
+								<span className="room-message-body">
 									{joinedName}
 									{roleLabel} joined the room
 								</span>
@@ -537,15 +561,19 @@ function RoomEventList({
 					}
 					case "participant_left":
 						return (
-							<div key={key} className="room-event room-system-event">
-								<span>Participant left</span>
+							<div key={key} className="room-event room-message">
+								<span className="room-message-prefix system">[system]</span>
+								<span className="room-message-body">Participant left</span>
 							</div>
 						)
 					case "room_closed":
 						return (
-							<div key={key} className="room-event room-system-event room-closed-event">
-								<span>Room closed by {event.closedBy}</span>
-								{event.summary && <span> — {event.summary}</span>}
+							<div key={key} className="room-event room-message">
+								<span className="room-message-prefix system">[system]</span>
+								<span className="room-message-body">
+									Room closed by {event.closedBy}
+									{event.summary && <> — {event.summary}</>}
+								</span>
 							</div>
 						)
 					default:
