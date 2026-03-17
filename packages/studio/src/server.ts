@@ -30,6 +30,7 @@ import {
 import {
 	createAppSkillContent,
 	generateClaudeMd,
+	ROOM_MESSAGING_SECTION,
 	resolveRoleSkill,
 	roomMessagingSkillContent,
 } from "./bridge/claude-md-generator.js"
@@ -2429,6 +2430,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					projectDir: handle.projectDir,
 					runtime: config.sandbox.runtime,
 					production: !config.devMode,
+					roomParticipant: true,
 					...(prodGitConfig
 						? { git: prodGitConfig }
 						: repoConfig
@@ -2608,8 +2610,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				for (const { session: agentSession, handle: agentHandle } of supportAgents) {
 					const agentBridge = getOrCreateBridge(config, agentSession.sessionId)
 
-					// Write a minimal CLAUDE.md
-					const minimalClaudeMd = "Room agent workspace"
+					// Write a minimal CLAUDE.md with room messaging protocol
+					const minimalClaudeMd = `Room agent workspace${ROOM_MESSAGING_SECTION}`
 					try {
 						await config.sandbox.exec(
 							agentHandle,
@@ -3019,9 +3021,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							handle,
 							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
 						)
-						// Append room-messaging reference to CLAUDE.md so the agent knows to read it
-						const roomRef = `\n\n## Room Messaging (CRITICAL)\nYou are a participant in a multi-agent room. Read .claude/skills/room-messaging/SKILL.md for the messaging protocol.\nAll communication with other agents MUST use @room or @<name> messages as described in that skill.\n`
-						const refB64 = Buffer.from(roomRef).toString("base64")
+						// Append room-messaging protocol to CLAUDE.md so the agent has the full protocol
+						const refB64 = Buffer.from(ROOM_MESSAGING_SECTION).toString("base64")
 						await config.sandbox.exec(
 							handle,
 							`echo '${refB64}' | base64 -d >> '${handle.projectDir}/CLAUDE.md'`,
