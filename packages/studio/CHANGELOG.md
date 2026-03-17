@@ -1,5 +1,11 @@
 # @electric-agent/studio
 
+## 1.17.1
+
+### Patch Changes
+
+- 08840aa: Fix mobile sidebar extra spacing under topbar and gate link styling in room page.
+
 ## 1.17.0
 
 ### Minor Changes
