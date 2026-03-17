@@ -39,6 +39,8 @@ export interface ClaudeMdOptions {
 	git?: GitConfig
 	/** When true, inject production guardrails that restrict agent scope */
 	production?: boolean
+	/** When true, include room messaging protocol for multi-agent coordination */
+	roomParticipant?: boolean
 }
 
 export function generateClaudeMd(opts: ClaudeMdOptions): string {
@@ -77,6 +79,11 @@ export function generateClaudeMd(opts: ClaudeMdOptions): string {
 	const gitSection = gitInstructions(opts.git)
 	if (gitSection) {
 		sections.push(gitSection)
+		sections.push("")
+	}
+
+	if (opts.roomParticipant) {
+		sections.push(ROOM_MESSAGING)
 		sections.push("")
 	}
 
@@ -296,6 +303,24 @@ git push
 Commit types: feat, fix, refactor, style, chore, docs, test`
 }
 
+const ROOM_MESSAGING = `## Room Messaging (CRITICAL)
+You are a participant in a multi-agent room. The full protocol is in .claude/skills/room-messaging/SKILL.md — read it for complete details.
+
+### Quick Reference
+- **Broadcast**: \`@room <message>\` — send to all participants
+- **Direct message**: \`@<name> <message>\` — send to one participant
+- **Gated question**: \`@room GATE: <question>\` — pause until a human responds
+- **Review request**: \`@room REVIEW_REQUEST: <summary>\` — signal code is ready for review
+- **Review feedback**: \`@room REVIEW_FEEDBACK: <issues>\` — send review findings
+- **Approved**: \`@room APPROVED: <summary>\` — review passed (terminal)
+
+### Rules
+1. Place your @room message at the **END** of your response, after all work
+2. ONE @room or @<name> per turn — no more
+3. The @room directive MUST be on its own line — never inline in a paragraph
+4. No @room = silence (your turn ends, you wait)
+5. Use \`@room GATE: <question>\` when you need human input to proceed (e.g., ambiguous requirements, architectural decisions). The conversation pauses until the human answers.`
+
 const PRODUCTION_GUARDRAILS = `## Production Guardrails (ENFORCED)
 You are running in production mode. You MUST follow these rules strictly:
 - ONLY generate Electric SQL apps via the /create-app skill pipeline
@@ -311,6 +336,12 @@ You are running in production mode. You MUST follow these rules strictly:
 // Create-app skill content — exported so the server can write it to sandboxes
 // where the npm-installed electric-agent may not include it yet.
 // ---------------------------------------------------------------------------
+
+/**
+ * Room messaging section text — exported so server.ts can append it
+ * to existing CLAUDE.md files when agents join a room mid-session.
+ */
+export const ROOM_MESSAGING_SECTION = `\n\n${ROOM_MESSAGING}\n`
 
 export { createAppSkillContent } from "./create-app-skill.js"
 export { resolveRoleSkill } from "./role-skills.js"
