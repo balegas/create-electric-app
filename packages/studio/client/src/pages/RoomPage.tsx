@@ -416,11 +416,11 @@ function RoomParticipantPrefix({
 }) {
 	const navigate = useNavigate()
 	const participant = participants.find((p) => p.name === name)
-	if (!participant) return <span className="room-message-prefix">[{name}]</span>
+	if (!participant) return <span className="prefix task">[{name}]</span>
 	return (
 		<button
 			type="button"
-			className="room-message-prefix room-message-prefix-link"
+			className="prefix task room-prefix-link"
 			onClick={() => navigate(`/session/${participant.sessionId}`)}
 			title={`Go to ${name}'s session`}
 		>
@@ -513,24 +513,27 @@ function RoomEventList({
 		<div className="room-event-list">
 			{events.map((event, i) => {
 				const key = `${event.ts}-${i}`
+				const time = (
+					<span key={`t-${key}`} className="duration" style={{ whiteSpace: "nowrap" }}>
+						{new Date(event.ts).toLocaleTimeString()}
+					</span>
+				)
 				switch (event.type) {
 					case "agent_message":
 						if (event.from === "system") {
 							if (event.body.includes("Project ready")) return null
 							return (
-								<div key={key} className="room-event room-message">
-									<span className="room-message-prefix system">[system]</span>
-									<span className="room-message-body">
+								<div key={key} className="console-entry">
+									<span className="prefix system">[system]</span>
+									<span>
 										<RoomMessageBody body={event.body} participants={participants} />
 									</span>
-									<span className="room-message-time">
-										{new Date(event.ts).toLocaleTimeString()}
-									</span>
+									{time}
 								</div>
 							)
 						}
 						return (
-							<div key={key} className="room-event room-message">
+							<div key={key} className="console-entry">
 								<RoomParticipantPrefix name={event.from} participants={participants} />
 								{event.to && (
 									<>
@@ -538,10 +541,10 @@ function RoomEventList({
 										<RoomParticipantPrefix name={event.to} participants={participants} />
 									</>
 								)}
-								<span className="room-message-body">
+								<span>
 									<RoomMessageBody body={event.body} participants={participants} />
 								</span>
-								<span className="room-message-time">{new Date(event.ts).toLocaleTimeString()}</span>
+								{time}
 							</div>
 						)
 					case "participant_joined": {
@@ -549,28 +552,28 @@ function RoomEventList({
 						const joinedP = participants.find((p) => p.name === joinedName)
 						const roleLabel = joinedP?.role ? ` (${joinedP.role})` : ""
 						return (
-							<div key={key} className="room-event room-message">
-								<span className="room-message-prefix system">[system]</span>
-								<span className="room-message-body">
+							<div key={key} className="console-entry">
+								<span className="prefix system">[system]</span>
+								<span>
 									{joinedName}
 									{roleLabel} joined the room
 								</span>
-								<span className="room-message-time">{new Date(event.ts).toLocaleTimeString()}</span>
+								{time}
 							</div>
 						)
 					}
 					case "participant_left":
 						return (
-							<div key={key} className="room-event room-message">
-								<span className="room-message-prefix system">[system]</span>
-								<span className="room-message-body">Participant left</span>
+							<div key={key} className="console-entry">
+								<span className="prefix system">[system]</span>
+								<span>Participant left</span>
 							</div>
 						)
 					case "room_closed":
 						return (
-							<div key={key} className="room-event room-message">
-								<span className="room-message-prefix system">[system]</span>
-								<span className="room-message-body">
+							<div key={key} className="console-entry">
+								<span className="prefix system">[system]</span>
+								<span>
 									Room closed by {event.closedBy}
 									{event.summary && <> — {event.summary}</>}
 								</span>
