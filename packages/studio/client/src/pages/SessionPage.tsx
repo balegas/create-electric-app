@@ -233,14 +233,14 @@ export function SessionPage() {
 					{initializing ? "Initializing..." : (activeSession?.projectName ?? "Loading...")}
 				</span>
 
-				{isRunning && (
-					<span className="session-header-status" style={{ color: "var(--green)" }}>
-						Live
-					</span>
-				)}
 				{!initializing && !isLive && !isComplete && (
 					<span className="session-header-status" style={{ color: "var(--yellow)" }}>
 						Connecting...
+					</span>
+				)}
+				{isRunning && isLive && (
+					<span className="session-header-status" style={{ color: "var(--green)" }}>
+						Live
 					</span>
 				)}
 

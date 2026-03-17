@@ -34,7 +34,7 @@
 	color: var(--blue);
 }
 .console-entry .prefix.build {
-	color: var(--brand-2);
+	color: var(--orange);
 }
 .console-entry .prefix.fix {
 	color: var(--yellow);
@@ -43,7 +43,7 @@
 	color: var(--green);
 }
 .console-entry .prefix.system {
-	color: var(--green);
+	color: var(--orange);
 }
 .console-entry .prefix.error {
 	color: var(--red);

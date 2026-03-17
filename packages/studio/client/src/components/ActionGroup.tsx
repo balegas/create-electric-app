@@ -73,7 +73,6 @@ export function ActionGroup({ items }: ActionGroupProps) {
 	}
 
 	// Larger groups: collapsible with header
-	const tailItems = toolItems.slice(-3)
 	return (
 		<div className="tool-group">
 			<div className="tool-group-header" onClick={() => setExpanded((v) => !v)}>
@@ -97,20 +96,6 @@ export function ActionGroup({ items }: ActionGroupProps) {
 						}
 						return null
 					})}
-				</div>
-			)}
-
-			{!expanded && tailItems.length > 0 && (
-				<div className="tool-group-tail">
-					{tailItems.map(({ entry, index: i, duration }) =>
-						entry.kind === "tool_use" ? (
-							<ToolExecution
-								key={entry.tool_use_id || `gt-${i}`}
-								entry={entry as ToolEntry}
-								duration={duration}
-							/>
-						) : null,
-					)}
 				</div>
 			)}
 		</div>
