@@ -394,11 +394,11 @@ function ParticipantLink({
 }) {
 	const navigate = useNavigate()
 	const participant = participants.find((p) => p.name === name)
-	if (!participant) return <span className="room-message-from">{name}</span>
+	if (!participant) return <span>{name}</span>
 	return (
 		<button
 			type="button"
-			className="room-message-from room-message-from-link"
+			className="room-inline-link"
 			onClick={() => navigate(`/session/${participant.sessionId}`)}
 			title={`Go to ${name}'s session`}
 		>
@@ -587,12 +587,7 @@ function RoomEventList({
 				<div className="waiting-indicator">
 					<span className="spinner-inline" />
 					<span className="waiting-label">
-						{workingAgents.map((a, i) => (
-							<span key={a.sessionId}>
-								{i > 0 && ", "}
-								<ParticipantLink name={a.name} participants={participants} />
-							</span>
-						))}{" "}
+						{workingAgents.map((a) => a.name).join(", ")}{" "}
 						{workingAgents.length === 1 ? "is" : "are"} working
 					</span>
 				</div>
