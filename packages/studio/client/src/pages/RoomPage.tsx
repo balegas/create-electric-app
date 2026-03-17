@@ -385,28 +385,6 @@ function RoomHeader({
 	)
 }
 
-function ParticipantLink({
-	name,
-	participants,
-}: {
-	name: string
-	participants: Array<{ sessionId: string; name: string; role?: string; running?: boolean }>
-}) {
-	const navigate = useNavigate()
-	const participant = participants.find((p) => p.name === name)
-	if (!participant) return <span>{name}</span>
-	return (
-		<button
-			type="button"
-			className="room-inline-link"
-			onClick={() => navigate(`/session/${participant.sessionId}`)}
-			title={`Go to ${name}'s session`}
-		>
-			{name}
-		</button>
-	)
-}
-
 function RoomParticipantPrefix({
 	name,
 	participants,
@@ -524,7 +502,9 @@ function RoomEventList({
 							if (event.body.includes("Project ready")) return null
 							return (
 								<div key={key} className="console-entry">
-									<span className="prefix system">[system]</span>
+									<span className="prefix" style={{ color: "var(--orange)" }}>
+										[system]
+									</span>
 									<span>
 										<RoomMessageBody body={event.body} participants={participants} />
 									</span>
@@ -553,7 +533,9 @@ function RoomEventList({
 						const roleLabel = joinedP?.role ? ` (${joinedP.role})` : ""
 						return (
 							<div key={key} className="console-entry">
-								<span className="prefix system">[system]</span>
+								<span className="prefix" style={{ color: "var(--orange)" }}>
+									[system]
+								</span>
 								<span>
 									{joinedName}
 									{roleLabel} joined the room
@@ -565,14 +547,18 @@ function RoomEventList({
 					case "participant_left":
 						return (
 							<div key={key} className="console-entry">
-								<span className="prefix system">[system]</span>
+								<span className="prefix" style={{ color: "var(--orange)" }}>
+									[system]
+								</span>
 								<span>Participant left</span>
 							</div>
 						)
 					case "room_closed":
 						return (
 							<div key={key} className="console-entry">
-								<span className="prefix system">[system]</span>
+								<span className="prefix" style={{ color: "var(--orange)" }}>
+									[system]
+								</span>
 								<span>
 									Room closed by {event.closedBy}
 									{event.summary && <> — {event.summary}</>}
