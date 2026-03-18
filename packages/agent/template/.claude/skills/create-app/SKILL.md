@@ -17,6 +17,20 @@ The project is pre-scaffolded. Database and Electric sync service are provisione
 
 Follow the phases below **in strict order**. Do NOT skip phases or jump ahead.
 
+**CRITICAL — ROOM ANNOUNCEMENTS**: You MUST announce progress to the room. These messages are visible to the user and other agents in the room timeline.
+
+**Your very first text output MUST include the `@room` announcement.** Before ANY tool calls, before reading files, before writing plans — output a short text response with your `@room` message on its own line. Example first response:
+
+```
+@room Starting app: <one-line summary of what you're building>
+```
+
+Then continue with Phase 0. For subsequent phases, include `@room PHASE: <phase name>` at the **END** of each response, on its own line. ONE `@room` message per response maximum.
+
+On completion, send: `@room REVIEW_REQUEST: <summary>`
+
+If you forget the REVIEW_REQUEST, the pipeline stalls — the system will NOT send it for you.
+
 ---
 
 ## Phase 0: Clarification

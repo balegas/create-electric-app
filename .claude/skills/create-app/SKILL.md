@@ -11,16 +11,17 @@ You are building a reactive, real-time application using Electric SQL + TanStack
 
 Follow the phases below **in strict order**. Do NOT skip phases or jump ahead.
 
-**CRITICAL — ROOM ANNOUNCEMENTS**: You MUST announce progress to the room at key points. These messages are visible to the user and other agents in the room timeline. Place your `@room` message at the **END** of your response, on its own line, after all work for that turn is complete. ONE `@room` message per turn maximum.
+**CRITICAL — ROOM ANNOUNCEMENTS**: You MUST announce progress to the room. These messages are visible to the user and other agents in the room timeline.
 
-1. **On start**: In your first response, announce you're beginning work:
-   `@room Starting app: <one-line summary of what you're building>`
+**Your very first text output MUST include the `@room` announcement.** Before ANY tool calls, before reading files, before writing plans — output a short text response with your `@room` message on its own line. Example first response:
 
-2. **On each phase**: At the END of each phase's response, announce which phase you just completed or are starting next:
-   `@room PHASE: <phase name>`
+```
+@room Starting app: <one-line summary of what you're building>
+```
 
-3. **On completion**: After Phase 8, send the review request (see Phase 8 "Signal Completion"):
-   `@room REVIEW_REQUEST: <summary>`
+Then continue with Phase 0. For subsequent phases, include `@room PHASE: <phase name>` at the **END** of each response, on its own line. ONE `@room` message per response maximum.
+
+On completion, send: `@room REVIEW_REQUEST: <summary>`
 
 If you forget the REVIEW_REQUEST, the pipeline stalls — the system will NOT send it for you.
 
