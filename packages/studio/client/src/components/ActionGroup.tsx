@@ -72,32 +72,43 @@ export function ActionGroup({ items }: ActionGroupProps) {
 		)
 	}
 
-	// Larger groups: collapsible with header
+	// Larger groups: collapsible with header, always showing last 3
+	const TAIL_COUNT = 3
+	const hiddenItems = toolItems.slice(0, -TAIL_COUNT)
+	const tailItems = toolItems.slice(-TAIL_COUNT)
+
 	return (
 		<div className="tool-group">
-			<div className="tool-group-header" onClick={() => setExpanded((v) => !v)}>
-				{!allDone && <span className="spinner-inline" />}
-				<span className="tool-group-label">{countLabel(items)}</span>
-				<span className="tool-group-chevron">{expanded ? "\u25BC" : "\u25B6"}</span>
-				{allDone && <Duration value={totalDuration} />}
-			</div>
+			{hiddenItems.length > 0 && (
+				<div className="tool-group-header" onClick={() => setExpanded((v) => !v)}>
+					{!allDone && <span className="spinner-inline" />}
+					<span className="tool-group-label">
+						{expanded ? "\u25BC" : "\u25B6"} {hiddenItems.length} more tool
+						{hiddenItems.length !== 1 ? "s" : ""}
+					</span>
+					{allDone && <Duration value={totalDuration} />}
+				</div>
+			)}
 
 			{expanded && (
 				<div className="tool-group-items">
-					{items.map(({ entry, index: i, duration }) => {
-						if (entry.kind === "tool_use") {
-							return (
-								<ToolExecution
-									key={entry.tool_use_id || `gi-${i}`}
-									entry={entry}
-									duration={duration}
-								/>
-							)
-						}
-						return null
-					})}
+					{hiddenItems.map(({ entry, index: i, duration }) => (
+						<ToolExecution
+							key={(entry as ToolEntry).tool_use_id || `gi-${i}`}
+							entry={entry as ToolEntry}
+							duration={duration}
+						/>
+					))}
 				</div>
 			)}
+
+			{tailItems.map(({ entry, index: i, duration }) => (
+				<ToolExecution
+					key={(entry as ToolEntry).tool_use_id || `gt-${i}`}
+					entry={entry as ToolEntry}
+					duration={duration}
+				/>
+			))}
 		</div>
 	)
 }
