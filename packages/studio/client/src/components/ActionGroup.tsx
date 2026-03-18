@@ -81,7 +81,6 @@ export function ActionGroup({ items }: ActionGroupProps) {
 		<div className="tool-group">
 			{hiddenItems.length > 0 && (
 				<div className="tool-group-header" onClick={() => setExpanded((v) => !v)}>
-					{!allDone && <span className="spinner-inline" />}
 					<span className="tool-group-label">
 						{expanded ? "\u25BC" : "\u25B6"} {hiddenItems.length} more tool
 						{hiddenItems.length !== 1 ? "s" : ""}
