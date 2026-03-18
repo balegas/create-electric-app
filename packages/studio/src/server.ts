@@ -2484,8 +2484,46 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 				}
 
-				// 4. Create Claude Code bridge for coder
-				const coderPrompt = `/create-app ${body.description}`
+				// Write coder role skill to sandbox
+				const coderRoleSkill = resolveRoleSkill("coder")
+				if (coderRoleSkill) {
+					try {
+						const skillDir = `${handle.projectDir}/.claude/skills/role`
+						const skillB64 = Buffer.from(coderRoleSkill.skillContent).toString("base64")
+						await config.sandbox.exec(
+							handle,
+							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
+						)
+					} catch (err) {
+						console.error(`[room:${roomId}] Failed to write coder role skill:`, err)
+					}
+				}
+
+				// 4. Build room context and create Claude Code bridge for coder
+				// Split into two turns: first turn is room context (agent announces
+				// presence via @room), second turn is /create-app (queued, delivered
+				// after the first turn completes). This mirrors the reviewer pattern.
+				const roomContext = await router.buildRoomContext({
+					name: coderSession.name,
+					role: "coder",
+				})
+				const coderPrompt = roomContext
+				const createAppCommand = `/create-app ${body.description}`
+
+				// Emit logs BEFORE createClaudeCodeBridge — it closes the HostedStreamBridge
+				await coderBridge.emit({
+					type: "log",
+					level: "build",
+					message: `Starting ${coderSession.name}`,
+					ts: ts(),
+				})
+				await coderBridge.emit({
+					type: "log",
+					level: "system",
+					message: `Prompt for ${coderSession.name}:\n${coderPrompt}\n\n(queued: ${createAppCommand})`,
+					ts: ts(),
+				})
+
 				const coderHookToken = deriveHookToken(config.streamConfig.secret, coderSession.sessionId)
 				const coderClaudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 					config.sandbox.runtime === "sprites"
@@ -2503,6 +2541,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								hookToken: coderHookToken,
 								agentName: coderSession.name,
 							}
+				// NOTE: createClaudeCodeBridge closes the HostedStreamBridge and replaces it
 				const coderCcBridge = createClaudeCodeBridge(
 					config,
 					coderSession.sessionId,
@@ -2579,24 +2618,23 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					console.log(`[room:${roomId}] ${coderSession.name} ${status}`)
 				})
 
-				await coderBridge.emit({
-					type: "log",
-					level: "build",
-					message: `Starting ${coderSession.name}`,
-					ts: ts(),
-				})
-
 				await coderCcBridge.start()
 
-				// Add coder as room participant
+				// Queue /create-app as a follow-up message — delivered after the
+				// first turn (room announcement) completes. The agent is busy so
+				// sendCommand queues it in pendingMessages.
+				await coderCcBridge.sendCommand({
+					command: "iterate",
+					request: createAppCommand,
+				})
+
+				// Register coder as room participant (context already embedded in prompt)
 				const coderParticipant: RoomParticipant = {
 					sessionId: coderSession.sessionId,
 					name: coderSession.name,
 					role: "coder",
 					bridge: coderCcBridge,
 				}
-				// Coder needs the discovery prompt to learn about the room and @room protocol
-				// (its initial prompt is just /create-app which doesn't mention the room)
 				await router.addParticipant(coderParticipant)
 
 				// Store the repoUrl for reviewer/ui-designer prompts
@@ -2667,13 +2705,32 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						}
 					}
 
-					// Build prompt (repo info is now passed via the room router's discovery prompt)
-					const agentPrompt =
+					// Build room context and prompt
+					const agentRoomContext = await router.buildRoomContext({
+						name: agentSession.name,
+						role: agentSession.role,
+					})
+					const roleInstructions =
 						agentSession.role === "reviewer"
-							? `You are "reviewer", a read-only code review agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines. CRITICAL: You must NEVER modify code — only read and review. Wait for the coder to send a @room REVIEW_REQUEST: message before starting any work.`
-							: `You are "${agentSession.role}", an agent in a multi-agent room. Read .claude/skills/role/SKILL.md for your role guidelines.`
+							? "CRITICAL: You must NEVER modify code — only read and review. Wait for the coder to send a @room REVIEW_REQUEST: message before starting any work."
+							: ""
+					const agentPrompt = `${agentRoomContext}\n\n${roleInstructions}`
 
-					// Create Claude Code bridge
+					// Emit logs BEFORE createClaudeCodeBridge — it closes the HostedStreamBridge
+					await agentBridge.emit({
+						type: "log",
+						level: "build",
+						message: `Starting ${agentSession.name}`,
+						ts: ts(),
+					})
+					await agentBridge.emit({
+						type: "log",
+						level: "system",
+						message: `Prompt for ${agentSession.name}:\n${agentPrompt}`,
+						ts: ts(),
+					})
+
+					// Create Claude Code bridge (closes HostedStreamBridge, replaces in map)
 					const agentHookToken = deriveHookToken(config.streamConfig.secret, agentSession.sessionId)
 					const agentClaudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 						config.sandbox.runtime === "sprites"
@@ -2751,23 +2808,16 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						})
 					})
 
-					await agentBridge.emit({
-						type: "log",
-						level: "build",
-						message: `Starting ${agentSession.name}`,
-						ts: ts(),
-					})
-
 					await ccBridge.start()
 
+					// Register participant (context already embedded in prompt)
 					const participant: RoomParticipant = {
 						sessionId: agentSession.sessionId,
 						name: agentSession.name,
 						role: agentSession.role,
 						bridge: ccBridge,
 					}
-					// Skip discovery prompt — agent was just started with its initial prompt
-					await router.addParticipant(participant, { skipDiscovery: true })
+					await router.addParticipant(participant)
 				}
 
 				console.log(`[room:${roomId}] All agents started`)
@@ -3076,13 +3126,28 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 				}
 
-				// Build prompt — reference the role skill if available
-				const rolePromptSuffix = roleSkill
-					? `\nRead .claude/skills/role/SKILL.md for your role guidelines before proceeding.`
-					: ""
-				const agentPrompt = `You are "${agentName}"${body.role ? `, role: ${body.role}` : ""}. You are joining a multi-agent room.${rolePromptSuffix}`
+				// Build room context and prompt
+				const dynRoomContext = await router.buildRoomContext({
+					name: agentName,
+					role: body.role,
+				})
+				const agentPrompt = dynRoomContext
 
-				// Create Claude Code bridge (with role-specific tool permissions)
+				// Emit logs BEFORE createClaudeCodeBridge — it closes the HostedStreamBridge
+				await bridge.emit({
+					type: "log",
+					level: "build",
+					message: `Starting ${agentName}`,
+					ts: ts(),
+				})
+				await bridge.emit({
+					type: "log",
+					level: "system",
+					message: `Prompt for ${agentName}:\n${agentPrompt}`,
+					ts: ts(),
+				})
+
+				// Create Claude Code bridge (closes HostedStreamBridge, replaces in map)
 				const agentHookToken = deriveHookToken(config.streamConfig.secret, sessionId)
 				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 					config.sandbox.runtime === "sprites"
@@ -3125,16 +3190,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 				})
 
-				await bridge.emit({
-					type: "log",
-					level: "build",
-					message: `Starting ${agentName}`,
-					ts: ts(),
-				})
-
 				await ccBridge.start()
 
-				// Add participant to room router
+				// Register participant (context already embedded in prompt)
 				const participant: RoomParticipant = {
 					sessionId,
 					name: agentName,
@@ -3233,7 +3291,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}
 			})
 
-			// Add participant to room router
+			// Register participant
 			const participant: RoomParticipant = {
 				sessionId,
 				name: body.name,
@@ -3241,10 +3299,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			}
 			await router.addParticipant(participant)
 
-			// If there's an initial prompt, send it directly to this agent
-			if (body.initialPrompt) {
-				await bridge.sendCommand({ command: "iterate", request: body.initialPrompt })
-			}
+			// Send room context to the existing session (may queue if agent is busy)
+			const existingRoomContext = await router.buildRoomContext({
+				name: body.name,
+			})
+			const contextPrompt = body.initialPrompt
+				? `${existingRoomContext}\n\n${body.initialPrompt}`
+				: existingRoomContext
+			await bridge.sendCommand({ command: "iterate", request: contextPrompt })
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Failed to add session to room"
 			console.error(`[room:${roomId}] Add session failed:`, err)
