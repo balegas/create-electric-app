@@ -1,5 +1,16 @@
 # @electric-agent/studio
 
+## 1.19.1
+
+### Patch Changes
+
+- 69d7c22: Room UI polish and agent communication improvements
+
+  - Use link icon + pill style for room link in session header (matches invite code style)
+  - Always show last 3 tool calls when collapsing action groups
+  - Coder agent announces phase transitions to room (@room PHASE: ...)
+  - Creative agent greetings when joining rooms instead of formulaic announcements
+
 ## 1.19.0
 
 ### Minor Changes
