@@ -446,10 +446,7 @@ describe("room creation flow", () => {
 			assert.ok(coder, "Should have coder session")
 			assert.ok(reviewer, "Should have reviewer session")
 			assert.ok(coder.name.startsWith("coder-"), "Coder name should have coder- prefix")
-			assert.ok(
-				reviewer.name.startsWith("reviewer-"),
-				"Reviewer name should have reviewer- prefix",
-			)
+			assert.ok(reviewer.name.startsWith("reviewer-"), "Reviewer name should have reviewer- prefix")
 			assert.ok(coder.sessionToken, "Coder should have sessionToken")
 			assert.ok(reviewer.sessionToken, "Reviewer should have sessionToken")
 		})

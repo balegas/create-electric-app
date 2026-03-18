@@ -38,7 +38,7 @@ import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
 import { createGate, hasGate, rejectAllGates, resolveGate } from "./gate.js"
-import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
+import { ghListAccounts, ghListBranches, ghListRepos } from "./git.js"
 import { createOrgRepo, getInstallationToken } from "./github-app.js"
 import { generateInviteCode } from "./invite-code.js"
 import { resolveProjectDir } from "./project-utils.js"
@@ -1021,13 +1021,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createSessionSchema)
 		if (isResponse(body)) return body
 
-		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		// Resolve Claude credentials — priority: env > keychain > user-provided override
 		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
-		const oauthToken = config.devMode
-			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
-			: (readKeychainOAuthToken() ?? undefined)
+		const oauthToken = body.oauthToken || (readKeychainOAuthToken() ?? undefined)
 		const ghToken = body.ghToken
-		const authType = oauthToken ? "oauth-keychain" : apiKey ? "api-key" : "none"
+		const authType = oauthToken ? "oauth" : apiKey ? "api-key" : "none"
 		console.log(`[auth] Using ${authType} for Claude credentials`)
 
 		// Block freeform sessions in production mode
@@ -1047,14 +1045,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 
 		const sessionId = crypto.randomUUID()
-		const inferredName = config.devMode
-			? body.name ||
-				body.description
-					.slice(0, 40)
-					.replace(/[^a-z0-9]+/gi, "-")
-					.replace(/^-|-$/g, "")
-					.toLowerCase()
-			: `electric-${sessionId.slice(0, 8)}`
+		const inferredName = `electric-${sessionId.slice(0, 8)}`
 		const baseDir = body.baseDir || process.cwd()
 		const { projectName } = resolveProjectDir(baseDir, inferredName)
 
@@ -1094,22 +1085,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		await bridge.emit({ type: "user_prompt", message: body.description, ts: ts() })
 
 		// Freeform sessions skip the infra config gate — no Electric/DB setup needed
-		let ghAccounts: { login: string; type: "user" | "org" }[] = []
 		if (!body.freeform) {
-			// Gather GitHub accounts for the merged setup gate (dev mode only)
-			if (config.devMode && ghToken && isGhAuthenticated(ghToken)) {
-				try {
-					ghAccounts = ghListAccounts(ghToken)
-				} catch {
-					// gh not available — no repo setup
-				}
-			}
-
-			// Emit combined infra + repo setup gate
+			// Emit infra setup gate (GH accounts fetched client-side)
 			await bridge.emit({
 				type: "infra_config_prompt",
 				projectName,
-				ghAccounts,
+				ghAccounts: [],
 				runtime: config.sandbox.runtime,
 				ts: ts(),
 			})
@@ -2036,13 +2017,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createAppRoomSchema)
 		if (isResponse(body)) return body
 
-		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		// Resolve Claude credentials — priority: env > keychain > user-provided override
 		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
-		const oauthToken = config.devMode
-			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
-			: (readKeychainOAuthToken() ?? undefined)
+		const oauthToken = body.oauthToken || (readKeychainOAuthToken() ?? undefined)
 		const ghToken = body.ghToken
-		const authType = oauthToken ? "oauth-keychain" : apiKey ? "api-key" : "none"
+		const authType = oauthToken ? "oauth" : apiKey ? "api-key" : "none"
 		console.log(`[auth] Using ${authType} for Claude credentials`)
 
 		// Rate-limit session creation in production mode
@@ -2168,15 +2147,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		// Record all sessions
 		for (const s of sessions) {
-			const projectName =
-				s.role === "coder" && config.devMode
-					? body.name ||
-						body.description
-							.slice(0, 40)
-							.replace(/[^a-z0-9]+/gi, "-")
-							.replace(/^-|-$/g, "")
-							.toLowerCase()
-					: `room-${s.name}-${s.sessionId.slice(0, 8)}`
+			const projectName = `room-${s.name}-${s.sessionId.slice(0, 8)}`
 			const sandboxProjectDir = `/home/agent/workspace/${projectName}`
 			const session: SessionInfo = {
 				id: s.sessionId,
@@ -2963,11 +2934,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				return c.json({ error: "Service at capacity, please try again later" }, 503)
 			}
 		}
-		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		// Resolve Claude credentials — priority: env > keychain > user-provided override
 		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
-		const oauthToken = config.devMode
-			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
-			: undefined
+		const oauthToken = body.oauthToken || (readKeychainOAuthToken() ?? undefined)
 		const ghToken = body.ghToken
 
 		const sessionId = crypto.randomUUID()
