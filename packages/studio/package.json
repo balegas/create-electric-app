@@ -1,6 +1,6 @@
 {
 	"name": "@electric-agent/studio",
-	"version": "1.18.0",
+	"version": "1.19.0",
 	"description": "General-purpose agent studio — web UI, sandbox management, session bridges",
 	"repository": {
 		"type": "git",
