@@ -2574,8 +2574,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					role: "coder",
 					bridge: coderCcBridge,
 				}
-				// Skip discovery prompt — coder was just started with /create-app prompt
-				await router.addParticipant(coderParticipant, { skipDiscovery: true })
+				// Coder needs the discovery prompt to learn about the room and @room protocol
+				// (its initial prompt is just /create-app which doesn't mention the room)
+				await router.addParticipant(coderParticipant)
 
 				// Store the repoUrl for reviewer/ui-designer prompts
 				// (we continue setting up those agents now)
