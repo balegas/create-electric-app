@@ -2505,6 +2505,21 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					role: "coder",
 				})
 				const coderPrompt = `${roomContext}\n\n/create-app ${body.description}`
+
+				// Emit logs BEFORE createClaudeCodeBridge — it closes the HostedStreamBridge
+				await coderBridge.emit({
+					type: "log",
+					level: "build",
+					message: `Starting ${coderSession.name}`,
+					ts: ts(),
+				})
+				await coderBridge.emit({
+					type: "log",
+					level: "system",
+					message: `Prompt for ${coderSession.name}:\n${coderPrompt}`,
+					ts: ts(),
+				})
+
 				const coderHookToken = deriveHookToken(config.streamConfig.secret, coderSession.sessionId)
 				const coderClaudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 					config.sandbox.runtime === "sprites"
@@ -2522,6 +2537,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								hookToken: coderHookToken,
 								agentName: coderSession.name,
 							}
+				// NOTE: createClaudeCodeBridge closes the HostedStreamBridge and replaces it
 				const coderCcBridge = createClaudeCodeBridge(
 					config,
 					coderSession.sessionId,
@@ -2596,19 +2612,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 					const status = success ? "completed" : "errored"
 					console.log(`[room:${roomId}] ${coderSession.name} ${status}`)
-				})
-
-				await coderBridge.emit({
-					type: "log",
-					level: "build",
-					message: `Starting ${coderSession.name}`,
-					ts: ts(),
-				})
-				await coderBridge.emit({
-					type: "log",
-					level: "system",
-					message: `Prompt for ${coderSession.name}:\n${coderPrompt}`,
-					ts: ts(),
 				})
 
 				await coderCcBridge.start()
@@ -2701,7 +2704,21 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							: ""
 					const agentPrompt = `${agentRoomContext}\n\n${roleInstructions}`
 
-					// Create Claude Code bridge
+					// Emit logs BEFORE createClaudeCodeBridge — it closes the HostedStreamBridge
+					await agentBridge.emit({
+						type: "log",
+						level: "build",
+						message: `Starting ${agentSession.name}`,
+						ts: ts(),
+					})
+					await agentBridge.emit({
+						type: "log",
+						level: "system",
+						message: `Prompt for ${agentSession.name}:\n${agentPrompt}`,
+						ts: ts(),
+					})
+
+					// Create Claude Code bridge (closes HostedStreamBridge, replaces in map)
 					const agentHookToken = deriveHookToken(config.streamConfig.secret, agentSession.sessionId)
 					const agentClaudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 						config.sandbox.runtime === "sprites"
@@ -2777,19 +2794,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						config.sessions.update(agentSession.sessionId, {
 							status: success ? "complete" : "error",
 						})
-					})
-
-					await agentBridge.emit({
-						type: "log",
-						level: "build",
-						message: `Starting ${agentSession.name}`,
-						ts: ts(),
-					})
-					await agentBridge.emit({
-						type: "log",
-						level: "system",
-						message: `Prompt for ${agentSession.name}:\n${agentPrompt}`,
-						ts: ts(),
 					})
 
 					await ccBridge.start()
@@ -3117,7 +3121,21 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				})
 				const agentPrompt = dynRoomContext
 
-				// Create Claude Code bridge (with role-specific tool permissions)
+				// Emit logs BEFORE createClaudeCodeBridge — it closes the HostedStreamBridge
+				await bridge.emit({
+					type: "log",
+					level: "build",
+					message: `Starting ${agentName}`,
+					ts: ts(),
+				})
+				await bridge.emit({
+					type: "log",
+					level: "system",
+					message: `Prompt for ${agentName}:\n${agentPrompt}`,
+					ts: ts(),
+				})
+
+				// Create Claude Code bridge (closes HostedStreamBridge, replaces in map)
 				const agentHookToken = deriveHookToken(config.streamConfig.secret, sessionId)
 				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
 					config.sandbox.runtime === "sprites"
@@ -3158,19 +3176,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								console.error(`[room:${roomId}] handleAgentOutput error:`, err)
 							})
 					}
-				})
-
-				await bridge.emit({
-					type: "log",
-					level: "build",
-					message: `Starting ${agentName}`,
-					ts: ts(),
-				})
-				await bridge.emit({
-					type: "log",
-					level: "system",
-					message: `Prompt for ${agentName}:\n${agentPrompt}`,
-					ts: ts(),
 				})
 
 				await ccBridge.start()
