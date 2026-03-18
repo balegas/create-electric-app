@@ -677,11 +677,16 @@
 	margin-left: auto;
 }
 
+.room-event-list .tool-inline summary {
+	align-items: baseline;
+}
+
 .room-event-list .tool-inline summary .tool-inline-summary {
 	flex: 1;
 	min-width: 0;
 	white-space: normal;
 	max-width: none;
+	color: var(--text);
 }
 
 .room-event-list .tool-inline summary .duration {
@@ -700,6 +705,17 @@
 
 .room-prefix-link:hover {
 	text-decoration: underline;
+}
+
+/* Dashed underline only for inline agent names in messages, not the [name] prefix */
+.room-prefix-link:not(.prefix) {
+	text-decoration: underline;
+	text-decoration-style: dashed;
+	text-underline-offset: 2px;
+}
+
+.room-prefix-link:not(.prefix):hover {
+	text-decoration-style: solid;
 }
 
 .room-inline-link {

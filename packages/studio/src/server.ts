@@ -46,7 +46,7 @@ import { SessionRegistry } from "./registry.js"
 import type { RoomRegistry } from "./room-registry.js"
 import { type RoomParticipant, RoomRouter } from "./room-router.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
-import type { InfraConfig, SandboxProvider } from "./sandbox/index.js"
+import type { InfraConfig, SandboxHandle, SandboxProvider } from "./sandbox/index.js"
 import type { SpritesSandboxProvider as SpritesSandboxProviderType } from "./sandbox/sprites.js"
 import {
 	deriveGlobalHookSecret,
@@ -2095,10 +2095,16 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			usedSuffixes.add(s)
 			return s
 		}
-		const agentDefs = [
+		// Only include reviewer if GitHub App is configured (repos auto-created)
+		// or user might configure a repo in the infra gate.
+		// If neither, reviewer is added later via the async flow if a repo is set up.
+		const hasGitHubApp = !!(GITHUB_APP_ID && GITHUB_INSTALLATION_ID && GITHUB_PRIVATE_KEY)
+		const agentDefs: Array<{ name: string; role: string }> = [
 			{ name: `coder-${uniquePick()}`, role: "coder" },
-			{ name: `reviewer-${uniquePick()}`, role: "reviewer" },
-		] as const
+		]
+		if (hasGitHubApp) {
+			agentDefs.push({ name: `reviewer-${uniquePick()}`, role: "reviewer" })
+		}
 
 		// Create session IDs and streams upfront for all 3 agents
 		const sessions: { name: string; role: string; sessionId: string; sessionToken: string }[] = []
@@ -2140,9 +2146,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		// Return immediately so the client can show the room + sessions
 		// The async flow handles sandbox creation, skill injection, and agent startup
-		// Sessions are created in agentDefs order: [coder, reviewer]
 		const coderSession = sessions[0]
-		const reviewerSession = sessions[1]
+		const reviewerSession = sessions.find((s) => s.role === "reviewer")
 		const coderBridge = getOrCreateBridge(config, coderSession.sessionId)
 
 		// Record all sessions
@@ -2256,8 +2261,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				router.setResolvedInfraDetails({ Infrastructure: "Local (Docker)" })
 			}
 
-			// 2. Create sandboxes in parallel
-			// Coder gets full scaffold, reviewer/ui-designer get minimal
+			// Determine if we should start a reviewer (need a repo for code review)
+			const shouldStartReviewer = reviewerSession && (hasGitHubApp || !!repoConfig)
+
+			// 2. Create sandboxes
 			await router.sendMessage("system", "Setting up agent sandboxes")
 
 			const sandboxOpts = (sid: string) => ({
@@ -2271,9 +2278,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 			const coderInfo = config.sessions.get(coderSession.sessionId)
 			if (!coderInfo) throw new Error("Coder session not found in registry")
-			const reviewerInfo = config.sessions.get(reviewerSession.sessionId)
-			if (!reviewerInfo) throw new Error("Reviewer session not found in registry")
-			const [coderHandle, reviewerHandle] = await Promise.all([
+
+			const sandboxPromises: Promise<SandboxHandle>[] = [
 				config.sandbox.create(coderSession.sessionId, {
 					projectName: coderInfo.projectName,
 					infra,
@@ -2282,20 +2288,35 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					ghToken,
 					...sandboxOpts(coderSession.sessionId),
 				}),
-				config.sandbox.create(reviewerSession.sessionId, {
-					projectName: reviewerInfo.projectName,
-					infra: { mode: "none" },
-					apiKey,
-					oauthToken,
-					ghToken,
-					...sandboxOpts(reviewerSession.sessionId),
-				}),
-			])
-
-			const handles = [
-				{ session: coderSession, handle: coderHandle },
-				{ session: reviewerSession, handle: reviewerHandle },
 			]
+
+			if (shouldStartReviewer) {
+				const reviewerInfo = config.sessions.get(reviewerSession.sessionId)
+				if (!reviewerInfo) throw new Error("Reviewer session not found in registry")
+				sandboxPromises.push(
+					config.sandbox.create(reviewerSession.sessionId, {
+						projectName: reviewerInfo.projectName,
+						infra: { mode: "none" },
+						apiKey,
+						oauthToken,
+						ghToken,
+						...sandboxOpts(reviewerSession.sessionId),
+					}),
+				)
+			} else if (reviewerSession) {
+				// Mark reviewer as cancelled — no repo to review
+				config.sessions.update(reviewerSession.sessionId, { status: "complete" })
+			}
+
+			const sandboxResults = await Promise.all(sandboxPromises)
+			const coderHandle = sandboxResults[0]
+			const reviewerHandle = shouldStartReviewer ? sandboxResults[1] : undefined
+
+			type SessionHandle = { session: typeof coderSession; handle: SandboxHandle }
+			const handles: SessionHandle[] = [{ session: coderSession, handle: coderHandle }]
+			if (reviewerSession && reviewerHandle) {
+				handles.push({ session: reviewerSession, handle: reviewerHandle })
+			}
 
 			// Update session info with sandbox details
 			for (const { session: s, handle } of handles) {
@@ -2588,8 +2609,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					branch: "main",
 				})
 
-				// 5. Set up reviewer and ui-designer sandboxes
-				const supportAgents = [{ session: reviewerSession, handle: reviewerHandle }]
+				// 5. Set up reviewer and ui-designer sandboxes (only if they have handles)
+				const supportAgents: Array<{ session: typeof coderSession; handle: SandboxHandle }> = []
+				if (reviewerSession && reviewerHandle) {
+					supportAgents.push({ session: reviewerSession, handle: reviewerHandle })
+				}
 
 				for (const { session: agentSession, handle: agentHandle } of supportAgents) {
 					const agentBridge = getOrCreateBridge(config, agentSession.sessionId)
