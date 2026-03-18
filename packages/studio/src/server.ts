@@ -2500,11 +2500,15 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				}
 
 				// 4. Build room context and create Claude Code bridge for coder
+				// Split into two turns: first turn is room context (agent announces
+				// presence via @room), second turn is /create-app (queued, delivered
+				// after the first turn completes). This mirrors the reviewer pattern.
 				const roomContext = await router.buildRoomContext({
 					name: coderSession.name,
 					role: "coder",
 				})
-				const coderPrompt = `${roomContext}\n\n/create-app ${body.description}`
+				const coderPrompt = roomContext
+				const createAppCommand = `/create-app ${body.description}`
 
 				// Emit logs BEFORE createClaudeCodeBridge — it closes the HostedStreamBridge
 				await coderBridge.emit({
@@ -2516,7 +2520,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				await coderBridge.emit({
 					type: "log",
 					level: "system",
-					message: `Prompt for ${coderSession.name}:\n${coderPrompt}`,
+					message: `Prompt for ${coderSession.name}:\n${coderPrompt}\n\n(queued: ${createAppCommand})`,
 					ts: ts(),
 				})
 
@@ -2615,6 +2619,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				})
 
 				await coderCcBridge.start()
+
+				// Queue /create-app as a follow-up message — delivered after the
+				// first turn (room announcement) completes. The agent is busy so
+				// sendCommand queues it in pendingMessages.
+				await coderCcBridge.sendCommand({
+					command: "iterate",
+					request: createAppCommand,
+				})
 
 				// Register coder as room participant (context already embedded in prompt)
 				const coderParticipant: RoomParticipant = {
