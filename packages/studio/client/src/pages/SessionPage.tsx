@@ -252,7 +252,21 @@ export function SessionPage() {
 						onClick={() => navigate(`/room/${parentRoom.id}`)}
 						title={`Go to room: ${parentRoom.name}`}
 					>
-						– {parentRoom.name}
+						<svg
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.5"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+							width="12"
+							height="12"
+						>
+							<title>{`Room: ${parentRoom.name}`}</title>
+							<path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l2-2a3.5 3.5 0 0 0-5-5l-1 1" />
+							<path d="M9.5 6.5a3.5 3.5 0 0 0-5 0l-2 2a3.5 3.5 0 0 0 5 5l1-1" />
+						</svg>
+						{parentRoom.name}
 					</button>
 				)}
 

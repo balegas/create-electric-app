@@ -216,19 +216,28 @@
 }
 
 .session-header-room-link {
-	background: none;
-	border: none;
-	padding: 0;
-	font: inherit;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-family: var(--font-sans);
 	font-size: 12px;
+	padding: 4px 10px;
+	border: 1px dashed var(--border);
+	border-radius: 6px;
+	background: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
 	white-space: nowrap;
 	flex-shrink: 0;
+	transition:
+		color 0.15s,
+		background 0.15s,
+		border-color 0.15s;
 }
 .session-header-room-link:hover {
 	color: var(--text);
-	text-decoration: underline;
+	background: var(--bg-hover);
+	border-color: var(--text-subtle);
 }
 
 .session-header-status {
