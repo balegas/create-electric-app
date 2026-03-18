@@ -1,5 +1,19 @@
 # @electric-agent/studio
 
+## 1.19.3
+
+### Patch Changes
+
+- 2d818b9: Fix coder agent not communicating in room: embed room context in initial prompt instead of relying on queued discovery prompt, inject coder role skill, log agent prompts, and align @room placement instructions across all skills.
+- ef4cf83: Room flow polish: conditional reviewer and UI refinements
+
+  - Only add reviewer agent when a GitHub repo is configured (GitHub App or user-selected repo)
+  - Dashed underline only on inline agent name links in system messages, not on [name] prefix
+  - Align agent name with first line in collapsible messages, use normal text color
+  - Indent tail tool calls under collapsed group header
+
+- 4c989c3: Fix sprite checkpoint version key to use agent package version instead of studio version, since the agent package is what gets installed in the sprite.
+
 ## 1.19.2
 
 ### Patch Changes
