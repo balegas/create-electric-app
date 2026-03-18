@@ -8,3 +8,4 @@ Room UI polish and agent communication improvements
 - Always show last 3 tool calls when collapsing action groups
 - Coder agent announces phase transitions to room (@room PHASE: ...)
 - Creative agent greetings when joining rooms instead of formulaic announcements
+- Fix coder not receiving room discovery prompt (couldn't greet or announce phases)
