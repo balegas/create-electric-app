@@ -1,5 +1,36 @@
 # @electric-agent/studio
 
+## 1.19.0
+
+### Minor Changes
+
+- 37671fb: Clean up room → agent creation flow and improve room UI
+
+  - Remove dead room code from Registry (renamed to SessionRegistry)
+  - Clean up console log messages with consistent prefixes
+  - Simplify room timeline messages and show infra config as inline card
+  - Fix duplicate reviewer announcements via skipDiscovery option
+  - Add agent name colors and clickable links in room timeline
+  - Right-align timestamps in room view to match agent view
+  - Add room link in agent session header for navigation
+  - Enable GitHub org/repo selector when user provides a PAT (any mode)
+  - Remove devMode gate from GitHub API endpoints (token-gated instead)
+  - Remove generic participant role from Add Agent modal
+  - Add room-flow.test.ts with 24 integration tests
+
+- e7ff122: Room improvements: move infra gate to room page, cascade-delete agents, persist sessions, markdown messages.
+
+  - Infrastructure configuration is now a room-level concern — the gate renders inline in the room page instead of requiring navigation to a coder session
+  - Deleting a room cascades to delete all associated agent sessions
+  - Room-session mappings are persisted to durable stream so rooms survive server restarts (interrupted rooms show correct status)
+  - Room messages render with markdown formatting (code blocks, headings, lists)
+  - Pre-create sprite checkpoints in CI after deploy to eliminate slow bootstrap
+  - Fix plan approval regression: revert clarification to use AskUserQuestion instead of non-blocking @room GATE
+  - Fix infra gate race condition: create gate before async flow so it's visible immediately
+  - Gate resolution broadcasts summary to room as system message
+
+- 5a41432: Persist room-session mappings to durable stream so rooms survive server restarts. Rooms interrupted by a deploy now show "Interrupted" status with participant avatars instead of appearing as "Closed" with empty participants.
+
 ## 1.18.0
 
 ### Minor Changes
