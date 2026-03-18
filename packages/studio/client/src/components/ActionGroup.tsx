@@ -102,13 +102,15 @@ export function ActionGroup({ items }: ActionGroupProps) {
 				</div>
 			)}
 
-			{tailItems.map(({ entry, index: i, duration }) => (
-				<ToolExecution
-					key={(entry as ToolEntry).tool_use_id || `gt-${i}`}
-					entry={entry as ToolEntry}
-					duration={duration}
-				/>
-			))}
+			<div className="tool-group-tail">
+				{tailItems.map(({ entry, index: i, duration }) => (
+					<ToolExecution
+						key={(entry as ToolEntry).tool_use_id || `gt-${i}`}
+						entry={entry as ToolEntry}
+						duration={duration}
+					/>
+				))}
+			</div>
 		</div>
 	)
 }
