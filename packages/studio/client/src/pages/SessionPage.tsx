@@ -6,9 +6,9 @@ import { Settings } from "../components/Settings"
 import { Skeleton } from "../components/Skeleton"
 import { useSession } from "../hooks/useSession"
 import { useAppContext } from "../layouts/AppShell"
+import { getAgentRooms } from "../lib/agent-room-store"
 import { createSession, interruptSession, type SessionInfo, sendIterate } from "../lib/api"
 import type { ConsoleEntry } from "../lib/event-types"
-import { getAgentRooms } from "../lib/agent-room-store"
 import { addSession, getSessionById, updateSession } from "../lib/session-store"
 
 interface OutletCtx {
@@ -161,7 +161,10 @@ export function SessionPage() {
 	const parentRoom = effectiveId
 		? getAgentRooms().find((r) => {
 				const s = r.sessions
-				return s && (s.coder === effectiveId || s.reviewer === effectiveId || s.uiDesigner === effectiveId)
+				return (
+					s &&
+					(s.coder === effectiveId || s.reviewer === effectiveId || s.uiDesigner === effectiveId)
+				)
 			})
 		: undefined
 
@@ -249,7 +252,7 @@ export function SessionPage() {
 						onClick={() => navigate(`/room/${parentRoom.id}`)}
 						title={`Go to room: ${parentRoom.name}`}
 					>
-						← {parentRoom.name}
+						– {parentRoom.name}
 					</button>
 				)}
 

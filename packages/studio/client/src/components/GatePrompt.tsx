@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { type ProvisionResult, provisionElectric, respondToGate } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
 import { Duration } from "./ConsoleEntry"
@@ -46,6 +46,13 @@ export function InfraConfigGate({
 	const [repoName, setRepoName] = useState(event.projectName)
 	const [repoVisibility, setRepoVisibility] = useState<"public" | "private">("private")
 	const [setupRepo, setSetupRepo] = useState(false)
+
+	// Sync repoAccount when ghAccounts load asynchronously
+	useEffect(() => {
+		if (event.ghAccounts.length > 0) {
+			setRepoAccount((prev) => prev || event.ghAccounts[0].login)
+		}
+	}, [event.ghAccounts])
 
 	async function handleProvision() {
 		setProvisioning(true)

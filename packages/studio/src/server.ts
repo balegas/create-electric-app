@@ -2155,8 +2155,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		})
 
 		const roomToken = deriveRoomToken(config.streamConfig.secret, roomId)
-		console.log(`[room:${roomId}] Created (${roomName}) agents=${sessions.map((s) => s.name).join(",")}`)
-
+		console.log(
+			`[room:${roomId}] Created (${roomName}) agents=${sessions.map((s) => s.name).join(",")}`,
+		)
 
 		// Return immediately so the client can show the room + sessions
 		// The async flow handles sandbox creation, skill injection, and agent startup
@@ -2487,10 +2488,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
 						)
 					} catch (err) {
-						console.error(
-							`[room:${roomId}] Failed to write room-messaging skill to coder:`,
-							err,
-						)
+						console.error(`[room:${roomId}] Failed to write room-messaging skill to coder:`, err)
 					}
 				}
 
@@ -3060,7 +3058,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							`echo '${refB64}' | base64 -d >> '${handle.projectDir}/CLAUDE.md'`,
 						)
 					} catch (err) {
-						console.error(`[room:${roomId}] Failed to write room-messaging skill for ${agentName}:`, err)
+						console.error(
+							`[room:${roomId}] Failed to write room-messaging skill for ${agentName}:`,
+							err,
+						)
 					}
 				}
 
@@ -3220,7 +3221,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						`echo '${refB64}' | base64 -d >> '${handle.projectDir}/CLAUDE.md'`,
 					)
 				} catch (err) {
-					console.error(`[room:${roomId}] Failed to write room-messaging skill for ${body.name}:`, err)
+					console.error(
+						`[room:${roomId}] Failed to write room-messaging skill for ${body.name}:`,
+						err,
+					)
 				}
 			}
 
@@ -3562,7 +3566,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// List GitHub accounts (personal + orgs) — requires client-provided token
 	app.get("/api/github/accounts", (c) => {
-		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const token = c.req.header("X-GH-Token")
 		if (!token) return c.json({ accounts: [] })
 		try {
@@ -3573,9 +3576,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 	})
 
-	// List GitHub repos for the authenticated user — requires client-provided token (dev mode only)
+	// List GitHub repos for the authenticated user — requires client-provided token
 	app.get("/api/github/repos", (c) => {
-		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const token = c.req.header("X-GH-Token")
 		if (!token) return c.json({ repos: [] })
 		try {
@@ -3587,7 +3589,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	})
 
 	app.get("/api/github/repos/:owner/:repo/branches", (c) => {
-		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const owner = c.req.param("owner")
 		const repo = c.req.param("repo")
 		const token = c.req.header("X-GH-Token")

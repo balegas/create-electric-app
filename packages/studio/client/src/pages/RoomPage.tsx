@@ -27,7 +27,7 @@ export function RoomPage() {
 	const navigate = useNavigate()
 	const location = useLocation()
 	const { openMobileDrawer } = useOutletContext<OutletCtx>()
-	const { refreshSessions, refreshAgentRooms } = useAppContext()
+	const { refreshSessions, refreshAgentRooms, hasGhToken } = useAppContext()
 	const [roomState, setRoomState] = useState<RoomState | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [showAddAgent, setShowAddAgent] = useState(false)
@@ -37,10 +37,25 @@ export function RoomPage() {
 
 	// Fetch GitHub accounts when there's a pending infra gate and user has a GH token
 	useEffect(() => {
+		const ghToken = getGhToken()
+		console.log("[room] GH accounts effect:", {
+			pendingGate: !!roomState?.pendingInfraGate,
+			infraGateResolved,
+			hasGhToken,
+			ghTokenPresent: !!ghToken,
+		})
 		if (!roomState?.pendingInfraGate || infraGateResolved) return
-		if (!getGhToken()) return
-		fetchGhAccounts().then(setGhAccounts).catch(() => {})
-	}, [roomState?.pendingInfraGate, infraGateResolved])
+		if (!ghToken) return
+		console.log("[room] Fetching GH accounts...")
+		fetchGhAccounts()
+			.then((accounts) => {
+				console.log("[room] GH accounts fetched:", accounts)
+				setGhAccounts(accounts)
+			})
+			.catch((err) => {
+				console.error("[room] GH accounts fetch failed:", err)
+			})
+	}, [roomState?.pendingInfraGate, infraGateResolved, hasGhToken])
 	const loadedRef = useRef(false)
 
 	// Handle /room/new — create a multi-agent app room
@@ -216,7 +231,7 @@ export function RoomPage() {
 							/>
 						</div>
 					)}
-					</div>
+				</div>
 
 				<RoomInput
 					roomId={roomId ?? ""}
@@ -528,11 +543,13 @@ function RoomEventList({
 							if (event.body.startsWith("Infrastructure confirmed")) {
 								// Parse "Infrastructure confirmed — Key1: Val1, Key2: Val2"
 								const detailStr = event.body.replace(/^Infrastructure confirmed —\s*/, "")
-								const details = detailStr.split(", ").reduce<Record<string, string>>((acc, part) => {
-									const idx = part.indexOf(": ")
-									if (idx > 0) acc[part.slice(0, idx)] = part.slice(idx + 2)
-									return acc
-								}, {})
+								const details = detailStr
+									.split(", ")
+									.reduce<Record<string, string>>((acc, part) => {
+										const idx = part.indexOf(": ")
+										if (idx > 0) acc[part.slice(0, idx)] = part.slice(idx + 2)
+										return acc
+									}, {})
 								return (
 									<div key={key} style={{ padding: "8px 0" }}>
 										<div className="gate-prompt">
@@ -589,9 +606,7 @@ function RoomEventList({
 											<RoomParticipantPrefix name={event.to} participants={participants} />
 										</>
 									)}
-									<span className="tool-inline-summary">
-										{`${event.body.slice(0, 300)}...`}
-									</span>
+									<span className="tool-inline-summary">{`${event.body.slice(0, 300)}...`}</span>
 									{time}
 								</summary>
 								<div className="tool-inline-body">
