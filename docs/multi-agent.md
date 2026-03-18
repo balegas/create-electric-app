@@ -21,7 +21,25 @@ Agent 3 (sandbox C)  ──┘                              ├→ Gated? → wa
 
 ## Creating a Room
 
-Rooms are created via the web UI or API:
+There are two ways to create a room:
+
+### App Creation Flow (Primary)
+
+The primary flow creates a room with pre-configured agents (coder, reviewer, ui-designer):
+
+```
+POST /api/rooms/create-app
+{
+  "description": "a project management app with boards and tasks"
+}
+→ { "roomId": "uuid", "roomToken": "...", "sessions": [...] }
+```
+
+This endpoint creates the room, emits an infra config gate on the room stream, and spawns agent sessions in parallel after the gate is resolved.
+
+### Manual Room Creation
+
+Rooms can also be created manually via the web UI or API:
 
 ```
 POST /api/rooms
@@ -77,10 +95,12 @@ The caller must present a valid session token for the session being added (provi
 
 ### What Happens on Join
 
-When an agent joins (either mode), the Room Router sends a **discovery prompt** with:
+When an agent joins, the Room Router calls `addParticipant(participant, opts?)`. By default, it sends a **discovery prompt** with:
 - The room's purpose and participant roster
 - Recent message history (for context)
 - The `@room` / `@name` messaging protocol
+
+The discovery prompt can be skipped by passing `{ skipDiscovery: true }` — useful when the agent was just started with an initial prompt that already provides room context (e.g., agents spawned by `POST /api/rooms/create-app`).
 
 ## Message Format
 
@@ -149,11 +169,11 @@ All room activity is streamed as `EngineEvent` types (see [Protocol](./protocol.
 | `outbound_message_gate` | Gated message awaiting approval |
 | `room_closed` | Conversation ended |
 
-## Room Registry
+## Registries
 
-Room metadata is persisted in a dedicated Durable Stream (`room-registry`). This includes:
-- Room ID, name, invite code
-- Linked session IDs and agent names
-- Room status (open/closed)
+Session and room metadata are persisted in separate Durable Streams and managed by dedicated registries:
 
-The registry survives server restarts, so rooms can be listed and resumed.
+- **SessionRegistry** (`packages/studio/src/registry.ts`) — Persists session lifecycle events (registered, updated, deleted, mapped). Hydrated on startup by replaying the registry stream.
+- **RoomRegistry** (`packages/studio/src/room-registry.ts`) — Persists room metadata in a dedicated Durable Stream (`room-registry`), including room ID, name, invite code, linked session IDs and agent names, and room status (open/closed).
+
+Both registries survive server restarts, so sessions and rooms can be listed and resumed.

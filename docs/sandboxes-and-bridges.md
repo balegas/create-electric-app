@@ -125,6 +125,8 @@ Server                          Sandbox
 
 ## Session Lifecycle
 
+### Standalone Sessions
+
 1. **Create**: `POST /api/sessions` → server creates a Durable Stream, emits `infra_config_prompt` gate, waits for user to select infrastructure mode.
 
 2. **Provision**: Gate resolved → server creates sandbox via the selected provider, creates a bridge.
@@ -138,6 +140,18 @@ Server                          Sandbox
 6. **End**: Agent emits `session_end` → bridge closes → sandbox remains available for iteration.
 
 7. **Destroy**: User deletes session → sandbox is destroyed, Durable Stream remains for replay.
+
+### Room-Based Sessions
+
+When sessions are created as part of a room (`POST /api/rooms/create-app`), the lifecycle differs:
+
+1. **Room creation**: Server creates a room with a shared Durable Stream and emits the `infra_config_prompt` gate on the room stream (not a session stream).
+2. **Gate resolution**: The user resolves the infra gate once — the resolved config applies to all agent sandboxes.
+3. **Parallel provisioning**: Sandboxes are created for all agents in parallel. The coder gets full scaffold setup; reviewer and ui-designer get minimal sandboxes.
+4. **Agent start**: Each agent's bridge is started with a role-specific initial prompt. Discovery prompts are skipped for agents spawned with the room (they already have context from their initial prompt).
+5. **Coordination**: Agents communicate via the room stream using the `@room` / `@name` messaging protocol. The Room Router watches for messages and routes them to target agents via `bridge.sendCommand()`.
+
+The rest of the lifecycle (iterate, gates, end, destroy) follows the same pattern as standalone sessions.
 
 ## Environment Variables
 

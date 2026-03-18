@@ -13,6 +13,10 @@ The **protocol** package defines the event contract. The **studio** package runs
 
 ## Request Lifecycle
 
+There are two primary flows: standalone sessions and room-based app creation.
+
+### Standalone Session Flow
+
 ```
 Browser (React SPA)
   │
@@ -33,6 +37,30 @@ Browser (React SPA)
   └── POST /api/sessions/:id/respond           ← resolve gates
         Authorization: Bearer <sessionToken>
 ```
+
+### Room-Based App Creation Flow (Primary)
+
+```
+Browser (React SPA)
+  │
+  ├── POST /api/rooms/create-app      ← create room + agents + get roomToken
+  │     │
+  │     ├── Create Room (RoomRouter + Durable Stream)
+  │     ├── Emit infra_config_prompt gate on room stream
+  │     ├── Wait for gate resolution (shared across all agents)
+  │     ├── Create sandboxes for each agent in parallel
+  │     ├── Create bridges (one per agent session)
+  │     └── Start agents with role-specific prompts
+  │
+  ├── GET /api/rooms/:id/events?token=...      ← room SSE stream
+  │
+  ├── GET /api/sessions/:id/events?token=...   ← per-agent SSE stream
+  │
+  └── POST /api/rooms/:id/messages             ← broadcast to room
+        X-Room-Token: <roomToken>
+```
+
+Rooms are created first, then agents are spawned into them. The infra config gate is resolved once on the room stream, and the resolved configuration is shared across all agent sandboxes.
 
 ## App Generation Pipeline
 

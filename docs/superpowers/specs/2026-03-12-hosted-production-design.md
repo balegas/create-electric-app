@@ -252,7 +252,7 @@ Use the existing `GET /api/config` endpoint which already returns `devMode`. Com
 | `server.ts` — session creation | Gate credential fields behind `devMode`; in Prod, pass `process.env.ANTHROPIC_API_KEY` as `apiKey` to `sandbox.create()` |
 | `server.ts` — resume endpoint | Return `403 Forbidden` on `POST /api/sessions/resume` when `!config.devMode` |
 | `server.ts` — room agents | Apply same prod-mode treatment to `POST /api/rooms/:id/agents`: rate limiting, server-side API key, no user credentials |
-| `server.ts` — GitHub routes | Gate `GET /api/github/repos`, branches behind `devMode` |
+| `server.ts` — GitHub routes | ~~Gate behind `devMode`~~ — **Updated**: GitHub API routes (`/api/github/accounts`, `/api/github/repos`, `/api/github/repos/:owner/:repo/branches`) are no longer gated on devMode; they work in any mode when a PAT is provided via `X-GH-Token` header |
 | `sandbox/sprites.ts` — env setup | Install credential helper; set `STUDIO_URL`, `SESSION_TOKEN`, `SESSION_ID` |
 | `api-schemas.ts` | Make `apiKey`, `oauthToken`, `ghToken` optional/ignored in Prod mode |
 | Client UI components | Conditional rendering based on `devMode` from `/api/config` |

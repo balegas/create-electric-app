@@ -2,38 +2,23 @@ import { DurableStream } from "@durable-streams/client"
 import type { SessionInfo } from "./sessions.js"
 import { getRegistryConnectionInfo, type StreamConfig } from "./streams.js"
 
-// --- Room Entry (persisted in registry stream) ---
+// --- Session Registry Event Types (internal to studio) ---
 
-export interface RoomEntry {
-	id: string
-	/** 8-char random invite code (e.g. "ABCD-1234") */
-	code: string
-	name?: string
-	createdAt: string
-	revoked: boolean
-}
-
-// --- Registry Event Types (internal to studio) ---
-
-type RegistryEvent =
+type SessionRegistryEvent =
 	| { type: "session_registered"; session: SessionInfo; ts: string }
 	| { type: "session_updated"; sessionId: string; update: Partial<SessionInfo>; ts: string }
 	| { type: "session_deleted"; sessionId: string; ts: string }
 	| { type: "session_mapped"; transcriptPath: string; sessionId: string; ts: string }
-	| { type: "room_created"; room: RoomEntry; ts: string }
-	| { type: "room_revoked"; roomId: string; ts: string }
 
 /**
- * In-memory registry backed by a Durable Streams log.
+ * In-memory session registry backed by a Durable Streams log.
  *
  * On startup, replays the registry stream to hydrate Maps.
  * On mutations, appends to stream then updates in-memory state.
  */
-export class Registry {
+export class SessionRegistry {
 	private sessions = new Map<string, SessionInfo>()
 	private transcriptToSession = new Map<string, string>()
-	private rooms = new Map<string, RoomEntry>()
-	private roomsByCode = new Map<string, RoomEntry>()
 	private stream: DurableStream
 
 	private constructor(stream: DurableStream) {
@@ -41,10 +26,10 @@ export class Registry {
 	}
 
 	/**
-	 * Create and hydrate a Registry from the durable stream.
+	 * Create and hydrate a SessionRegistry from the durable stream.
 	 * Creates the stream if it doesn't exist yet.
 	 */
-	static async create(config: StreamConfig): Promise<Registry> {
+	static async create(config: StreamConfig): Promise<SessionRegistry> {
 		const conn = getRegistryConnectionInfo(config)
 
 		// Ensure the stream exists
@@ -64,20 +49,20 @@ export class Registry {
 			contentType: "application/json",
 		})
 
-		const registry = new Registry(stream)
+		const registry = new SessionRegistry(stream)
 		await registry.hydrate()
 		return registry
 	}
 
 	/** Replay the stream to rebuild in-memory state. */
 	private async hydrate(): Promise<void> {
-		const response = await this.stream.stream<RegistryEvent>({
+		const response = await this.stream.stream<SessionRegistryEvent>({
 			offset: "-1",
 			live: false,
 		})
 
 		await new Promise<void>((resolve) => {
-			const cancel = response.subscribeJson<RegistryEvent>((batch) => {
+			const cancel = response.subscribeJson<SessionRegistryEvent>((batch) => {
 				for (const event of batch.items) {
 					this.applyEvent(event)
 				}
@@ -91,11 +76,11 @@ export class Registry {
 			}, 500)
 		})
 
-		console.log(`[registry] Hydrated: ${this.sessions.size} session(s), ${this.rooms.size} room(s)`)
+		console.log(`[session-registry] Hydrated: ${this.sessions.size} session(s)`)
 	}
 
 	/** Apply a single event to in-memory state (no stream write). */
-	private applyEvent(event: RegistryEvent): void {
+	private applyEvent(event: SessionRegistryEvent): void {
 		switch (event.type) {
 			case "session_registered":
 				this.sessions.set(event.session.id, event.session)
@@ -113,22 +98,11 @@ export class Registry {
 			case "session_mapped":
 				this.transcriptToSession.set(event.transcriptPath, event.sessionId)
 				break
-			case "room_created":
-				this.rooms.set(event.room.id, event.room)
-				this.roomsByCode.set(event.room.code, event.room)
-				break
-			case "room_revoked": {
-				const room = this.rooms.get(event.roomId)
-				if (room) {
-					room.revoked = true
-				}
-				break
-			}
 		}
 	}
 
 	/** Append an event to the stream and apply it in-memory. */
-	private async append(event: RegistryEvent): Promise<void> {
+	private async append(event: SessionRegistryEvent): Promise<void> {
 		await this.stream.append(JSON.stringify(event))
 		this.applyEvent(event)
 	}
@@ -217,33 +191,5 @@ export class Registry {
 			sessionId,
 			ts: new Date().toISOString(),
 		})
-	}
-
-	// --- Room CRUD ---
-
-	async addRoom(entry: RoomEntry): Promise<void> {
-		await this.append({
-			type: "room_created",
-			room: entry,
-			ts: new Date().toISOString(),
-		})
-	}
-
-	getRoom(id: string): RoomEntry | undefined {
-		return this.rooms.get(id)
-	}
-
-	getRoomByCode(code: string): RoomEntry | undefined {
-		return this.roomsByCode.get(code)
-	}
-
-	async revokeRoom(id: string): Promise<boolean> {
-		if (!this.rooms.has(id)) return false
-		await this.append({
-			type: "room_revoked",
-			roomId: id,
-			ts: new Date().toISOString(),
-		})
-		return true
 	}
 }

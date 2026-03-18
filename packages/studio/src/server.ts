@@ -38,11 +38,11 @@ import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
 import { createGate, hasGate, rejectAllGates, resolveGate } from "./gate.js"
-import { ghListAccounts, ghListBranches, ghListRepos, isGhAuthenticated } from "./git.js"
+import { ghListAccounts, ghListBranches, ghListRepos } from "./git.js"
 import { createOrgRepo, getInstallationToken } from "./github-app.js"
 import { generateInviteCode } from "./invite-code.js"
 import { resolveProjectDir } from "./project-utils.js"
-import { Registry } from "./registry.js"
+import { SessionRegistry } from "./registry.js"
 import type { RoomRegistry } from "./room-registry.js"
 import { type RoomParticipant, RoomRouter } from "./room-router.js"
 import type { DockerSandboxProvider as DockerSandboxProviderType } from "./sandbox/docker.js"
@@ -1021,13 +1021,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createSessionSchema)
 		if (isResponse(body)) return body
 
-		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		// Resolve Claude credentials — priority: env > keychain > user-provided override
 		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
-		const oauthToken = config.devMode
-			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
-			: (readKeychainOAuthToken() ?? undefined)
+		const oauthToken = body.oauthToken || (readKeychainOAuthToken() ?? undefined)
 		const ghToken = body.ghToken
-		const authType = oauthToken ? "oauth-keychain" : apiKey ? "api-key" : "none"
+		const authType = oauthToken ? "oauth" : apiKey ? "api-key" : "none"
 		console.log(`[auth] Using ${authType} for Claude credentials`)
 
 		// Block freeform sessions in production mode
@@ -1047,14 +1045,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 
 		const sessionId = crypto.randomUUID()
-		const inferredName = config.devMode
-			? body.name ||
-				body.description
-					.slice(0, 40)
-					.replace(/[^a-z0-9]+/gi, "-")
-					.replace(/^-|-$/g, "")
-					.toLowerCase()
-			: `electric-${sessionId.slice(0, 8)}`
+		const inferredName = `electric-${sessionId.slice(0, 8)}`
 		const baseDir = body.baseDir || process.cwd()
 		const { projectName } = resolveProjectDir(baseDir, inferredName)
 
@@ -1094,22 +1085,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		await bridge.emit({ type: "user_prompt", message: body.description, ts: ts() })
 
 		// Freeform sessions skip the infra config gate — no Electric/DB setup needed
-		let ghAccounts: { login: string; type: "user" | "org" }[] = []
 		if (!body.freeform) {
-			// Gather GitHub accounts for the merged setup gate (dev mode only)
-			if (config.devMode && ghToken && isGhAuthenticated(ghToken)) {
-				try {
-					ghAccounts = ghListAccounts(ghToken)
-				} catch {
-					// gh not available — no repo setup
-				}
-			}
-
-			// Emit combined infra + repo setup gate
+			// Emit infra setup gate (GH accounts fetched client-side)
 			await bridge.emit({
 				type: "infra_config_prompt",
 				projectName,
-				ghAccounts,
+				ghAccounts: [],
 				runtime: config.sandbox.runtime,
 				ts: ts(),
 			})
@@ -1591,7 +1572,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Write user prompt to the stream
 		await bridge.emit({ type: "user_prompt", message: body.request, ts: ts() })
 
-		config.sessions.update(sessionId, { status: "running" })
+		config.sessions.update(sessionId, { status: "running", needsInput: false })
 
 		await bridge.sendCommand({
 			command: "iterate",
@@ -2036,13 +2017,11 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		const body = await validateBody(c, createAppRoomSchema)
 		if (isResponse(body)) return body
 
-		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		// Resolve Claude credentials — priority: env > keychain > user-provided override
 		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
-		const oauthToken = config.devMode
-			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
-			: (readKeychainOAuthToken() ?? undefined)
+		const oauthToken = body.oauthToken || (readKeychainOAuthToken() ?? undefined)
 		const ghToken = body.ghToken
-		const authType = oauthToken ? "oauth-keychain" : apiKey ? "api-key" : "none"
+		const authType = oauthToken ? "oauth" : apiKey ? "api-key" : "none"
 		console.log(`[auth] Using ${authType} for Claude credentials`)
 
 		// Rate-limit session creation in production mode
@@ -2068,7 +2047,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				contentType: "application/json",
 			})
 		} catch (err) {
-			console.error(`[room:create-app] Failed to create room stream:`, err)
+			console.error(`[room] Failed to create room stream:`, err)
 			return c.json({ error: "Failed to create room stream" }, 500)
 		}
 
@@ -2133,7 +2112,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					contentType: "application/json",
 				})
 			} catch (err) {
-				console.error(`[room:create-app] Failed to create stream for ${agentDef.name}:`, err)
+				console.error(`[room] Failed to create stream for ${agentDef.name}:`, err)
 				return c.json({ error: `Failed to create stream for ${agentDef.name}` }, 500)
 			}
 
@@ -2151,12 +2130,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		// Persist session-room mapping to durable stream (survives restarts)
 		config.rooms.setRoomSessions(roomId, sessionMappings).catch((err) => {
-			console.error(`[room:create-app] Failed to persist room sessions:`, err)
+			console.error(`[room] Failed to persist room sessions:`, err)
 		})
 
 		const roomToken = deriveRoomToken(config.streamConfig.secret, roomId)
 		console.log(
-			`[room:create-app] Created room ${roomId} with agents: ${sessions.map((s) => s.name).join(", ")}`,
+			`[room:${roomId}] Created (${roomName}) agents=${sessions.map((s) => s.name).join(",")}`,
 		)
 
 		// Return immediately so the client can show the room + sessions
@@ -2168,15 +2147,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		// Record all sessions
 		for (const s of sessions) {
-			const projectName =
-				s.role === "coder" && config.devMode
-					? body.name ||
-						body.description
-							.slice(0, 40)
-							.replace(/[^a-z0-9]+/gi, "-")
-							.replace(/^-|-$/g, "")
-							.toLowerCase()
-					: `room-${s.name}-${s.sessionId.slice(0, 8)}`
+			const projectName = `room-${s.name}-${s.sessionId.slice(0, 8)}`
 			const sandboxProjectDir = `/home/agent/workspace/${projectName}`
 			const session: SessionInfo = {
 				id: s.sessionId,
@@ -2195,7 +2166,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		// Create the infra gate synchronously so it's visible to room state polls
 		// immediately. The gate is resolved from the room page UI.
-		console.log(`[room:create-app:${roomId}] Waiting for infra_config gate...`)
+		console.log(`[room:${roomId}] Waiting for infra_config gate`)
 		const infraGatePromise = createGate<
 			InfraConfig & {
 				repoAccount?: string
@@ -2208,7 +2179,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		// Async flow: wait for gate, create sandboxes, start agents
 		const asyncFlow = async () => {
 			// 1. Wait for infra config gate on coder's session
-			await router.sendMessage("system", "Waiting for setup — confirm infrastructure to continue.")
+			await router.sendMessage("system", "Waiting for infrastructure configuration")
 			let infra: InfraConfig
 			let repoConfig: {
 				account: string
@@ -2220,7 +2191,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			try {
 				const gateValue = await infraGatePromise
 
-				console.log(`[room:create-app:${roomId}] Infra gate resolved: mode=${gateValue.mode}`)
+				console.log(`[room:${roomId}] Infra gate resolved: mode=${gateValue.mode}`)
 
 				if (gateValue.mode === "cloud" || gateValue.mode === "claim") {
 					infra = {
@@ -2280,14 +2251,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				const summaryParts = Object.entries(infraDetails).map(([k, v]) => `${k}: ${v}`)
 				await router.sendMessage("system", `Infrastructure confirmed — ${summaryParts.join(", ")}`)
 			} catch (err) {
-				console.log(`[room:create-app:${roomId}] Infra gate error (defaulting to local):`, err)
+				console.log(`[room:${roomId}] Infra gate error (defaulting to local):`, err)
 				infra = { mode: "local" }
 				router.setResolvedInfraDetails({ Infrastructure: "Local (Docker)" })
 			}
 
 			// 2. Create sandboxes in parallel
 			// Coder gets full scaffold, reviewer/ui-designer get minimal
-			await router.sendMessage("system", "Creating sandboxes for all agents")
+			await router.sendMessage("system", "Setting up agent sandboxes")
 
 			const sandboxOpts = (sid: string) => ({
 				...((!config.devMode || GITHUB_APP_ID) && {
@@ -2336,13 +2307,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				})
 			}
 
-			await coderBridge.emit({
-				type: "log",
-				level: "system",
-				message: "All sandboxes ready",
-				ts: ts(),
-			})
-
 			// 3. Set up coder sandbox (full scaffold + CLAUDE.md + skills + GitHub repo)
 			{
 				const handle = coderHandle
@@ -2374,7 +2338,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						ts: ts(),
 					})
 				} catch (err) {
-					console.error(`[room:create-app:${roomId}] Project setup failed:`, err)
+					console.error(`[room:${roomId}] Project setup failed:`, err)
 					await coderBridge.emit({
 						type: "log",
 						level: "error",
@@ -2436,7 +2400,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							})
 						}
 					} catch (err) {
-						console.error(`[room:create-app:${roomId}] GitHub repo creation error:`, err)
+						console.error(`[room:${roomId}] GitHub repo creation error:`, err)
 					}
 				} else if (repoConfig) {
 					repoUrl = `https://github.com/${repoConfig.account}/${repoConfig.repoName}`
@@ -2468,7 +2432,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						`cat > '${handle.projectDir}/CLAUDE.md' << 'CLAUDEMD_EOF'\n${claudeMd}\nCLAUDEMD_EOF`,
 					)
 				} catch (err) {
-					console.error(`[room:create-app:${roomId}] Failed to write CLAUDE.md:`, err)
+					console.error(`[room:${roomId}] Failed to write CLAUDE.md:`, err)
 				}
 
 				// Write create-app skill to coder sandbox
@@ -2481,7 +2445,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
 						)
 					} catch (err) {
-						console.error(`[room:create-app:${roomId}] Failed to write create-app skill:`, err)
+						console.error(`[room:${roomId}] Failed to write create-app skill:`, err)
 					}
 				}
 
@@ -2495,10 +2459,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
 						)
 					} catch (err) {
-						console.error(
-							`[room:create-app:${roomId}] Failed to write room-messaging skill to coder:`,
-							err,
-						)
+						console.error(`[room:${roomId}] Failed to write room-messaging skill to coder:`, err)
 					}
 				}
 
@@ -2544,7 +2505,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					if (event.type === "assistant_message" && "text" in event) {
 						const text = (event as EngineEvent & { text: string }).text
 						router.handleAgentOutput(coderSession.sessionId, text).catch((err) => {
-							console.error(`[room:create-app:${roomId}] handleAgentOutput error (coder):`, err)
+							console.error(`[room:${roomId}] handleAgentOutput error (coder):`, err)
 						})
 					}
 					// Notify room when coder is waiting for user input
@@ -2556,7 +2517,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								`${coderSession.name} needs input — open their session to respond.`,
 							)
 							.catch((err) => {
-								console.error(`[room:create-app:${roomId}] Failed to send gate notification:`, err)
+								console.error(`[room:${roomId}] Failed to send gate notification:`, err)
 							})
 					}
 					if (event.type === "gate_resolved") {
@@ -2593,14 +2554,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					config.sessions.update(coderSession.sessionId, updates)
 
-					const status = success ? "completed" : "ended with errors"
-					console.log(`[room:create-app:${roomId}] Coder session ${status}`)
+					const status = success ? "completed" : "errored"
+					console.log(`[room:${roomId}] ${coderSession.name} ${status}`)
 				})
 
 				await coderBridge.emit({
 					type: "log",
 					level: "build",
-					message: `Running: claude "/create-app ${body.description}"`,
+					message: `Starting ${coderSession.name}`,
 					ts: ts(),
 				})
 
@@ -2613,7 +2574,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					role: "coder",
 					bridge: coderCcBridge,
 				}
-				await router.addParticipant(coderParticipant)
+				// Skip discovery prompt — coder was just started with /create-app prompt
+				await router.addParticipant(coderParticipant, { skipDiscovery: true })
 
 				// Store the repoUrl for reviewer/ui-designer prompts
 				// (we continue setting up those agents now)
@@ -2640,7 +2602,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						)
 					} catch (err) {
 						console.error(
-							`[room:create-app:${roomId}] Failed to write CLAUDE.md for ${agentSession.name}:`,
+							`[room:${roomId}] Failed to write CLAUDE.md for ${agentSession.name}:`,
 							err,
 						)
 					}
@@ -2656,7 +2618,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							)
 						} catch (err) {
 							console.error(
-								`[room:create-app:${roomId}] Failed to write room-messaging skill for ${agentSession.name}:`,
+								`[room:${roomId}] Failed to write room-messaging skill for ${agentSession.name}:`,
 								err,
 							)
 						}
@@ -2674,7 +2636,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							)
 						} catch (err) {
 							console.error(
-								`[room:create-app:${roomId}] Failed to write role skill for ${agentSession.name}:`,
+								`[room:${roomId}] Failed to write role skill for ${agentSession.name}:`,
 								err,
 							)
 						}
@@ -2714,9 +2676,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 					// Track events
 					ccBridge.onAgentEvent((event) => {
-						console.log(
-							`[room:create-app:${roomId}] ${agentSession.name} event: type=${event.type}${event.type === "assistant_message" && "text" in event ? ` text=${(event as EngineEvent & { text: string }).text.slice(0, 120)}` : ""}`,
-						)
 						if (event.type === "session_start") {
 							const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
 							if (ccSessionId) {
@@ -2730,12 +2689,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						}
 						if (event.type === "assistant_message" && "text" in event) {
 							const text = (event as EngineEvent & { text: string }).text
-							console.log(
-								`[room:create-app:${roomId}] ${agentSession.name} assistant_message -> calling handleAgentOutput (sessionId=${agentSession.sessionId})`,
-							)
 							router.handleAgentOutput(agentSession.sessionId, text).catch((err) => {
 								console.error(
-									`[room:create-app:${roomId}] handleAgentOutput error (${agentSession.name}):`,
+									`[room:${roomId}] handleAgentOutput error (${agentSession.name}):`,
 									err,
 								)
 							})
@@ -2749,7 +2705,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								)
 								.catch((err) => {
 									console.error(
-										`[room:create-app:${roomId}] Failed to send gate notification (${agentSession.name}):`,
+										`[room:${roomId}] Failed to send gate notification (${agentSession.name}):`,
 										err,
 									)
 								})
@@ -2772,8 +2728,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 					await agentBridge.emit({
 						type: "log",
-						level: "system",
-						message: `Sandbox ready for "${agentSession.name}"`,
+						level: "build",
+						message: `Starting ${agentSession.name}`,
 						ts: ts(),
 					})
 
@@ -2785,19 +2741,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						role: agentSession.role,
 						bridge: ccBridge,
 					}
-					await router.addParticipant(participant)
+					// Skip discovery prompt — agent was just started with its initial prompt
+					await router.addParticipant(participant, { skipDiscovery: true })
 				}
 
-				console.log(`[room:create-app:${roomId}] All agents started and added to room`)
-				await router.sendMessage(
-					"system",
-					`All agents ready — ${coderSession.name} is building, ${reviewerSession.name} waiting for review request. UI designer can be added later via "Add Agent".`,
-				)
+				console.log(`[room:${roomId}] All agents started`)
+				await router.sendMessage("system", "All agents ready")
 			}
 		}
 
 		asyncFlow().catch(async (err) => {
-			console.error(`[room:create-app:${roomId}] Flow failed:`, err)
+			console.error(`[room:${roomId}] Flow failed:`, err)
 			for (const s of sessions) {
 				config.sessions.update(s.sessionId, { status: "error" })
 			}
@@ -2980,11 +2934,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				return c.json({ error: "Service at capacity, please try again later" }, 503)
 			}
 		}
-		// Resolve Claude credentials — priority: env > keychain OAuth > user-provided key
+		// Resolve Claude credentials — priority: env > keychain > user-provided override
 		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
-		const oauthToken = config.devMode
-			? body.oauthToken || process.env.CLAUDE_OAUTH_TOKEN
-			: undefined
+		const oauthToken = body.oauthToken || (readKeychainOAuthToken() ?? undefined)
 		const ghToken = body.ghToken
 
 		const sessionId = crypto.randomUUID()
@@ -3034,7 +2986,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			await bridge.emit({
 				type: "log",
 				level: "build",
-				message: `Creating sandbox for room agent "${agentName}"...`,
+				message: `Setting up sandbox for ${agentName}`,
 				ts: ts(),
 			})
 
@@ -3075,7 +3027,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							`echo '${refB64}' | base64 -d >> '${handle.projectDir}/CLAUDE.md'`,
 						)
 					} catch (err) {
-						console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
+						console.error(
+							`[room:${roomId}] Failed to write room-messaging skill for ${agentName}:`,
+							err,
+						)
 					}
 				}
 
@@ -3092,7 +3047,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,
 						)
 					} catch (err) {
-						console.error(`[session:${sessionId}] Failed to write role skill:`, err)
+						console.error(`[room:${roomId}] Failed to write role skill for ${agentName}:`, err)
 					}
 				}
 
@@ -3147,8 +3102,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 				await bridge.emit({
 					type: "log",
-					level: "system",
-					message: `Sandbox ready for "${agentName}"`,
+					level: "build",
+					message: `Starting ${agentName}`,
 					ts: ts(),
 				})
 
@@ -3235,7 +3190,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						`echo '${refB64}' | base64 -d >> '${handle.projectDir}/CLAUDE.md'`,
 					)
 				} catch (err) {
-					console.error(`[session:${sessionId}] Failed to write room-messaging skill:`, err)
+					console.error(
+						`[room:${roomId}] Failed to write room-messaging skill for ${body.name}:`,
+						err,
+					)
 				}
 			}
 
@@ -3577,7 +3535,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 	// List GitHub accounts (personal + orgs) — requires client-provided token
 	app.get("/api/github/accounts", (c) => {
-		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const token = c.req.header("X-GH-Token")
 		if (!token) return c.json({ accounts: [] })
 		try {
@@ -3588,9 +3545,8 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		}
 	})
 
-	// List GitHub repos for the authenticated user — requires client-provided token (dev mode only)
+	// List GitHub repos for the authenticated user — requires client-provided token
 	app.get("/api/github/repos", (c) => {
-		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const token = c.req.header("X-GH-Token")
 		if (!token) return c.json({ repos: [] })
 		try {
@@ -3602,7 +3558,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 	})
 
 	app.get("/api/github/repos/:owner/:repo/branches", (c) => {
-		if (!config.devMode) return c.json({ error: "Not available" }, 403)
 		const owner = c.req.param("owner")
 		const repo = c.req.param("repo")
 		const token = c.req.header("X-GH-Token")
@@ -3926,7 +3881,7 @@ export async function startWebServer(opts: {
 		console.log("[studio] GitHub App not configured — auto repo creation disabled")
 	}
 	// Hydrate session registry from durable stream (survives restarts)
-	const registry = await Registry.create(opts.streamConfig)
+	const registry = await SessionRegistry.create(opts.streamConfig)
 
 	const config: ServerConfig = {
 		port: opts.port ?? 4400,

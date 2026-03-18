@@ -126,13 +126,16 @@ export class RoomRouter {
 	/**
 	 * Add an agent to the room.
 	 * Reads stream history for discovery context, sends discovery prompt to agent.
+	 *
+	 * @param skipDiscovery - If true, skip sending the discovery prompt (use when
+	 *   the agent was just started with an initial prompt that already provides context).
 	 */
-	async addParticipant(participant: RoomParticipant): Promise<void> {
+	async addParticipant(
+		participant: RoomParticipant,
+		opts?: { skipDiscovery?: boolean },
+	): Promise<void> {
 		this._participants.set(participant.sessionId, participant)
 		this._pendingSessions.delete(participant.sessionId)
-
-		// Read stream history for discovery context (non-live replay)
-		const { roster, recentMessages } = await this.readStreamHistory()
 
 		// Emit participant_joined to room stream
 		const joinEvent: RoomEvent = {
@@ -142,12 +145,15 @@ export class RoomRouter {
 		}
 		await this.stream.append(JSON.stringify(joinEvent))
 
-		// Build and send discovery prompt
-		const prompt = this.buildDiscoveryPrompt(participant, roster, recentMessages)
-		await participant.bridge.sendCommand({
-			command: "iterate",
-			request: prompt,
-		})
+		// Send discovery prompt unless the agent already has context from its initial prompt
+		if (!opts?.skipDiscovery) {
+			const { roster, recentMessages } = await this.readStreamHistory()
+			const prompt = this.buildDiscoveryPrompt(participant, roster, recentMessages)
+			await participant.bridge.sendCommand({
+				command: "iterate",
+				request: prompt,
+			})
+		}
 
 		// Notify other participants that this agent joined
 		const roleSuffix = participant.role ? ` (${participant.role})` : ""

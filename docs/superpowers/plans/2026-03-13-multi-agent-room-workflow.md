@@ -1084,7 +1084,7 @@ app.post("/api/rooms/create-app", async (c) => {
 				role: agent.role,
 				bridge: ccBridge,
 			}
-			await router.addParticipant(participant, false)
+			await router.addParticipant(participant, { skipDiscovery: true })
 		}
 
 		// Show the command being sent to Claude Code

@@ -1,4 +1,4 @@
-import type { Registry } from "./registry.js"
+import type { SessionRegistry } from "./registry.js"
 import type { SessionInfo } from "./sessions.js"
 
 /**
@@ -11,13 +11,13 @@ import type { SessionInfo } from "./sessions.js"
 export class ActiveSessions {
 	private sessions = new Map<string, SessionInfo>()
 	private transcriptToSession = new Map<string, string>()
-	private registry: Registry | null = null
+	private registry: SessionRegistry | null = null
 
 	/**
-	 * Create an ActiveSessions store backed by a Registry.
+	 * Create an ActiveSessions store backed by a SessionRegistry.
 	 * Seeds in-memory state from the registry's persisted sessions.
 	 */
-	static fromRegistry(registry: Registry): ActiveSessions {
+	static fromRegistry(registry: SessionRegistry): ActiveSessions {
 		const store = new ActiveSessions()
 		store.registry = registry
 

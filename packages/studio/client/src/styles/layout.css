@@ -215,6 +215,22 @@
 	text-overflow: ellipsis;
 }
 
+.session-header-room-link {
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	font-size: 12px;
+	color: var(--text-muted);
+	cursor: pointer;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+.session-header-room-link:hover {
+	color: var(--text);
+	text-decoration: underline;
+}
+
 .session-header-status {
 	font-size: 11px;
 	flex-shrink: 0;
@@ -640,7 +656,8 @@
    Only room-specific overrides live here. */
 
 .room-event-list .console-entry {
-	display: block;
+	display: flex;
+	align-items: baseline;
 }
 
 .room-event-list .console-entry .prefix {
@@ -648,7 +665,18 @@
 }
 
 .room-event-list .console-entry .duration {
-	margin-left: 8px;
+	margin-left: auto;
+}
+
+.room-event-list .tool-inline summary .tool-inline-summary {
+	flex: 1;
+	min-width: 0;
+	white-space: normal;
+	max-width: none;
+}
+
+.room-event-list .tool-inline summary .duration {
+	margin-left: auto;
 }
 
 .room-prefix-link {

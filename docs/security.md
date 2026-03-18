@@ -123,6 +123,17 @@ All room-scoped endpoints (except creation and invite join) require a room token
 | `POST /api/rooms/:id/messages` | Room token | Broadcast message to room |
 | `GET /api/rooms/:id/events` | Room token | SSE stream — token via `?token=` query param |
 | `POST /api/rooms/:id/close` | Room token | Close room |
+| `POST /api/rooms/create-app` | No | Create room with agents — returns `roomToken` + session info |
+
+### GitHub Endpoints
+
+GitHub API endpoints are not gated on devMode. They work in any mode whenever a valid personal access token is provided via the `X-GH-Token` header. If no token is provided, they return empty results.
+
+| Endpoint | Auth | Notes |
+|----------|:----:|-------|
+| `GET /api/github/accounts` | `X-GH-Token` header | List GitHub accounts (personal + orgs) |
+| `GET /api/github/repos` | `X-GH-Token` header | List repos for the authenticated user |
+| `GET /api/github/repos/:owner/:repo/branches` | `X-GH-Token` header | List branches for a repo |
 
 ### Hook Endpoints
 
