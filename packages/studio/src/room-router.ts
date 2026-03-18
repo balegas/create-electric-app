@@ -125,15 +125,13 @@ export class RoomRouter {
 
 	/**
 	 * Add an agent to the room.
-	 * Reads stream history for discovery context, sends discovery prompt to agent.
 	 *
-	 * @param skipDiscovery - If true, skip sending the discovery prompt (use when
-	 *   the agent was just started with an initial prompt that already provides context).
+	 * Registers the participant, emits a join event, and notifies other
+	 * participants. Room context should be embedded in the agent's initial
+	 * prompt via {@link buildRoomContext} before starting the agent — this
+	 * method does NOT send a discovery prompt.
 	 */
-	async addParticipant(
-		participant: RoomParticipant,
-		opts?: { skipDiscovery?: boolean },
-	): Promise<void> {
+	async addParticipant(participant: RoomParticipant): Promise<void> {
 		this._participants.set(participant.sessionId, participant)
 		this._pendingSessions.delete(participant.sessionId)
 
@@ -144,16 +142,6 @@ export class RoomRouter {
 			ts: ts(),
 		}
 		await this.stream.append(JSON.stringify(joinEvent))
-
-		// Send discovery prompt unless the agent already has context from its initial prompt
-		if (!opts?.skipDiscovery) {
-			const { roster, recentMessages } = await this.readStreamHistory()
-			const prompt = this.buildDiscoveryPrompt(participant, roster, recentMessages)
-			await participant.bridge.sendCommand({
-				command: "iterate",
-				request: prompt,
-			})
-		}
 
 		// Notify other participants that this agent joined
 		const roleSuffix = participant.role ? ` (${participant.role})` : ""
@@ -484,13 +472,16 @@ export class RoomRouter {
 	}
 
 	/**
-	 * Build the discovery prompt sent to an agent when it joins the room.
+	 * Build room context text for embedding in an agent's initial prompt.
+	 *
+	 * Reads stream history for roster and recent messages, then returns a
+	 * self-contained block of text describing the room, participants, and
+	 * messaging protocol. Callers should prepend or append this to the
+	 * agent's prompt before starting it.
 	 */
-	private buildDiscoveryPrompt(
-		self: RoomParticipant,
-		roster: Array<{ name: string; role?: string }>,
-		recentMessages: Array<{ from: string; body: string }>,
-	): string {
+	async buildRoomContext(self: { name: string; role?: string }): Promise<string> {
+		const { roster, recentMessages } = await this.readStreamHistory()
+
 		const others = roster.filter((p) => p.name !== self.name)
 		const lines: string[] = [
 			`You have joined room "${this.roomName}".`,
@@ -499,11 +490,7 @@ export class RoomRouter {
 
 		if (self.role) {
 			lines.push(`Your role: ${self.role}`)
-			// Coder already has its own skill at .claude/skills/create-app/SKILL.md
-			// Only non-coder roles get a role skill injected at .claude/skills/role/
-			if (self.role !== "coder") {
-				lines.push(`Read .claude/skills/role/SKILL.md for your role-specific guidelines.`)
-			}
+			lines.push("Read .claude/skills/role/SKILL.md for your role-specific guidelines.")
 		}
 
 		lines.push("")

@@ -11,12 +11,12 @@ You are building a reactive, real-time application using Electric SQL + TanStack
 
 Follow the phases below **in strict order**. Do NOT skip phases or jump ahead.
 
-**CRITICAL — ROOM ANNOUNCEMENTS**: You MUST announce progress to the room at key points. These messages are visible to the user and other agents in the room timeline.
+**CRITICAL — ROOM ANNOUNCEMENTS**: You MUST announce progress to the room at key points. These messages are visible to the user and other agents in the room timeline. Place your `@room` message at the **END** of your response, on its own line, after all work for that turn is complete. ONE `@room` message per turn maximum.
 
-1. **On start**: Immediately announce you're beginning work:
+1. **On start**: In your first response, announce you're beginning work:
    `@room Starting app: <one-line summary of what you're building>`
 
-2. **On each phase**: At the START of each phase, announce it:
+2. **On each phase**: At the END of each phase's response, announce which phase you just completed or are starting next:
    `@room PHASE: <phase name>`
 
 3. **On completion**: After Phase 8, send the review request (see Phase 8 "Signal Completion"):
