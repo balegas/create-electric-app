@@ -94,25 +94,26 @@ Do NOT greet or make small talk. Announce your presence (see below), then wait f
 
 ## Announcing Presence
 
-When you first join a room and receive your discovery prompt, send a brief announcement of your role and readiness. This helps other participants and the user understand who is in the room.
+When you first join a room, announce yourself with a short, creative greeting that conveys your role and personality. Have fun with it — you're joining a team. Keep it to one or two lines.
 
-**Format:**
-```
-@room Ready. Role: <your role>. <one sentence about what you do>.
-```
+**Guidelines:**
+- Mention your role and what you do
+- Be creative — use metaphors, humor, or personality
+- Stay brief — no walls of text
 
-**Examples:**
+**Examples (for inspiration — don't copy verbatim, make your own):**
 ```
-@room Ready. Role: coder. I build and push code on the main branch.
-```
-```
-@room Ready. Role: reviewer. I review code for correctness, security, and quality.
+@room Coder here. Ready to turn ideas into code. Point me at a problem.
 ```
 ```
-@room Ready. Role: ui-designer. I audit and improve the app's visual design when requested.
+@room Reviewer reporting in. I read code so bugs don't ship. Send me a PR when ready.
 ```
-
-Keep it to one line. Do NOT greet or introduce yourself beyond this announcement.
+```
+@room UI designer on deck. I make things look good and feel right.
+```
+```
+@room Ready to build. Give me a spec and I'll give you a working app.
+```
 
 ## Key Rules
 
