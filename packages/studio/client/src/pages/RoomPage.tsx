@@ -9,10 +9,12 @@ import { addAgentRoom, getAgentRooms } from "../lib/agent-room-store"
 import {
 	addAgentToRoom,
 	createAppRoom,
+	fetchGhAccounts,
 	getAgentRoomState,
 	type RoomState,
 	sendRoomMessage,
 } from "../lib/api"
+import { getGhToken } from "../lib/credentials"
 import { getOrCreateParticipant } from "../lib/participant"
 import { addSession, setSessionToken, updateSession } from "../lib/session-store"
 
@@ -31,6 +33,14 @@ export function RoomPage() {
 	const [showAddAgent, setShowAddAgent] = useState(false)
 	const [sending, setSending] = useState(false)
 	const [infraGateResolved, setInfraGateResolved] = useState(false)
+	const [ghAccounts, setGhAccounts] = useState<Array<{ login: string; type: string }>>([])
+
+	// Fetch GitHub accounts when there's a pending infra gate and user has a GH token
+	useEffect(() => {
+		if (!roomState?.pendingInfraGate || infraGateResolved) return
+		if (!getGhToken()) return
+		fetchGhAccounts().then(setGhAccounts).catch(() => {})
+	}, [roomState?.pendingInfraGate, infraGateResolved])
 	const loadedRef = useRef(false)
 
 	// Handle /room/new — create a multi-agent app room
@@ -170,7 +180,6 @@ export function RoomPage() {
 		roomState?.previewUrl ??
 		(roomState?.appPort ? `http://localhost:${roomState.appPort}` : undefined)
 	const pendingInfraGate = roomState?.pendingInfraGate
-	const resolvedInfraDetails = roomState?.resolvedInfraDetails
 
 	return (
 		<>
@@ -199,7 +208,7 @@ export function RoomPage() {
 								event={{
 									type: "infra_config_prompt" as const,
 									projectName: pendingInfraGate.projectName,
-									ghAccounts: [],
+									ghAccounts,
 									runtime: pendingInfraGate.runtime,
 									ts: new Date().toISOString(),
 								}}
@@ -207,24 +216,7 @@ export function RoomPage() {
 							/>
 						</div>
 					)}
-					{!pendingInfraGate && resolvedInfraDetails && (
-						<div style={{ padding: "0 16px 16px" }}>
-							<InfraConfigGate
-								sessionId=""
-								event={{
-									type: "infra_config_prompt" as const,
-									projectName: "",
-									ghAccounts: [],
-									runtime: "",
-									ts: new Date().toISOString(),
-								}}
-								onResolved={() => {}}
-								resolved
-								resolvedDetails={resolvedInfraDetails}
-							/>
-						</div>
-					)}
-				</div>
+					</div>
 
 				<RoomInput
 					roomId={roomId ?? ""}
@@ -418,15 +410,68 @@ function RoomParticipantPrefix({
 	const navigate = useNavigate()
 	const participant = participants.find((p) => p.name === name)
 	if (!participant) return <span className="prefix task">[{name}]</span>
+	const color = getAvatarColor(participant.sessionId)
 	return (
 		<button
 			type="button"
 			className="prefix task room-prefix-link"
+			style={{ color: color.fg }}
 			onClick={() => navigate(`/session/${participant.sessionId}`)}
 			title={`Go to ${name}'s session`}
 		>
 			[{name}]
 		</button>
+	)
+}
+
+/** Inline clickable agent name (no brackets, used inside system messages) */
+function AgentNameLink({
+	name,
+	participants,
+}: {
+	name: string
+	participants: Array<{ sessionId: string; name: string; role?: string }>
+}) {
+	const navigate = useNavigate()
+	const participant = participants.find((p) => p.name === name)
+	if (!participant) return <span>{name}</span>
+	const color = getAvatarColor(participant.sessionId)
+	return (
+		<button
+			type="button"
+			className="room-prefix-link"
+			style={{ color: color.fg, fontWeight: 600 }}
+			onClick={() => navigate(`/session/${participant.sessionId}`)}
+			title={`Go to ${name}'s session`}
+		>
+			{name}
+		</button>
+	)
+}
+
+/** Render system message body with agent names as clickable links */
+function SystemMessageBody({
+	body,
+	participants,
+}: {
+	body: string
+	participants: Array<{ sessionId: string; name: string; role?: string }>
+}) {
+	if (participants.length === 0) return <span>{body}</span>
+
+	// Build regex matching any participant name
+	const escaped = participants.map((p) => p.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+	const pattern = new RegExp(`(${escaped.join("|")})`, "g")
+	const parts = body.split(pattern)
+
+	return (
+		<span>
+			{parts.map((part, i) => {
+				const p = participants.find((pp) => pp.name === part)
+				if (p) return <AgentNameLink key={i} name={part} participants={participants} />
+				return <span key={i}>{part}</span>
+			})}
+		</span>
 	)
 }
 
@@ -480,12 +525,41 @@ function RoomEventList({
 					case "agent_message":
 						if (event.from === "system") {
 							if (event.body.includes("Project ready")) return null
+							if (event.body.startsWith("Infrastructure confirmed")) {
+								// Parse "Infrastructure confirmed — Key1: Val1, Key2: Val2"
+								const detailStr = event.body.replace(/^Infrastructure confirmed —\s*/, "")
+								const details = detailStr.split(", ").reduce<Record<string, string>>((acc, part) => {
+									const idx = part.indexOf(": ")
+									if (idx > 0) acc[part.slice(0, idx)] = part.slice(idx + 2)
+									return acc
+								}, {})
+								return (
+									<div key={key} style={{ padding: "8px 0" }}>
+										<div className="gate-prompt">
+											<div className="gate-config-summary">
+												{Object.entries(details).map(([k, v]) => (
+													<div key={k}>
+														<strong>{k}:</strong>{" "}
+														{v.startsWith("http") ? (
+															<a href={v} target="_blank" rel="noopener noreferrer">
+																{v}
+															</a>
+														) : (
+															v
+														)}
+													</div>
+												))}
+											</div>
+										</div>
+									</div>
+								)
+							}
 							return (
 								<div key={key} className="console-entry">
 									<span className="prefix" style={{ color: "var(--orange)" }}>
 										[system]
 									</span>
-									<span>{event.body}</span>
+									<SystemMessageBody body={event.body} participants={participants} />
 									{time}
 								</div>
 							)
@@ -500,9 +574,7 @@ function RoomEventList({
 											<RoomParticipantPrefix name={event.to} participants={participants} />
 										</>
 									)}
-									<span>
-										<Markdown inline>{event.body}</Markdown>
-									</span>
+									<span>{event.body}</span>
 									{time}
 								</div>
 							)
@@ -517,7 +589,9 @@ function RoomEventList({
 											<RoomParticipantPrefix name={event.to} participants={participants} />
 										</>
 									)}
-									<span className="tool-inline-summary">{event.body.slice(0, 120)}...</span>
+									<span className="tool-inline-summary">
+										{`${event.body.slice(0, 300)}...`}
+									</span>
 									{time}
 								</summary>
 								<div className="tool-inline-body">
@@ -535,7 +609,7 @@ function RoomEventList({
 									[system]
 								</span>
 								<span>
-									{joinedName}
+									<AgentNameLink name={joinedName} participants={participants} />
 									{roleLabel} joined
 								</span>
 								{time}
@@ -697,7 +771,7 @@ function AddAgentModal({
 	onAdded: () => void
 }) {
 	const [name, setName] = useState("")
-	const [role, setRole] = useState("")
+	const [role, setRole] = useState("coder")
 	const [initialPrompt, setInitialPrompt] = useState("")
 	const [adding, setAdding] = useState(false)
 	const [addError, setAddError] = useState<string | null>(null)
@@ -748,7 +822,6 @@ function AddAgentModal({
 					<label className="room-form-label">
 						Role
 						<select value={role} onChange={(e) => setRole(e.target.value)}>
-							<option value="">No role (generic participant)</option>
 							{BUILT_IN_ROLES.map((r) => (
 								<option key={r.value} value={r.value}>
 									{r.label} — {r.description}

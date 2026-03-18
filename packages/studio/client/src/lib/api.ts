@@ -400,6 +400,21 @@ export function iterateRoomSession(roomId: string, sessionId: string, userReques
 	})
 }
 
+export async function fetchGhAccounts(): Promise<Array<{ login: string; type: string }>> {
+	const ghToken = getGhToken()
+	if (!ghToken) return []
+	try {
+		const res = await fetch(`${API_BASE}/github/accounts`, {
+			headers: { "X-GH-Token": ghToken },
+		})
+		if (!res.ok) return []
+		const data = (await res.json()) as { accounts?: Array<{ login: string; type: string }> }
+		return data.accounts ?? []
+	} catch {
+		return []
+	}
+}
+
 export function closeAgentRoom(roomId: string) {
 	return request<{ ok: boolean }>(`/rooms/${roomId}/close`, {
 		method: "POST",

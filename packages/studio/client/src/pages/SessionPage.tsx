@@ -8,6 +8,7 @@ import { useSession } from "../hooks/useSession"
 import { useAppContext } from "../layouts/AppShell"
 import { createSession, interruptSession, type SessionInfo, sendIterate } from "../lib/api"
 import type { ConsoleEntry } from "../lib/event-types"
+import { getAgentRooms } from "../lib/agent-room-store"
 import { addSession, getSessionById, updateSession } from "../lib/session-store"
 
 interface OutletCtx {
@@ -156,6 +157,14 @@ export function SessionPage() {
 	// so users can access the app at any point during the session — not just after completion.
 	const showAppLink = Boolean(previewUrl || appPort)
 
+	// Find parent room for this session (if any)
+	const parentRoom = effectiveId
+		? getAgentRooms().find((r) => {
+				const s = r.sessions
+				return s && (s.coder === effectiveId || s.reviewer === effectiveId || s.uiDesigner === effectiveId)
+			})
+		: undefined
+
 	const [sendError, setSendError] = useState<string | null>(null)
 
 	const handleIterate = useCallback(
@@ -232,6 +241,17 @@ export function SessionPage() {
 				<span className="session-header-name">
 					{initializing ? "Initializing..." : (activeSession?.projectName ?? "Loading...")}
 				</span>
+
+				{parentRoom && (
+					<button
+						type="button"
+						className="session-header-room-link"
+						onClick={() => navigate(`/room/${parentRoom.id}`)}
+						title={`Go to room: ${parentRoom.name}`}
+					>
+						← {parentRoom.name}
+					</button>
+				)}
 
 				{!initializing && !isLive && !isComplete && (
 					<span className="session-header-status" style={{ color: "var(--yellow)" }}>
