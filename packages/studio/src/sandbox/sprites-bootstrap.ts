@@ -6,13 +6,20 @@
  * a checkpoint so subsequent sprites can restore instantly.
  */
 
-import { createRequire } from "node:module"
+import { readFileSync } from "node:fs"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import type { Sprite } from "@fly/sprites"
 
-const require = createRequire(import.meta.url)
-const { version } = require("../../package.json") as { version: string }
+// Use the agent package version since that's what gets installed in the sprite.
+// The agent package isn't a dependency of studio, so resolve it via workspace path.
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const agentPkgPath = resolve(__dirname, "../../../agent/package.json")
+export const agentVersion: string = (
+	JSON.parse(readFileSync(agentPkgPath, "utf-8")) as { version: string }
+).version
 
-const CHECKPOINT_COMMENT = `bootstrapped:${version}`
+const CHECKPOINT_COMMENT = `bootstrapped:${agentVersion}`
 
 export interface BootstrapOptions {
 	/** Custom package URL (e.g. pkg-pr-new preview) to install instead of the published electric-agent */
@@ -81,7 +88,7 @@ export async function bootstrapSprite(sprite: Sprite, opts?: BootstrapOptions): 
 		"!gh auth git-credential",
 	])
 
-	console.log(`[sprites-bootstrap] Bootstrap complete (electric-agent@${version})`)
+	console.log(`[sprites-bootstrap] Bootstrap complete (electric-agent@${agentVersion})`)
 }
 
 /**
@@ -102,7 +109,7 @@ export async function ensureBootstrapped(sprite: Sprite, opts?: BootstrapOptions
 		const bootstrapped = checkpoints.find((cp) => cp.comment === comment)
 		if (bootstrapped) {
 			console.log(
-				`[sprites-bootstrap] Restoring from checkpoint "${bootstrapped.id}" (electric-agent@${version})`,
+				`[sprites-bootstrap] Restoring from checkpoint "${bootstrapped.id}" (electric-agent@${agentVersion})`,
 			)
 			const response = await sprite.restoreCheckpoint(bootstrapped.id)
 			// Consume the NDJSON response stream to completion
