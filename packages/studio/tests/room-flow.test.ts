@@ -12,6 +12,9 @@ import { createApp } from "../src/server.js"
 import { deriveRoomToken } from "../src/session-auth.js"
 import { localStreamServer } from "./local-stream-server.js"
 
+// These tests create durable streams — skip unless explicitly enabled
+const SKIP = !process.env.RUN_INTEGRATION_TESTS
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -103,7 +106,7 @@ async function appFetch(
 // Room Creation Flow Tests
 // ---------------------------------------------------------------------------
 
-describe("room creation flow", () => {
+describe("room creation flow", { skip: SKIP }, () => {
 	before(async () => {
 		await server.start()
 		dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "room-flow-test-"))
