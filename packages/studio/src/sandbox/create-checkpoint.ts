@@ -1,5 +1,5 @@
 /**
- * CLI script to pre-create a sprite checkpoint for the current studio version.
+ * CLI script to pre-create a sprite checkpoint for the current agent version.
  *
  * Run after publishing / deploying so the first sprite creation in prod
  * restores from checkpoint instantly instead of running a full bootstrap.
@@ -9,7 +9,7 @@
  */
 
 import { SpritesClient } from "@fly/sprites"
-import { bootstrapSprite } from "./sprites-bootstrap.js"
+import { agentVersion, bootstrapSprite } from "./sprites-bootstrap.js"
 
 const SPRITE_NAME = "ea-checkpoint-builder"
 
@@ -33,11 +33,7 @@ async function main() {
 		process.exit(1)
 	}
 
-	// Read the studio version to build the checkpoint comment
-	const { createRequire } = await import("node:module")
-	const require = createRequire(import.meta.url)
-	const { version } = require("../../package.json") as { version: string }
-	const comment = `bootstrapped:${version}`
+	const comment = `bootstrapped:${agentVersion}`
 
 	const client = new SpritesClient(token)
 
@@ -59,7 +55,7 @@ async function main() {
 		}
 
 		// Run full bootstrap
-		console.log(`No checkpoint for version ${version}, running bootstrap...`)
+		console.log(`No checkpoint for version ${agentVersion}, running bootstrap...`)
 		await bootstrapSprite(tempSprite)
 
 		// Create checkpoint
