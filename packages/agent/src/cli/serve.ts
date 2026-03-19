@@ -33,13 +33,19 @@ export async function serveCommand(opts: {
 	if (runtime === "docker") {
 		sandbox = new DockerSandboxProvider()
 		console.log("[serve] Sandbox runtime: Docker (SANDBOX_RUNTIME=docker)")
-	} else if (runtime === "sprites" || (!runtime && process.env.FLY_API_TOKEN)) {
-		if (!process.env.FLY_API_TOKEN) {
-			console.error("Error: SANDBOX_RUNTIME=sprites requires FLY_API_TOKEN to be set.")
+	} else if (
+		runtime === "sprites" ||
+		(!runtime && (process.env.SPRITES_API_TOKEN || process.env.FLY_API_TOKEN))
+	) {
+		const spritesToken = process.env.SPRITES_API_TOKEN || process.env.FLY_API_TOKEN
+		if (!spritesToken) {
+			console.error(
+				"Error: SANDBOX_RUNTIME=sprites requires SPRITES_API_TOKEN (or FLY_API_TOKEN) to be set.",
+			)
 			process.exit(1)
 		}
 		sandbox = new SpritesSandboxProvider({
-			token: process.env.FLY_API_TOKEN,
+			token: spritesToken,
 		})
 		console.log(`[serve] Sandbox runtime: Sprites (Fly.io)`)
 	} else {

@@ -5,7 +5,7 @@
  * restores from checkpoint instantly instead of running a full bootstrap.
  *
  * Usage:
- *   FLY_API_TOKEN=... npx tsx packages/studio/src/sandbox/create-checkpoint.ts
+ *   SPRITES_API_TOKEN=... npx tsx packages/studio/src/sandbox/create-checkpoint.ts
  */
 
 import { SpritesClient } from "@fly/sprites"
@@ -14,9 +14,9 @@ import { agentVersion, bootstrapSprite } from "./sprites-bootstrap.js"
 const SPRITE_NAME = "ea-checkpoint-builder"
 
 async function main() {
-	const token = process.env.FLY_API_TOKEN
+	const token = process.env.SPRITES_API_TOKEN || process.env.FLY_API_TOKEN
 	if (!token) {
-		console.error("FLY_API_TOKEN is required")
+		console.error("SPRITES_API_TOKEN (or FLY_API_TOKEN) is required")
 		process.exit(1)
 	}
 
@@ -47,8 +47,15 @@ async function main() {
 
 		// Create checkpoint
 		console.log(`Creating checkpoint "${comment}"...`)
-		const stream = await tempSprite.createCheckpoint(comment)
-		await stream.processAll(() => {})
+		const response = await tempSprite.createCheckpoint(comment)
+		if (response.body) {
+			const reader = response.body.getReader()
+			while (true) {
+				const { done } = await reader.read()
+				if (done) break
+			}
+			reader.releaseLock()
+		}
 		console.log(`Checkpoint created successfully`)
 	} finally {
 		// Clean up

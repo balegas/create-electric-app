@@ -3,7 +3,6 @@
 import { createRequire } from "node:module"
 import { Command } from "commander"
 import dotenv from "dotenv"
-import { serveCommand } from "./cli/serve.js"
 import { findUp } from "./find-env.js"
 import { scaffold } from "./scaffold/index.js"
 
@@ -29,6 +28,7 @@ program
 	.option("--data-dir <path>", "Data directory for persistence", ".electric-agent")
 	.option("--open", "Open browser on start")
 	.action(async (opts: { port?: string; dataDir?: string; open?: boolean }) => {
+		const { serveCommand } = await import("./cli/serve.js")
 		await serveCommand({
 			port: opts.port ? parseInt(opts.port, 10) : undefined,
 			dataDir: opts.dataDir,
