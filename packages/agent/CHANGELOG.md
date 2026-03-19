@@ -1,5 +1,15 @@
 # @electric-agent/agent
 
+## 1.4.19
+
+### Patch Changes
+
+- 4f16586: Fix Sprites runtime: separate SPRITES_API_TOKEN from FLY_API_TOKEN, fix SDK compatibility with @fly/sprites 0.0.1-rc37, remove global session cap, stop logging agent prompts to UI, and lazy-load serve command to unblock scaffold in sprites.
+- Updated dependencies [cf0335d]
+- Updated dependencies [4f16586]
+- Updated dependencies [66f3de4]
+  - @electric-agent/studio@1.19.4
+
 ## 1.4.18
 
 ### Patch Changes

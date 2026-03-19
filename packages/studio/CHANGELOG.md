@@ -1,5 +1,13 @@
 # @electric-agent/studio
 
+## 1.19.4
+
+### Patch Changes
+
+- cf0335d: Fix mobile viewport height overflow by using dvh units instead of vh, preventing the permanent scrollbar caused by mobile browser chrome.
+- 4f16586: Fix Sprites runtime: separate SPRITES_API_TOKEN from FLY_API_TOKEN, fix SDK compatibility with @fly/sprites 0.0.1-rc37, remove global session cap, stop logging agent prompts to UI, and lazy-load serve command to unblock scaffold in sprites.
+- 66f3de4: Upgrade @fly/sprites SDK from 0.0.1 to 0.0.1-rc37 to fix production sprite compatibility. The old SDK was incompatible with the current Sprites server due to field mapping changes (snake_case vs camelCase), missing URL fields, and control mode defaults. Also updates checkpoint/restore stream consumption to use the new CheckpointStream/RestoreStream API instead of raw Response objects.
+
 ## 1.19.3
 
 ### Patch Changes
