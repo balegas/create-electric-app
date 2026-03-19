@@ -47,15 +47,8 @@ async function main() {
 
 		// Create checkpoint
 		console.log(`Creating checkpoint "${comment}"...`)
-		const response = await tempSprite.createCheckpoint(comment)
-		if (response.body) {
-			const reader = response.body.getReader()
-			while (true) {
-				const { done } = await reader.read()
-				if (done) break
-			}
-			reader.releaseLock()
-		}
+		const stream = await tempSprite.createCheckpoint(comment)
+		await stream.processAll(() => {})
 		console.log(`Checkpoint created successfully`)
 	} finally {
 		// Clean up

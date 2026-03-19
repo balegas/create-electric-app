@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import type { Sprite } from "@fly/sprites"
+import type { Sprite, CheckpointStream, RestoreStream } from "@fly/sprites"
 
 // Use the agent package version since that's what gets installed in the sprite.
 // Try the monorepo workspace path first, then fall back to the studio package's own version.
@@ -148,18 +148,9 @@ export async function ensureBootstrapped(sprite: Sprite, opts?: BootstrapOptions
 	}
 }
 
-/** Consume a checkpoint/restore NDJSON response stream to completion */
-async function consumeCheckpointStream(response: Response): Promise<void> {
-	if (!response.body) return
-	const reader = response.body.getReader()
-	try {
-		while (true) {
-			const { done } = await reader.read()
-			if (done) break
-		}
-	} finally {
-		reader.releaseLock()
-	}
+/** Consume a checkpoint/restore NDJSON stream to completion */
+async function consumeCheckpointStream(stream: CheckpointStream | RestoreStream): Promise<void> {
+	await stream.processAll(() => {})
 }
 
 /** Simple string hash for checkpoint disambiguation */
