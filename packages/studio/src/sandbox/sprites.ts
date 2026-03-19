@@ -428,6 +428,62 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		}
 	}
 
+	/**
+	 * Reconnect to an existing sprite that may have been lost from in-memory state
+	 * (e.g. after a server restart). Uses the API to fetch the sprite and stores
+	 * it back in the internal map. Returns the Sprite object or null if not found.
+	 */
+	async reconnectSprite(sessionId: string): Promise<Sprite | null> {
+		const existing = this.sprites.get(sessionId)
+		if (existing) return existing
+
+		const spriteName = `ea-${sessionId.slice(0, 12)}`
+		try {
+			const sprite = await this.client.getSprite(spriteName)
+			this.sprites.set(sessionId, sprite)
+
+			// Reconstruct the handle if missing
+			if (!this.handles.has(sessionId)) {
+				const previewUrl = await this.getSpriteUrl(spriteName)
+				this.handles.set(sessionId, {
+					sessionId,
+					runtime: "sprites",
+					port: 8080,
+					projectDir: `/home/agent/workspace/${sessionId.slice(0, 8)}`,
+					previewUrl: previewUrl ?? undefined,
+				})
+			}
+
+			console.log(
+				`[sprites] Reconnected to sprite ${spriteName} for session ${sessionId} (status=${sprite.status})`,
+			)
+			return sprite
+		} catch (err) {
+			console.warn(
+				`[sprites] Failed to reconnect sprite ${spriteName}: ${err instanceof Error ? err.message : String(err)}`,
+			)
+			return null
+		}
+	}
+
+	/**
+	 * Ensure a sprite is awake and responsive.
+	 * Executing a command on a stopped sprite auto-wakes it.
+	 */
+	async wakeSprite(sessionId: string): Promise<boolean> {
+		const sprite = this.sprites.get(sessionId)
+		if (!sprite) return false
+		try {
+			await sprite.execFile("echo", ["alive"])
+			return true
+		} catch (err) {
+			console.warn(
+				`[sprites] Failed to wake sprite for session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
+			)
+			return false
+		}
+	}
+
 	async getPreviewUrl(handle: SandboxHandle, _port: number): Promise<string | null> {
 		return handle.previewUrl ?? null
 	}

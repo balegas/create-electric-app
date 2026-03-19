@@ -271,7 +271,7 @@
 }
 
 .gate-option.selected {
-	border-color: var(--green);
+	border-color: var(--brand-1);
 	opacity: 1;
 }
 
@@ -378,7 +378,7 @@
 }
 
 .gate-resolved-check {
-	color: var(--green);
+	color: var(--brand-1);
 	font-weight: 600;
 	flex-shrink: 0;
 }

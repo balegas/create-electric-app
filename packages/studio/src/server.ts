@@ -34,6 +34,7 @@ import {
 	resolveRoleSkill,
 	roomMessagingSkillContent,
 } from "./bridge/claude-md-generator.js"
+import { formatGateMessage } from "./bridge/gate-response.js"
 import { HostedStreamBridge } from "./bridge/hosted.js"
 import type { SessionBridge } from "./bridge/types.js"
 import { DEFAULT_ELECTRIC_URL, getClaimUrl, provisionElectricResources } from "./electric-api.js"
@@ -1689,10 +1690,138 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		// Forward agent gate responses via the bridge
 		if (!serverGates.has(gate)) {
-			const bridge = bridges.get(sessionId)
-			if (!bridge) {
-				return c.json({ error: "No active bridge found" }, 404)
+			let bridge = bridges.get(sessionId)
+
+			// If bridge is missing or process is dead, attempt reconnection
+			if (!bridge || !bridge.isRunning()) {
+				const session = config.sessions.get(sessionId)
+				if (!session) {
+					return c.json({ error: "Session not found" }, 404)
+				}
+
+				let handle = config.sandbox.get(sessionId)
+
+				if (config.sandbox.runtime === "sprites") {
+					const spritesProvider = config.sandbox as SpritesSandboxProviderType
+
+					// Try to reconnect the sprite (re-fetch from API)
+					const sprite = await spritesProvider.reconnectSprite(sessionId)
+					if (!sprite) {
+						return c.json(
+							{
+								error: "Sprite VM not found — it may have been deleted",
+								code: "SPRITE_NOT_FOUND",
+							},
+							404,
+						)
+					}
+
+					// Wake the sprite if it's stopped (exec auto-wakes)
+					const awake = await spritesProvider.wakeSprite(sessionId)
+					if (!awake) {
+						return c.json(
+							{
+								error: "Failed to wake sprite VM — it may need to be recreated",
+								code: "SPRITE_WAKE_FAILED",
+							},
+							503,
+						)
+					}
+
+					// Ensure handle exists (may have been lost on server restart)
+					if (!handle) {
+						handle = {
+							sessionId,
+							runtime: "sprites" as const,
+							port: 8080,
+							projectDir:
+								session.sandboxProjectDir || `/home/agent/workspace/${session.projectName}`,
+							previewUrl: session.previewUrl,
+						}
+					}
+				} else if (!handle || !config.sandbox.isAlive(handle)) {
+					return c.json({ error: "Sandbox is not running" }, 400)
+				}
+
+				// Recreate the CC bridge (same pattern as iterate handler)
+				const hookToken = deriveHookToken(config.streamConfig.secret, sessionId)
+				const claudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
+					config.sandbox.runtime === "sprites"
+						? {
+								prompt: "",
+								cwd: session.sandboxProjectDir || handle.projectDir,
+								studioUrl: resolveStudioUrl(config.port),
+								hookToken,
+							}
+						: {
+								prompt: "",
+								cwd: session.sandboxProjectDir || handle.projectDir,
+								studioPort: config.port,
+								hookToken,
+							}
+				bridge = createClaudeCodeBridge(config, sessionId, claudeConfig)
+
+				bridge.onAgentEvent((event) => {
+					if (event.type === "session_start") {
+						const ccSessionId = (event as EngineEvent & { session_id?: string }).session_id
+						if (ccSessionId) {
+							config.sessions.update(sessionId, { lastCoderSessionId: ccSessionId })
+						}
+					}
+					if (event.type === "session_end") {
+						accumulateSessionCost(config, sessionId, event)
+					}
+				})
+
+				bridge.onComplete(async (success) => {
+					config.sessions.update(sessionId, {
+						status: success ? "complete" : "error",
+					})
+				})
+
+				// Resume Claude Code with the gate response as the user message
+				const resumeSessionId = session.lastCoderSessionId
+				if (!resumeSessionId) {
+					return c.json(
+						{
+							error: "Cannot resume — no previous Claude Code session found",
+							code: "NO_RESUME_SESSION",
+						},
+						400,
+					)
+				}
+
+				const { gate: _g, _summary: _su, ...gateValue } = body
+				const gateMessage = formatGateMessage(gate, gateValue as Record<string, unknown>)
+				if (!gateMessage) {
+					return c.json({ error: `Cannot format response for gate: ${gate}` }, 400)
+				}
+
+				config.sessions.update(sessionId, { status: "running", needsInput: false })
+
+				await bridge.sendCommand({
+					command: "iterate",
+					projectDir: session.sandboxProjectDir || handle.projectDir,
+					request: gateMessage,
+					resumeSessionId,
+				})
+
+				console.log(`[respond] Reconnected sprite and resumed CC for session ${sessionId}`)
+
+				try {
+					await bridge.emit({
+						type: "gate_resolved",
+						gate,
+						summary,
+						resolvedBy,
+						ts: ts(),
+					})
+				} catch {
+					// Non-critical
+				}
+				return c.json({ ok: true })
 			}
+
 			const { gate: _, _summary: _s, ...value } = body
 			await bridge.sendGateResponse(gate, value as Record<string, unknown>)
 
@@ -3968,6 +4097,24 @@ export async function startWebServer(opts: {
 	} else {
 		// Non-Docker: mark all running sessions as stale
 		registry.cleanupStaleSessions(0)
+	}
+
+	// Warn when using sprites without a reachable STUDIO_URL
+	if (config.sandbox.runtime === "sprites") {
+		const studioUrl = resolveStudioUrl(config.port)
+		if (studioUrl.includes("localhost") || studioUrl.includes("127.0.0.1")) {
+			console.warn(
+				"\n" +
+					"===========================================================================\n" +
+					"WARNING: SANDBOX_RUNTIME=sprites but STUDIO_URL is not set.\n" +
+					`Studio URL resolved to ${studioUrl}, which sprites VMs cannot reach.\n` +
+					"AskUserQuestion hooks from sprites will fail to connect back to studio.\n" +
+					"\n" +
+					"Set STUDIO_URL to a publicly-reachable URL (e.g. ngrok tunnel)\n" +
+					"or set FLY_APP_NAME if running on Fly.io.\n" +
+					"===========================================================================\n",
+			)
+		}
 	}
 
 	fs.mkdirSync(config.dataDir, { recursive: true })
