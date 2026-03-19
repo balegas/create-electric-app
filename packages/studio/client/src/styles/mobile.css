@@ -528,3 +528,12 @@
 		display: none;
 	}
 }
+
+/* Use dynamic viewport height on mobile to avoid overflow from browser chrome */
+@supports (max-height: 90dvh) {
+	@media (max-width: 768px) {
+		.modal-card {
+			max-height: 90dvh;
+		}
+	}
+}

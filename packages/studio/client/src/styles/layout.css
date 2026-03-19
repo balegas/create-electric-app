@@ -939,3 +939,10 @@
 	font-size: 13px;
 	margin-top: 8px;
 }
+
+/* Use dynamic viewport height on mobile to avoid overflow from browser chrome */
+@supports (height: 100dvh) {
+	.app-shell {
+		height: 100dvh;
+	}
+}
