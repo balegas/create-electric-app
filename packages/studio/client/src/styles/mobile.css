@@ -415,7 +415,7 @@
 	.modal-card {
 		width: 95%;
 		max-width: none;
-		max-height: 90vh;
+		max-height: 90dvh;
 		overflow-y: auto;
 		border-radius: 14px;
 	}
@@ -526,14 +526,5 @@
 
 	.mobile-topbar-logo {
 		display: none;
-	}
-}
-
-/* Use dynamic viewport height on mobile to avoid overflow from browser chrome */
-@supports (max-height: 90dvh) {
-	@media (max-width: 768px) {
-		.modal-card {
-			max-height: 90dvh;
-		}
 	}
 }

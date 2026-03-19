@@ -2,7 +2,7 @@
 .app-shell {
 	display: grid;
 	grid-template-columns: var(--sidebar-width) 1fr;
-	height: 100vh;
+	height: 100dvh;
 	overflow: hidden;
 	transition: grid-template-columns 0.2s ease;
 	position: relative;
@@ -938,11 +938,4 @@
 	color: var(--red);
 	font-size: 13px;
 	margin-top: 8px;
-}
-
-/* Use dynamic viewport height on mobile to avoid overflow from browser chrome */
-@supports (height: 100dvh) {
-	.app-shell {
-		height: 100dvh;
-	}
 }
