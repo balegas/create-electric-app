@@ -160,7 +160,6 @@ function resolveStudioUrl(port: number): string {
 // ---------------------------------------------------------------------------
 
 const MAX_SESSIONS_PER_IP_PER_HOUR = Number(process.env.MAX_SESSIONS_PER_IP_PER_HOUR) || 5
-const MAX_TOTAL_SESSIONS = Number(process.env.MAX_TOTAL_SESSIONS || 50)
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000 // 1 hour
 const sessionCreationsByIp = new Map<string, number[]>()
 
@@ -198,10 +197,6 @@ function checkSessionRateLimit(ip: string): boolean {
 	timestamps.push(now)
 	sessionCreationsByIp.set(ip, timestamps)
 	return true
-}
-
-function checkGlobalSessionCap(sessions: ActiveSessions): boolean {
-	return sessions.size() >= MAX_TOTAL_SESSIONS
 }
 
 function checkGithubTokenRateLimit(sessionId: string): boolean {
@@ -1038,9 +1033,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			const ip = extractClientIp(c)
 			if (!checkSessionRateLimit(ip)) {
 				return c.json({ error: "Too many sessions. Please try again later." }, 429)
-			}
-			if (checkGlobalSessionCap(config.sessions)) {
-				return c.json({ error: "Service at capacity, please try again later" }, 503)
 			}
 		}
 
@@ -2030,9 +2022,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			if (!checkSessionRateLimit(ip)) {
 				return c.json({ error: "Too many sessions. Please try again later." }, 429)
 			}
-			if (checkGlobalSessionCap(config.sessions)) {
-				return c.json({ error: "Service at capacity, please try again later" }, 503)
-			}
 		}
 
 		const roomId = crypto.randomUUID()
@@ -2517,12 +2506,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					message: `Starting ${coderSession.name}`,
 					ts: ts(),
 				})
-				await coderBridge.emit({
-					type: "log",
-					level: "system",
-					message: `Prompt for ${coderSession.name}:\n${coderPrompt}\n\n(queued: ${createAppCommand})`,
-					ts: ts(),
-				})
 
 				const coderHookToken = deriveHookToken(config.streamConfig.secret, coderSession.sessionId)
 				const coderClaudeConfig: ClaudeCodeDockerConfig | ClaudeCodeSpritesConfig =
@@ -2721,12 +2704,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						type: "log",
 						level: "build",
 						message: `Starting ${agentSession.name}`,
-						ts: ts(),
-					})
-					await agentBridge.emit({
-						type: "log",
-						level: "system",
-						message: `Prompt for ${agentSession.name}:\n${agentPrompt}`,
 						ts: ts(),
 					})
 
@@ -3005,9 +2982,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			if (!checkSessionRateLimit(ip)) {
 				return c.json({ error: "Too many sessions. Please try again later." }, 429)
 			}
-			if (checkGlobalSessionCap(config.sessions)) {
-				return c.json({ error: "Service at capacity, please try again later" }, 503)
-			}
 		}
 		// Resolve Claude credentials — priority: env > keychain > user-provided override
 		const apiKey = process.env.ANTHROPIC_API_KEY || body.apiKey
@@ -3138,12 +3112,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					type: "log",
 					level: "build",
 					message: `Starting ${agentName}`,
-					ts: ts(),
-				})
-				await bridge.emit({
-					type: "log",
-					level: "system",
-					message: `Prompt for ${agentName}:\n${agentPrompt}`,
 					ts: ts(),
 				})
 

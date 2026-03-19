@@ -9,15 +9,27 @@
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import type { CheckpointStream, RestoreStream, Sprite } from "@fly/sprites"
+import type { Sprite } from "@fly/sprites"
 
 // Use the agent package version since that's what gets installed in the sprite.
-// The agent package isn't a dependency of studio, so resolve it via workspace path.
+// Try the monorepo workspace path first, then fall back to the studio package's own version.
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const agentPkgPath = resolve(__dirname, "../../../agent/package.json")
-export const agentVersion: string = (
-	JSON.parse(readFileSync(agentPkgPath, "utf-8")) as { version: string }
-).version
+function readAgentVersion(): string {
+	// Monorepo workspace path: studio/dist/sandbox/ → agent/package.json
+	const workspacePath = resolve(__dirname, "../../../agent/package.json")
+	try {
+		return (JSON.parse(readFileSync(workspacePath, "utf-8")) as { version: string }).version
+	} catch {
+		// Installed as npm package — read studio's own version as fallback
+		const studioPkgPath = resolve(__dirname, "../../package.json")
+		try {
+			return (JSON.parse(readFileSync(studioPkgPath, "utf-8")) as { version: string }).version
+		} catch {
+			return "unknown"
+		}
+	}
+}
+export const agentVersion: string = readAgentVersion()
 
 const CHECKPOINT_COMMENT = `bootstrapped:${agentVersion}`
 
@@ -136,9 +148,18 @@ export async function ensureBootstrapped(sprite: Sprite, opts?: BootstrapOptions
 	}
 }
 
-/** Consume a checkpoint/restore stream to completion */
-async function consumeCheckpointStream(stream: CheckpointStream | RestoreStream): Promise<void> {
-	await stream.processAll(() => {})
+/** Consume a checkpoint/restore NDJSON response stream to completion */
+async function consumeCheckpointStream(response: Response): Promise<void> {
+	if (!response.body) return
+	const reader = response.body.getReader()
+	try {
+		while (true) {
+			const { done } = await reader.read()
+			if (done) break
+		}
+	} finally {
+		reader.releaseLock()
+	}
 }
 
 /** Simple string hash for checkpoint disambiguation */

@@ -63,7 +63,7 @@ export class SpritesSandboxProvider implements SandboxProvider {
 		ramMB?: number
 		cpus?: number
 	}) {
-		this.token = opts?.token ?? process.env.FLY_API_TOKEN ?? ""
+		this.token = opts?.token ?? process.env.SPRITES_API_TOKEN ?? process.env.FLY_API_TOKEN ?? ""
 		this.baseURL = "https://api.sprites.dev"
 		this.client = new SpritesClient(this.token)
 	}
