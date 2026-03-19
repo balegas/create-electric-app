@@ -70,7 +70,7 @@
 		"@durable-streams/client": "^0.2.1",
 		"@durable-streams/server": "^0.2.1",
 		"@electric-agent/protocol": "workspace:*",
-		"@fly/sprites": "^0.0.1",
+		"@fly/sprites": "0.0.1-rc37",
 		"@hono/node-server": "^1.19.9",
 		"hono": "^4.11.9",
 		"zod": "^3.25.76"

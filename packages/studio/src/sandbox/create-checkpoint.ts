@@ -13,19 +13,6 @@ import { agentVersion, bootstrapSprite } from "./sprites-bootstrap.js"
 
 const SPRITE_NAME = "ea-checkpoint-builder"
 
-async function consumeStream(response: Response): Promise<void> {
-	if (!response.body) return
-	const reader = response.body.getReader()
-	try {
-		while (true) {
-			const { done } = await reader.read()
-			if (done) break
-		}
-	} finally {
-		reader.releaseLock()
-	}
-}
-
 async function main() {
 	const token = process.env.FLY_API_TOKEN
 	if (!token) {
@@ -60,8 +47,8 @@ async function main() {
 
 		// Create checkpoint
 		console.log(`Creating checkpoint "${comment}"...`)
-		const response = await tempSprite.createCheckpoint(comment)
-		await consumeStream(response)
+		const stream = await tempSprite.createCheckpoint(comment)
+		await stream.processAll(() => {})
 		console.log(`Checkpoint created successfully`)
 	} finally {
 		// Clean up

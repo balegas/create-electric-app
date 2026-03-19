@@ -70,8 +70,8 @@ importers:
         specifier: workspace:*
         version: link:../protocol
       '@fly/sprites':
-        specifier: ^0.0.1
-        version: 0.0.1
+        specifier: 0.0.1-rc37
+        version: 0.0.1-rc37
       '@hono/node-server':
         specifier: ^1.19.9
         version: 1.19.9(hono@4.11.9)
@@ -513,8 +513,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@fly/sprites@0.0.1':
-    resolution: {integrity: sha512-1s+dIVi/pTMP4Aj4Mkg+4LoZ/+a0Kp6l9piPRxvpgEKm11b/eRiZgJwVytwAHeI/vtg2fuwcFExjtXOEfny/TA==}
+  '@fly/sprites@0.0.1-rc37':
+    resolution: {integrity: sha512-yzjJ8bsBl1XoECSols0iFvvmlqiog22ODO8F3Z+8mao44ZaMYiOVjRTuSd2g+rE0OFuj0u/ctlpPTHfVdpgWKA==}
     engines: {node: '>=24.0.0'}
 
   '@harperfast/extended-iterable@1.0.3':
@@ -2198,7 +2198,7 @@ snapshots:
   '@esbuild/win32-x64@0.27.3':
     optional: true
 
-  '@fly/sprites@0.0.1': {}
+  '@fly/sprites@0.0.1-rc37': {}
 
   '@harperfast/extended-iterable@1.0.3': {}
 

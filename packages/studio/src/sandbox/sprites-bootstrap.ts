@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import type { Sprite } from "@fly/sprites"
+import type { CheckpointStream, RestoreStream, Sprite } from "@fly/sprites"
 
 // Use the agent package version since that's what gets installed in the sprite.
 // The agent package isn't a dependency of studio, so resolve it via workspace path.
@@ -111,9 +111,9 @@ export async function ensureBootstrapped(sprite: Sprite, opts?: BootstrapOptions
 			console.log(
 				`[sprites-bootstrap] Restoring from checkpoint "${bootstrapped.id}" (electric-agent@${agentVersion})`,
 			)
-			const response = await sprite.restoreCheckpoint(bootstrapped.id)
+			const stream = await sprite.restoreCheckpoint(bootstrapped.id)
 			// Consume the NDJSON response stream to completion
-			await consumeStream(response)
+			await consumeCheckpointStream(stream)
 			console.log(`[sprites-bootstrap] Restored from checkpoint`)
 			return
 		}
@@ -127,8 +127,8 @@ export async function ensureBootstrapped(sprite: Sprite, opts?: BootstrapOptions
 	// Create checkpoint for future reuse
 	console.log(`[sprites-bootstrap] Creating checkpoint...`)
 	try {
-		const response = await sprite.createCheckpoint(comment)
-		await consumeStream(response)
+		const stream = await sprite.createCheckpoint(comment)
+		await consumeCheckpointStream(stream)
 		console.log(`[sprites-bootstrap] Checkpoint created`)
 	} catch (err) {
 		// Non-fatal — next creation will just bootstrap again
@@ -136,18 +136,9 @@ export async function ensureBootstrapped(sprite: Sprite, opts?: BootstrapOptions
 	}
 }
 
-/** Consume a streaming Response body to completion */
-async function consumeStream(response: Response): Promise<void> {
-	if (!response.body) return
-	const reader = response.body.getReader()
-	try {
-		while (true) {
-			const { done } = await reader.read()
-			if (done) break
-		}
-	} finally {
-		reader.releaseLock()
-	}
+/** Consume a checkpoint/restore stream to completion */
+async function consumeCheckpointStream(stream: CheckpointStream | RestoreStream): Promise<void> {
+	await stream.processAll(() => {})
 }
 
 /** Simple string hash for checkpoint disambiguation */
