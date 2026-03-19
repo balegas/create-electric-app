@@ -2,7 +2,7 @@
 .app-shell {
 	display: grid;
 	grid-template-columns: var(--sidebar-width) 1fr;
-	height: 100vh;
+	height: 100dvh;
 	overflow: hidden;
 	transition: grid-template-columns 0.2s ease;
 	position: relative;

@@ -415,7 +415,7 @@
 	.modal-card {
 		width: 95%;
 		max-width: none;
-		max-height: 90vh;
+		max-height: 90dvh;
 		overflow-y: auto;
 		border-radius: 14px;
 	}
