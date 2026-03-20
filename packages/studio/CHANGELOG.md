@@ -1,5 +1,11 @@
 # @electric-agent/studio
 
+## 1.20.0
+
+### Minor Changes
+
+- 6cf403d: Sprites respond handler: reconnect and wake stopped sprites instead of returning "No active bridge found". Adds specific error messages for each failure mode (sprite deleted, wake failed, sandbox not running, no resume session). Warns at startup when STUDIO_URL is not set for sprites. Uses primary brand color for selected gate options instead of green.
+
 ## 1.19.4
 
 ### Patch Changes
