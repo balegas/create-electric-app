@@ -282,13 +282,17 @@
 	line-height: 1.6;
 }
 
-.tool-group-header:hover .tool-group-label {
+.tool-group-toggle {
+	font-weight: 600;
+	color: var(--text-subtle);
 	text-decoration: underline;
+	text-decoration-style: dashed;
+	text-underline-offset: 3px;
 }
 
-.tool-group-label {
-	font-weight: 600;
-	color: var(--brand-1);
+.tool-group-header:hover .tool-group-toggle {
+	color: var(--text-muted);
+	text-decoration-style: solid;
 }
 
 /* Tail & expanded items are indented under the header */
