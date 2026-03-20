@@ -231,7 +231,7 @@ export function InfraConfigGate({
 						</>
 					) : (
 						<div style={{ fontSize: "0.85em" }}>
-							<p style={{ color: "var(--color-done, #4c4)", margin: "0 0 6px" }}>
+							<p style={{ color: "var(--color-done, #d0bcff)", margin: "0 0 6px" }}>
 								Resources provisioned successfully (72h TTL).
 							</p>
 							<div

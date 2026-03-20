@@ -276,7 +276,7 @@ export function SessionPage() {
 					</span>
 				)}
 				{isRunning && isLive && (
-					<span className="session-header-status" style={{ color: "var(--green)" }}>
+					<span className="session-header-status" style={{ color: "var(--purple)" }}>
 						Live
 					</span>
 				)}

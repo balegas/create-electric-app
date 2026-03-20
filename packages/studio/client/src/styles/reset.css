@@ -89,7 +89,7 @@
 
 	/* sugar-high syntax highlighting */
 	--sh-keyword: #d0bcff;
-	--sh-string: #3fb950;
+	--sh-string: #d0bcff;
 	--sh-number: #ff8c3b;
 	--sh-comment: rgba(235, 235, 245, 0.38);
 	--sh-class: #d29922;

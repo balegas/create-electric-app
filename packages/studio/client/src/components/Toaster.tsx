@@ -14,7 +14,7 @@ export function Toaster() {
 				},
 				success: {
 					iconTheme: {
-						primary: "var(--green)",
+						primary: "var(--purple)",
 						secondary: "var(--bg-surface)",
 					},
 				},
