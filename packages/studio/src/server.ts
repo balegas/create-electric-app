@@ -2454,7 +2454,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				await coderBridge.emit({
 					type: "log",
 					level: "build",
-					message: "Setting up project...",
+					message: `Setting up ${coderSession.name}...`,
 					ts: ts(),
 				})
 				try {
@@ -2767,6 +2767,13 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 				for (const { session: agentSession, handle: agentHandle } of supportAgents) {
 					const agentBridge = getOrCreateBridge(config, agentSession.sessionId)
+
+					await agentBridge.emit({
+						type: "log",
+						level: "build",
+						message: `Setting up ${agentSession.name}...`,
+						ts: ts(),
+					})
 
 					// Write a minimal CLAUDE.md with room messaging protocol
 					const minimalClaudeMd = `Room agent workspace${ROOM_MESSAGING_SECTION}`
