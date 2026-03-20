@@ -39,18 +39,6 @@ function aggregateDuration(items: ActionGroupEntry[]): string | null {
 	return `${minutes}m ${remainingSeconds.toFixed(0)}s`
 }
 
-function countLabel(items: ActionGroupEntry[]): string {
-	const toolCount = items.filter((i) => i.entry.kind === "tool_use").length
-	const allDone = items
-		.filter((i) => i.entry.kind === "tool_use")
-		.every((i) => (i.entry as ToolEntry).tool_response !== null)
-
-	if (allDone) {
-		return `${toolCount} tool${toolCount !== 1 ? "s" : ""}`
-	}
-	return `${toolCount} tool${toolCount !== 1 ? "s" : ""}...`
-}
-
 export function ActionGroup({ items }: ActionGroupProps) {
 	const [expanded, setExpanded] = useState(false)
 	const toolItems = items.filter((i) => i.entry.kind === "tool_use")
@@ -81,9 +69,8 @@ export function ActionGroup({ items }: ActionGroupProps) {
 		<div className="tool-group">
 			{hiddenItems.length > 0 && (
 				<div className="tool-group-header" onClick={() => setExpanded((v) => !v)}>
-					{!allDone && <span className="spinner-inline" />}
-					<span className="tool-group-label">
-						{expanded ? "\u25BC" : "\u25B6"} {hiddenItems.length} more tool
+					<span className="tool-group-toggle">
+						{hiddenItems.length} more tool
 						{hiddenItems.length !== 1 ? "s" : ""}
 					</span>
 					{allDone && <Duration value={totalDuration} />}
