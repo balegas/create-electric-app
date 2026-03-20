@@ -317,7 +317,7 @@ function RoomHeader({
 			<span className="session-header-name">{roomName || roomId?.slice(0, 8)}</span>
 
 			{state === "active" && (
-				<span className="session-header-status" style={{ color: "var(--green)" }}>
+				<span className="session-header-status" style={{ color: "var(--purple)" }}>
 					Active
 				</span>
 			)}
