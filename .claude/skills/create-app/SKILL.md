@@ -42,13 +42,21 @@ After getting answers, enrich the description mentally and proceed.
 
 ## Phase 1: Generate PLAN.md
 
-Based on the description, write a complete `PLAN.md` file with this structure:
+Based on the description, write a complete `PLAN.md` file. **The plan MUST contain app-specific implementation details, not generic checklists.** Every task should reference concrete entities, components, routes, and behaviors unique to THIS app.
+
+Use this structure:
 
 ```markdown
 # [App Name] — Implementation Plan
 
 ## App Description
-[1-2 sentences]
+[1-2 sentences describing what the app does and its core value proposition]
+
+## User Flows
+[Describe the primary user interactions step by step. Example:]
+1. User opens the app → sees [specific view]
+2. User [takes action] → [what happens, what they see]
+3. [Continue for each major flow]
 
 ## Data Model
 
@@ -63,33 +71,44 @@ export const entityName = pgTable("entity_name", {
 \```
 (Repeat for EVERY entity)
 
+## Key Technical Decisions
+[Describe app-specific technical choices. Examples:]
+- External integrations: what services/APIs, which SDK, server-side vs client-side
+- State management: what needs real-time sync vs local-only state
+- Any non-standard patterns this app requires
+
 ## Implementation Tasks
+
+**IMPORTANT**: Every task below must be app-specific. Do NOT write generic items like "Create page routes with useLiveQuery" — instead write "Create /jokes route showing joke history list with topic filter and rating badges".
 
 ### Phase 1: Data Model & Migrations
 - [ ] Discover available skills: run `npx @tanstack/intent list` to see all installed playbook skills and their paths
 - [ ] Read guardrails and key playbooks: electric-app-guardrails, electric-tanstack-integration, tanstack-db, tanstack-db/collections (has timestamp pattern), tanstack-db/schemas
-- [ ] Define all Drizzle table schemas in src/db/schema.ts
-- [ ] Derive Zod schemas in src/db/zod-schemas.ts (drizzle-zod, z from "zod/v4", timestamp overrides)
+- [ ] Define Drizzle schemas for: [list each table with key columns and their purpose]
+- [ ] Derive Zod schemas for: [list each table, note any custom validations needed]
 - [ ] Run drizzle-kit generate && drizzle-kit migrate
-- [ ] Write schema smoke tests in tests/schema.test.ts
+- [ ] Write schema smoke tests covering: [list specific validation scenarios, e.g. "joke_text is required", "rating must be 'up' or 'down' or null"]
 - [ ] Run pnpm test — STOP if tests fail
 
 ### Phase 2: Collections & API Routes
-- [ ] Create collection for each entity in src/db/collections/<entity>.ts
-- [ ] Create Electric shape proxy route: src/routes/api/<entity>.ts
-- [ ] Create mutation routes: src/routes/api/mutations/<entity>.ts
+For each entity, describe the specific routes needed:
+- [ ] Create [entity] collection in src/db/collections/[entity].ts
+- [ ] Create Electric shape proxy: src/routes/api/[entity].ts
+- [ ] Create mutation routes with specific handlers: [list each — e.g. "POST to insert new joke with topic and joke_text", "PATCH to update rating"]
+- [ ] [If the app needs non-CRUD routes, list them here with details — e.g. "POST /api/generate-joke: accepts { topic?: string }, calls Claude API, returns { joke_text: string }"]
 
 ### Phase 3: UI Components
-- [ ] Create page routes with useLiveQuery (ssr: false on leaf routes)
-- [ ] Implement CRUD operations using mutation fetch calls
-- [ ] Style with Radix UI Themes + lucide-react icons
+List each component/page with specific details:
+- [ ] [Page/Component name]: [what it shows, key interactions, layout description]
+  - [Sub-detail: specific controls, data displayed, user actions]
+- [ ] [Repeat for each component]
 
 ### Phase 4: Build & Lint
 - [ ] pnpm run build passes
 - [ ] pnpm run check passes
 
 ### Phase 5: Testing
-- [ ] Collection insert validation tests in tests/collections.test.ts
+- [ ] Collection insert validation tests: [list specific scenarios]
 - [ ] JSON round-trip tests (parseDates + schema validation)
 - [ ] pnpm test passes
 
@@ -107,6 +126,17 @@ export const entityName = pgTable("entity_name", {
 - snake_case for SQL table/column names
 - Foreign keys with onDelete: "cascade" where appropriate
 ```
+
+### Plan Quality Check — Self-Review Before Presenting
+
+Before presenting the plan to the user, review it against these criteria. If any check fails, revise the plan BEFORE presenting:
+
+1. **Specificity**: Would two different developers produce roughly the same app from this plan? If the tasks are so generic they could apply to any app, add detail.
+2. **User flows**: Does the plan describe what the user actually does in the app, step by step?
+3. **API completeness**: Are ALL API routes listed — including non-CRUD routes (LLM calls, external integrations, computed endpoints)?
+4. **UI concreteness**: Can you picture each screen from the plan? Each component should name what data it displays, what controls it has, and what happens on user interaction.
+5. **Technical decisions**: Are external integrations, SDK choices, and architectural decisions documented?
+6. **No template residue**: Search the plan for generic phrases like "Create page routes", "Implement CRUD operations", "Style with Radix" — these MUST be replaced with app-specific descriptions.
 
 **Present the plan to the user for approval** using AskUserQuestion:
 - "Here is the implementation plan. Should I proceed?"
