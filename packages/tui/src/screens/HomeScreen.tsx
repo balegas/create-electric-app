@@ -2,14 +2,21 @@ import React, { useState } from "react"
 import { Box, Text, useInput } from "ink"
 import { TextInput } from "../components/TextInput.js"
 import type { SessionInfo } from "@electric-agent/protocol/client"
+import type { StoredRoom } from "../lib/session-store.js"
+
+type RecentItem =
+	| { type: "session"; session: SessionInfo }
+	| { type: "room"; room: StoredRoom }
 
 interface HomeScreenProps {
 	sessions: SessionInfo[]
 	deletingIds: Set<string>
+	rooms?: StoredRoom[]
 	onCreateSession: (description: string) => void
 	onCreateRoom: (description: string) => void
 	onJoinRoom: (code: string) => void
 	onSelectSession: (id: string) => void
+	onSelectRoom?: (id: string, name?: string) => void
 	onDeleteSession: (id: string) => void
 	isActive: boolean
 	inputDisabled?: boolean
@@ -20,10 +27,12 @@ type Mode = "prompt" | "browse" | "join"
 export function HomeScreen({
 	sessions,
 	deletingIds,
+	rooms,
 	onCreateSession,
 	onCreateRoom,
 	onJoinRoom,
 	onSelectSession,
+	onSelectRoom,
 	onDeleteSession,
 	isActive,
 	inputDisabled,
@@ -34,14 +43,25 @@ export function HomeScreen({
 	const [browseIndex, setBrowseIndex] = useState(0)
 	const [freeform, setFreeform] = useState(false)
 
-	const recentSessions = sessions
-		.sort((a, b) => new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime())
+	const recentItems: RecentItem[] = [
+		...sessions.map((session): RecentItem => ({ type: "session", session })),
+		...(rooms ?? []).map((room): RecentItem => ({ type: "room", room })),
+	]
+		.sort((a, b) => {
+			const timeA = a.type === "session"
+				? new Date(a.session.lastActiveAt).getTime()
+				: new Date(a.room.createdAt).getTime()
+			const timeB = b.type === "session"
+				? new Date(b.session.lastActiveAt).getTime()
+				: new Date(b.room.createdAt).getTime()
+			return timeB - timeA
+		})
 		.slice(0, 10)
 
 	const handleSubmit = (value: string) => {
 		const trimmed = value.trim()
 		if (!trimmed) {
-			if (recentSessions.length > 0) {
+			if (recentItems.length > 0) {
 				setMode("browse")
 				setBrowseIndex(0)
 			}
@@ -67,7 +87,7 @@ export function HomeScreen({
 	// Ctrl+T → toggle freeform mode, Ctrl+J → switch to join mode
 	useInput(
 		(input, key) => {
-			if (key.downArrow && recentSessions.length > 0) {
+			if (key.downArrow && recentItems.length > 0) {
 				setMode("browse")
 				setBrowseIndex(0)
 				return
@@ -88,7 +108,7 @@ export function HomeScreen({
 	useInput(
 		(input, key) => {
 			if (key.downArrow) {
-				setBrowseIndex((i) => Math.min(i + 1, recentSessions.length - 1))
+				setBrowseIndex((i) => Math.min(i + 1, recentItems.length - 1))
 				return
 			}
 			if (key.upArrow) {
@@ -100,17 +120,21 @@ export function HomeScreen({
 				return
 			}
 			if (key.return) {
-				const session = recentSessions[browseIndex]
-				if (session) onSelectSession(session.id)
+				const item = recentItems[browseIndex]
+				if (item?.type === "session") {
+					onSelectSession(item.session.id)
+				} else if (item?.type === "room" && onSelectRoom) {
+					onSelectRoom(item.room.id, item.room.name)
+				}
 				return
 			}
-			// Ctrl+D to delete
+			// Ctrl+D to delete (sessions only)
 			if (key.ctrl && input === "d") {
-				const session = recentSessions[browseIndex]
-				if (session) {
-					onDeleteSession(session.id)
-					setBrowseIndex((i) => Math.min(i, recentSessions.length - 2))
-					if (recentSessions.length <= 1) {
+				const item = recentItems[browseIndex]
+				if (item?.type === "session") {
+					onDeleteSession(item.session.id)
+					setBrowseIndex((i) => Math.min(i, recentItems.length - 2))
+					if (recentItems.length <= 1) {
 						setMode("prompt")
 					}
 				}
@@ -181,30 +205,53 @@ export function HomeScreen({
 				</Box>
 			)}
 
-			{recentSessions.length > 0 && (
+			{recentItems.length > 0 && (
 				<Box flexDirection="column" marginTop={2}>
 					<Text bold>Recent:</Text>
-					{recentSessions.map((session, i) => {
-						const timeAgo = formatTimeAgo(session.lastActiveAt)
+					{recentItems.map((item, i) => {
 						const isSelected = mode === "browse" && i === browseIndex
-						const isDeleting = deletingIds.has(session.id)
-						const sColor = isDeleting ? "gray" : statusColor(session.status)
+
+						if (item.type === "session") {
+							const session = item.session
+							const timeAgo = formatTimeAgo(session.lastActiveAt)
+							const isDeleting = deletingIds.has(session.id)
+							const sColor = isDeleting ? "gray" : statusColor(session.status)
+
+							return (
+								<Box key={`s-${session.id}`} gap={1}>
+									<Text color={isSelected ? "cyan" : undefined}>
+										{isSelected ? ">" : " "}
+									</Text>
+									<Text inverse={isSelected} color={isSelected ? undefined : sColor} strikethrough={isDeleting}>
+										{statusIcon(session.status)}
+									</Text>
+									<Text inverse={isSelected} bold={isSelected} dimColor={isDeleting} strikethrough={isDeleting}>
+										{session.projectName || session.description?.slice(0, 40) || session.id.slice(0, 8)}
+									</Text>
+									<Text inverse={isSelected} dimColor>{timeAgo}</Text>
+									<Text color={sColor}>
+										{isDeleting ? "[deleting...]" : `[${session.status}]`}
+									</Text>
+								</Box>
+							)
+						}
+
+						const room = item.room
+						const timeAgo = formatTimeAgo(room.createdAt)
 
 						return (
-							<Box key={session.id} gap={1}>
+							<Box key={`r-${room.id}`} gap={1}>
 								<Text color={isSelected ? "cyan" : undefined}>
 									{isSelected ? ">" : " "}
 								</Text>
-								<Text inverse={isSelected} color={isSelected ? undefined : sColor} strikethrough={isDeleting}>
-									{statusIcon(session.status)}
+								<Text inverse={isSelected} color={isSelected ? undefined : "blue"}>
+									{"\u25C9"}
 								</Text>
-								<Text inverse={isSelected} bold={isSelected} dimColor={isDeleting} strikethrough={isDeleting}>
-									{session.projectName || session.description?.slice(0, 40) || session.id.slice(0, 8)}
+								<Text inverse={isSelected} bold={isSelected}>
+									{room.name || room.id.slice(0, 8)}
 								</Text>
 								<Text inverse={isSelected} dimColor>{timeAgo}</Text>
-								<Text color={sColor}>
-									{isDeleting ? "[deleting...]" : `[${session.status}]`}
-								</Text>
+								<Text color="blue">[room]</Text>
 							</Box>
 						)
 					})}
