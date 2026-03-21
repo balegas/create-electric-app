@@ -63,10 +63,15 @@ export function RoomScreen({
 		return () => { cancelled = true; clearInterval(interval) }
 	}, [client, roomId, infraGateResolved])
 
-	// ^P from parent → open agent selector
+	// Sync view with showPeek: open selector when peek requested, reset when dismissed
 	useEffect(() => {
 		if (showPeek && view === "room") {
 			setView("selecting-agent")
+		}
+		if (!showPeek && view !== "room") {
+			setView("room")
+			setPeekAgent(null)
+			setAgentHasGate(false)
 		}
 	}, [showPeek, view])
 
@@ -187,8 +192,14 @@ export function RoomScreen({
 				</Box>
 			) : view === "agent" && peekAgent ? (
 				<>
-					<AgentConsoleView client={client} sessionId={peekAgent.sessionId} onGateAppeared={() => setAgentHasGate(true)} />
-					{agentHasGate && (
+					<AgentConsoleView
+						client={client}
+						sessionId={peekAgent.sessionId}
+						onGateAppeared={() => setAgentHasGate(true)}
+						showGateOverlay={gateRequested}
+						onGateDismissed={() => { setAgentHasGate(false); onGateDismissed() }}
+					/>
+					{agentHasGate && !gateRequested && (
 						<Box paddingX={1}>
 							<Text color="yellow" bold>
 								{"\u26A0"} Agent has a pending gate {"\u2014"} press ^G to respond
@@ -249,14 +260,22 @@ function AgentConsoleView({
 	client,
 	sessionId,
 	onGateAppeared,
+	showGateOverlay,
+	onGateDismissed,
 }: {
 	client: ElectricAgentClient
 	sessionId: string
 	onGateAppeared?: () => void
+	showGateOverlay?: boolean
+	onGateDismissed?: () => void
 }) {
-	const { entries, isLive, error } = useSessionStream(client, sessionId)
+	const { entries, isLive, error, markGateResolved } = useSessionStream(client, sessionId)
 	const consoleEntries = entries.filter((e) => e.kind !== "gate")
-	const hasUnresolvedGate = entries.some((e) => e.kind === "gate" && !e.resolved)
+	const unresolvedGateIndex = entries.findIndex((e) => e.kind === "gate" && !e.resolved)
+	const unresolvedGate = unresolvedGateIndex >= 0 && entries[unresolvedGateIndex]?.kind === "gate"
+		? entries[unresolvedGateIndex] as Extract<typeof entries[number], { kind: "gate" }>
+		: null
+	const hasUnresolvedGate = !!unresolvedGate
 	const notifiedRef = useRef(false)
 
 	useEffect(() => {
@@ -268,6 +287,21 @@ function AgentConsoleView({
 			notifiedRef.current = false
 		}
 	}, [hasUnresolvedGate, onGateAppeared])
+
+	const handleGateRespond = useCallback(
+		async (gate: string, data: Record<string, unknown>) => {
+			try {
+				await client.respondToGate(sessionId, gate, data)
+				if (unresolvedGateIndex >= 0) {
+					markGateResolved(unresolvedGateIndex, "Resolved")
+				}
+				onGateDismissed?.()
+			} catch {
+				// Error handling — gate response failed
+			}
+		},
+		[client, sessionId, unresolvedGateIndex, markGateResolved, onGateDismissed],
+	)
 
 	if (error) {
 		return (
@@ -281,6 +315,19 @@ function AgentConsoleView({
 		return (
 			<Box flexDirection="column" flexGrow={1} paddingX={1}>
 				<Text dimColor>Connecting to agent stream...</Text>
+			</Box>
+		)
+	}
+
+	if (showGateOverlay && unresolvedGate) {
+		return (
+			<Box flexDirection="column" flexGrow={1}>
+				<Console entries={consoleEntries} />
+				<GateOverlay
+					gate={unresolvedGate}
+					onRespond={handleGateRespond}
+					onDismiss={() => onGateDismissed?.()}
+				/>
 			</Box>
 		)
 	}

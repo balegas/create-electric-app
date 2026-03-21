@@ -15,6 +15,7 @@ import {
 	loadSessions,
 	saveSession,
 	deleteStoredSession,
+	deleteStoredRoom,
 	loadRooms,
 	saveRoom,
 	type StoredSession,
@@ -369,7 +370,11 @@ export function App({ serverUrl }: { serverUrl?: string }) {
 		if (key.ctrl && input === "d") {
 			if (activeScr?.type === "session") {
 				requestDeleteSession(activeScr.sessionId)
-			} else if (activeScr?.type === "settings" || activeScr?.type === "room") {
+			} else if (activeScr?.type === "room") {
+				deleteStoredRoom(activeScr.roomId)
+				setStoredRooms(loadRooms())
+				removeScreen(ai)
+			} else if (activeScr?.type === "settings") {
 				removeScreen(ai)
 			}
 			return
