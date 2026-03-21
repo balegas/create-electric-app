@@ -853,13 +853,13 @@ function extractRoomId(path: string): string | undefined {
 	return match?.[1]
 }
 
-/** Build the SSE URL, appending an `offset` query param when resuming. */
+/** Build the SSE URL, appending an `offset` query param when resuming.
+ *  Handles both absolute URLs (http://...) and relative paths (/api/...). */
 function buildSSEUrl(baseUrl: string, path: string, lastEventId: string | undefined): string {
-	const url = new URL(`${baseUrl}${path}`)
-	if (lastEventId) {
-		url.searchParams.set("offset", lastEventId)
-	}
-	return url.toString()
+	const fullPath = `${baseUrl}${path}`
+	if (!lastEventId) return fullPath
+	const sep = fullPath.includes("?") ? "&" : "?"
+	return `${fullPath}${sep}offset=${encodeURIComponent(lastEventId)}`
 }
 
 /** Promise-based delay. */
