@@ -116,7 +116,7 @@ export function SessionPage() {
 	}, [id, location.state, navigate, refreshSessions])
 
 	const effectiveId = realSessionId
-	const { entries, isLive, isComplete, appStatus, cost, markGateResolved } = useSession(effectiveId)
+	const { entries, isLive, isComplete, appStatus, markGateResolved } = useSession(effectiveId)
 
 	// Load session from localStorage
 	const [activeSession, setActiveSession] = useState<SessionInfo | null>(() =>
@@ -281,12 +281,6 @@ export function SessionPage() {
 					</span>
 				)}
 
-				{cost.totalCostUsd > 0 && (
-					<span className="session-header-cost" title={`${cost.totalTurns} turns`}>
-						${cost.totalCostUsd.toFixed(2)}
-					</span>
-				)}
-
 				{/* Mobile icon-only Open App button */}
 				{showAppLink && (previewUrl || appPort) && (
 					<a
@@ -346,11 +340,6 @@ export function SessionPage() {
 				</button>
 				{overflowOpen && (
 					<div className="session-header-overflow-menu">
-						{cost.totalCostUsd > 0 && (
-							<span className="session-header-overflow-menu-item session-header-overflow-cost">
-								Cost: ${cost.totalCostUsd.toFixed(2)} ({cost.totalTurns} turns)
-							</span>
-						)}
 						<button
 							type="button"
 							className="session-header-overflow-menu-item"

@@ -1,12 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { client } from "../lib/api"
 import type { ConsoleEntry, EngineEvent } from "../lib/event-types"
-import { getSessionToken } from "../lib/session-store"
-
-export interface SessionCost {
-	totalCostUsd: number
-	totalTurns: number
-	totalDurationMs: number
-}
 
 export function useSession(sessionId: string | null) {
 	const [entries, setEntries] = useState<ConsoleEntry[]>([])
@@ -17,12 +11,6 @@ export function useSession(sessionId: string | null) {
 		port?: number
 		previewUrl?: string
 	} | null>(null)
-	const [cost, setCost] = useState<SessionCost>({
-		totalCostUsd: 0,
-		totalTurns: 0,
-		totalDurationMs: 0,
-	})
-	const lastEventIdRef = useRef("-1")
 
 	const processEvent = useCallback((event: EngineEvent) => {
 		setEntries((prev) => {
@@ -150,19 +138,7 @@ export function useSession(sessionId: string | null) {
 					return updated
 				}
 
-				case "budget_exceeded": {
-					const be = event as EngineEvent & { spent_usd: number; budget_usd: number }
-					return [
-						...prev,
-						{
-							kind: "log" as const,
-							level: "error" as const,
-							message: `Session budget exceeded ($${be.spent_usd.toFixed(2)} / $${be.budget_usd.toFixed(2)} limit)`,
-							ts: event.ts,
-						},
-					]
-				}
-
+				case "budget_exceeded":
 				case "session_end":
 				case "session_start":
 				case "app_status":
@@ -186,17 +162,6 @@ export function useSession(sessionId: string | null) {
 		}
 		if (event.type === "session_end") {
 			setIsComplete(true)
-			// Accumulate cost from each run
-			if (event.cost_usd != null || event.num_turns != null || event.duration_ms != null) {
-				setCost((prev) => ({
-					totalCostUsd: prev.totalCostUsd + (event.cost_usd ?? 0),
-					totalTurns: prev.totalTurns + (event.num_turns ?? 0),
-					totalDurationMs: prev.totalDurationMs + (event.duration_ms ?? 0),
-				}))
-			}
-		}
-		if (event.type === "budget_exceeded") {
-			setIsComplete(true)
 		}
 	}, [])
 
@@ -207,73 +172,28 @@ export function useSession(sessionId: string | null) {
 		setIsLive(false)
 		setIsComplete(false)
 		setAppStatus(null)
-		setCost({ totalCostUsd: 0, totalTurns: 0, totalDurationMs: 0 })
-		lastEventIdRef.current = "-1"
 
-		let cancelled = false
-		let eventSource: EventSource | null = null
-		let retryCount = 0
-		const MAX_RETRIES = 10
+		const abort = new AbortController()
 
-		function connect() {
-			if (cancelled) return
-			if (retryCount >= MAX_RETRIES) {
-				console.warn(`[sse] Giving up on session ${sessionId} after ${MAX_RETRIES} retries`)
-				setIsLive(false)
-				return
-			}
-
-			const token = getSessionToken(sessionId)
-			const params = new URLSearchParams()
-			if (token) params.set("token", token)
-			// On reconnect, pass the last received offset so the server resumes
-			// from where we left off instead of replaying from the beginning.
-			if (lastEventIdRef.current !== "-1") {
-				params.set("offset", lastEventIdRef.current)
-			}
-			const qs = params.toString()
-			const sseUrl = `/api/sessions/${sessionId}/events${qs ? `?${qs}` : ""}`
-			eventSource = new EventSource(sseUrl)
-
-			eventSource.onopen = () => {
-				if (!cancelled) {
-					retryCount = 0 // Reset on successful connection
-					setIsLive(true)
-				}
-			}
-
-			eventSource.onmessage = (e) => {
-				if (cancelled) return
-				// Track the last received event ID so reconnects resume from here
-				if (e.lastEventId) {
-					lastEventIdRef.current = e.lastEventId
-				}
-				try {
-					const event = JSON.parse(e.data) as EngineEvent
+		async function connect() {
+			try {
+				const stream = client.sessionEvents(sessionId!, { signal: abort.signal })
+				setIsLive(true)
+				for await (const event of stream) {
+					if (abort.signal.aborted) break
 					processEvent(event)
-				} catch {
-					// Ignore malformed events
 				}
-			}
-
-			eventSource.onerror = () => {
-				if (cancelled) return
-				eventSource?.close()
-				retryCount++
-				// Exponential backoff: 1s, 2s, 4s, 8s, ... capped at 30s
-				const delay = Math.min(1000 * 2 ** (retryCount - 1), 30_000)
-				setTimeout(connect, delay)
+			} catch {
+				if (!abort.signal.aborted) {
+					setIsLive(false)
+				}
 			}
 		}
 
 		connect()
 
 		return () => {
-			cancelled = true
-			if (eventSource) {
-				eventSource.close()
-				eventSource = null
-			}
+			abort.abort()
 		}
 	}, [sessionId, processEvent])
 
@@ -288,5 +208,5 @@ export function useSession(sessionId: string | null) {
 		})
 	}, [])
 
-	return { entries, isLive, isComplete, appStatus, cost, markGateResolved }
+	return { entries, isLive, isComplete, appStatus, markGateResolved }
 }

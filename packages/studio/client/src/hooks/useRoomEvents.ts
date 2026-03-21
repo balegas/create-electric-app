@@ -1,6 +1,5 @@
-import type { RoomEvent as ProtocolRoomEvent } from "@electric-agent/protocol"
-import { useEffect, useRef, useState } from "react"
-import { getRoomToken } from "../lib/session-store"
+import { useEffect, useState } from "react"
+import { client } from "../lib/api"
 
 export interface RoomMessage {
 	type: "agent_message"
@@ -29,74 +28,33 @@ export interface RoomEvent {
 export function useRoomEvents(roomId: string | null) {
 	const [events, setEvents] = useState<RoomEvent[]>([])
 	const [isLive, setIsLive] = useState(false)
-	const lastEventIdRef = useRef("-1")
 
 	useEffect(() => {
 		if (!roomId) return
 
 		setEvents([])
 		setIsLive(false)
-		lastEventIdRef.current = "-1"
 
-		let cancelled = false
-		let eventSource: EventSource | null = null
-		let retryCount = 0
-		const MAX_RETRIES = 10
+		const abort = new AbortController()
 
-		function connect() {
-			if (cancelled) return
-			if (retryCount >= MAX_RETRIES) {
-				setIsLive(false)
-				return
-			}
-
-			const params = new URLSearchParams()
-			const roomTokenValue = getRoomToken(roomId)
-			if (roomTokenValue) params.set("token", roomTokenValue)
-			if (lastEventIdRef.current !== "-1") {
-				params.set("offset", lastEventIdRef.current)
-			}
-			const qs = params.toString()
-			const sseUrl = `/api/rooms/${roomId}/events${qs ? `?${qs}` : ""}`
-			eventSource = new EventSource(sseUrl)
-
-			eventSource.onopen = () => {
-				if (!cancelled) {
-					retryCount = 0
-					setIsLive(true)
-				}
-			}
-
-			eventSource.onmessage = (e) => {
-				if (cancelled) return
-				if (e.lastEventId) {
-					lastEventIdRef.current = e.lastEventId
-				}
-				try {
-					const event = JSON.parse(e.data) as ProtocolRoomEvent
+		async function connect() {
+			try {
+				const stream = client.roomEvents(roomId!, { signal: abort.signal })
+				setIsLive(true)
+				for await (const event of stream) {
+					if (abort.signal.aborted) break
 					setEvents((prev) => [...prev, event as unknown as RoomEvent])
-				} catch {
-					// Ignore malformed events
 				}
-			}
-
-			eventSource.onerror = () => {
-				if (cancelled) return
-				eventSource?.close()
-				retryCount++
-				const delay = Math.min(1000 * 2 ** (retryCount - 1), 30_000)
-				setTimeout(connect, delay)
+			} catch {
+				if (!abort.signal.aborted) {
+					setIsLive(false)
+				}
 			}
 		}
 
 		connect()
-
 		return () => {
-			cancelled = true
-			if (eventSource) {
-				eventSource.close()
-				eventSource = null
-			}
+			abort.abort()
 		}
 	}, [roomId])
 
