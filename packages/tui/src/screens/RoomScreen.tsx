@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { Box, Text, useInput } from "ink"
 import SelectInput from "ink-select-input"
 import type { ElectricAgentClient, RoomState } from "@electric-agent/protocol/client"
@@ -42,6 +42,7 @@ export function RoomScreen({
 	const [peekAgent, setPeekAgent] = useState<{ sessionId: string; name: string } | null>(null)
 	const [showInfraGate, setShowInfraGate] = useState(false)
 	const [infraGateResolved, setInfraGateResolved] = useState(false)
+	const [agentHasGate, setAgentHasGate] = useState(false)
 
 	// Fetch room state periodically
 	useEffect(() => {
@@ -83,6 +84,7 @@ export function RoomScreen({
 				if (view === "agent" || view === "selecting-agent") {
 					setView("room")
 					setPeekAgent(null)
+					setAgentHasGate(false)
 					onPeekDismiss()
 				}
 			}
@@ -184,7 +186,16 @@ export function RoomScreen({
 					</Box>
 				</Box>
 			) : view === "agent" && peekAgent ? (
-				<AgentConsoleView client={client} sessionId={peekAgent.sessionId} />
+				<>
+					<AgentConsoleView client={client} sessionId={peekAgent.sessionId} onGateAppeared={() => setAgentHasGate(true)} />
+					{agentHasGate && (
+						<Box paddingX={1}>
+							<Text color="yellow" bold>
+								{"\u26A0"} Agent has a pending gate {"\u2014"} press ^G to respond
+							</Text>
+						</Box>
+					)}
+				</>
 			) : (
 				<>
 					<Box flexDirection="column" flexGrow={1} paddingX={1}>
@@ -234,9 +245,29 @@ export function RoomScreen({
 }
 
 /** Full agent console view (not a small peek panel) */
-function AgentConsoleView({ client, sessionId }: { client: ElectricAgentClient; sessionId: string }) {
+function AgentConsoleView({
+	client,
+	sessionId,
+	onGateAppeared,
+}: {
+	client: ElectricAgentClient
+	sessionId: string
+	onGateAppeared?: () => void
+}) {
 	const { entries, isLive, error } = useSessionStream(client, sessionId)
 	const consoleEntries = entries.filter((e) => e.kind !== "gate")
+	const hasUnresolvedGate = entries.some((e) => e.kind === "gate" && !e.resolved)
+	const notifiedRef = useRef(false)
+
+	useEffect(() => {
+		if (hasUnresolvedGate && !notifiedRef.current && onGateAppeared) {
+			notifiedRef.current = true
+			onGateAppeared()
+		}
+		if (!hasUnresolvedGate) {
+			notifiedRef.current = false
+		}
+	}, [hasUnresolvedGate, onGateAppeared])
 
 	if (error) {
 		return (
