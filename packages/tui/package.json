@@ -1,0 +1,43 @@
+{
+	"name": "@electric-agent/tui",
+	"version": "0.1.0",
+	"description": "Terminal UI for Electric Agent Studio",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/balegas/create-electric-app",
+		"directory": "packages/tui"
+	},
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"bin": {
+		"electric-tui": "./dist/index.js"
+	},
+	"files": [
+		"dist/"
+	],
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"typecheck": "tsc --noEmit",
+		"clean": "rm -rf dist",
+		"start": "node dist/index.js"
+	},
+	"license": "Apache-2.0",
+	"dependencies": {
+		"@electric-agent/protocol": "workspace:*",
+		"ink": "^5.2.0",
+		"ink-select-input": "^6.0.0",
+		"ink-spinner": "^5.0.0",
+		"ink-text-input": "^6.0.0",
+		"marked": "^17.0.5",
+		"marked-terminal": "^7.3.0",
+		"meow": "^13.0.0",
+		"react": "^18.3.1"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0",
+		"@types/react": "^18.3.0",
+		"typescript": "^5.8.0"
+	}
+}
