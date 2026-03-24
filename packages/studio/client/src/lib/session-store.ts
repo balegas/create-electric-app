@@ -14,7 +14,9 @@ export function getSessions(): SessionInfo[] {
 	try {
 		const raw = localStorage.getItem(STORAGE_KEY)
 		if (!raw) return []
-		return JSON.parse(raw) as SessionInfo[]
+		const parsed = JSON.parse(raw)
+		if (!Array.isArray(parsed)) return []
+		return parsed as SessionInfo[]
 	} catch {
 		return []
 	}

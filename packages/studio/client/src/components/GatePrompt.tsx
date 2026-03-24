@@ -522,32 +522,50 @@ export function AskUserQuestionGate({
 		})
 	}
 
-	// Resolved state — show selected options as a list
+	// Resolved state — show same options with selected one highlighted
 	if (resolved) {
-		// Parse the comma-separated summary back into individual selections
-		const selectedLabels = (resolvedSummary || "")
-			.split(",")
-			.map((s) => s.trim())
-			.filter(Boolean)
+		const selectedLabels = new Set(
+			(resolvedSummary || "")
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean),
+		)
 		return (
-			<div className="gate-prompt">
+			<div className="gate-prompt gate-prompt-resolved">
 				<h3>Question</h3>
-				{questions.map((q) => (
-					<div key={q.question} className="gate-question-section">
-						{q.header && <span className="gate-question-header">{q.header}</span>}
-						<p className="gate-summary">{q.question}</p>
-					</div>
-				))}
-				{selectedLabels.length > 0 && (
-					<div className="gate-resolved-selections">
-						{selectedLabels.map((label) => (
-							<div key={label} className="gate-resolved-item">
-								<span className="gate-resolved-check">&#10003;</span>
-								<span>{label}</span>
-							</div>
-						))}
-					</div>
-				)}
+				{questions.map((q) => {
+					const hasOptions = q.options && q.options.length > 0
+					return (
+						<div key={q.question} className="gate-question-section">
+							{q.header && <span className="gate-question-header">{q.header}</span>}
+							<p className="gate-summary">{q.question}</p>
+							{hasOptions && (
+								<div className="gate-option-group-vert">
+									{q.options?.map((opt) => {
+										const isSelected = selectedLabels.has(opt.label)
+										return (
+											<button
+												key={opt.label}
+												type="button"
+												className={`gate-option ${isSelected ? "selected" : ""}`}
+												disabled
+											>
+												{isSelected && <span className="gate-resolved-check">&#10003; </span>}
+												<span className="gate-option-title">{opt.label}</span>
+												{opt.description && (
+													<span className="gate-option-desc">{opt.description}</span>
+												)}
+											</button>
+										)
+									})}
+								</div>
+							)}
+							{!hasOptions && resolvedSummary && (
+								<p className="gate-summary" style={{ opacity: 0.7 }}>{resolvedSummary}</p>
+							)}
+						</div>
+					)
+				})}
 			</div>
 		)
 	}
