@@ -750,8 +750,11 @@
 	border-radius: 8px;
 	color: var(--text);
 	padding: 10px 14px;
-	font-size: 13px;
+	font-size: 15px;
 	font-family: var(--font-sans);
+	line-height: 1.5;
+	min-height: 44px;
+	box-sizing: border-box;
 	min-width: 120px;
 	appearance: none;
 	-webkit-appearance: none;
