@@ -13,6 +13,8 @@ interface GatePromptProps {
 	roomId?: string
 	roomName?: string
 	respondFn?: (sessionId: string, gate: string, data: Record<string, unknown>) => Promise<unknown>
+	/** Agent name shown in the gate header (room context) */
+	agentName?: string
 }
 
 export function InfraConfigGate({
@@ -758,9 +760,19 @@ export function GatePrompt({
 	roomId,
 	roomName,
 	respondFn,
+	agentName,
 }: GatePromptProps & { duration: string | null }) {
 	const resolve = (summary?: string) => onResolved(entryIndex, summary)
 	const { resolved, resolvedSummary } = entry
+
+	const agentHeader = agentName ? (
+		<div className="gate-agent-header">
+			<a href={`/session/${sessionId}`} className="gate-agent-link">
+				{agentName}
+			</a>
+			<span className="gate-agent-label">needs input</span>
+		</div>
+	) : null
 
 	let content: React.ReactNode = null
 	switch (entry.event.type) {
@@ -795,7 +807,13 @@ export function GatePrompt({
 		return (
 			<div className="gate-answered">
 				<div className="gate-answered-header">
-					<span className="prefix done">[gate]</span>
+					{agentName ? (
+						<a href={`/session/${sessionId}`} className="gate-agent-link">
+							{agentName}
+						</a>
+					) : (
+						<span className="prefix done">[gate]</span>
+					)}
 					<span className="gate-resolved-label">{resolvedLabel(entry.event.type)}</span>
 					<Duration value={duration} />
 				</div>
@@ -809,5 +827,10 @@ export function GatePrompt({
 		)
 	}
 
-	return content
+	return (
+		<>
+			{agentHeader}
+			{content}
+		</>
+	)
 }

@@ -792,6 +792,7 @@ function RoomEventList({
 								<GatePrompt
 									key={key}
 									sessionId={gd.sessionId}
+									agentName={event.from}
 									entry={{
 										kind: "gate",
 										event: {

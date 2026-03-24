@@ -332,6 +332,28 @@
 	background: color-mix(in srgb, var(--blue) 15%, transparent);
 }
 
+.gate-agent-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 0;
+	font-size: 13px;
+}
+
+.gate-agent-link {
+	color: var(--blue);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.gate-agent-link:hover {
+	text-decoration: underline;
+}
+
+.gate-agent-label {
+	color: var(--text-subtle);
+}
+
 /* Continue gate — resolved decision text */
 .gate-continue-decision {
 	color: var(--text-muted);
