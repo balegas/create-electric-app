@@ -59,4 +59,18 @@ program
 		},
 	)
 
+program
+	.command("create")
+	.description("Create an app in headless mode (room + agents, auto-provision)")
+	.argument("<description>", "App description")
+	.option("-p, --port <number>", "Server port (starts server if not running)", "4400")
+	.option("--server <url>", "Connect to existing server instead of starting one")
+	.action(async (description: string, opts: { port?: string; server?: string }) => {
+		const { createCommand } = await import("./cli/create.js")
+		await createCommand(description, {
+			port: opts.port ? parseInt(opts.port, 10) : undefined,
+			serverUrl: opts.server,
+		})
+	})
+
 program.parse()
