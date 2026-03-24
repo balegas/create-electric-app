@@ -24,7 +24,7 @@ function statusClass(status: string): string {
 }
 
 export function TodoWidget({ entry }: TodoWidgetProps) {
-	const { todos } = entry
+	const todos = Array.isArray(entry.todos) ? entry.todos : []
 	const completed = todos.filter((t) => t.status === "completed").length
 	const inProgress = todos.filter((t) => t.status === "in_progress").length
 	const total = todos.length
