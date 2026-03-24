@@ -71,7 +71,6 @@ export async function createCommand(
 		}
 
 		console.log(`Room: ${result.name}`)
-		console.log(`Join: ${result.roomId}/${result.code}`)
 		console.log(`Agents: ${result.sessions.map((s) => `${s.name} (${s.role})`).join(", ")}`)
 		console.log()
 
@@ -106,7 +105,11 @@ export async function createCommand(
 		}
 
 		console.log()
-		console.log(`Web UI: ${serverUrl}/room/${roomId}`)
+		console.log(`Open the Web UI and paste this join code in the sidebar:`)
+		console.log()
+		console.log(`  ${result.roomId}:${result.code}`)
+		console.log()
+		console.log(`Web UI: ${serverUrl}`)
 		console.log()
 		console.log("Press Ctrl+C to stop.")
 
