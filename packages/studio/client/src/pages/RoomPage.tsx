@@ -6,7 +6,7 @@ import {
 	useParams,
 	useSearchParams,
 } from "react-router-dom"
-import { AskUserQuestionGate, InfraConfigGate } from "../components/GatePrompt"
+import { GatePrompt, InfraConfigGate } from "../components/GatePrompt"
 import { Markdown } from "../components/Markdown"
 import { getAvatarColor } from "../components/SessionListItem"
 import { type RoomEvent, useRoomEvents } from "../hooks/useRoomEvents"
@@ -789,30 +789,33 @@ function RoomEventList({
 								}>
 							}
 							return (
-								<div key={key} className="agent-gate-activity">
-									<div className="console-entry">
-										<RoomParticipantPrefix name={event.from} participants={participants} />
-										<span className="agent-gate-question">needs input</span>
-										{time}
-									</div>
-									<AskUserQuestionGate
-										sessionId={gd.sessionId}
-										event={{
+								<GatePrompt
+									key={key}
+									sessionId={gd.sessionId}
+									entry={{
+										kind: "gate",
+										event: {
 											type: "ask_user_question" as const,
 											tool_use_id: gd.toolUseId,
 											questions: gd.questions,
 											ts: event.ts,
-										}}
-										resolved={!!resolvedGates[gd.toolUseId]}
-										resolvedSummary={resolvedGates[gd.toolUseId]}
-										onResolved={(summary) =>
-											setResolvedGates((prev) => ({ ...prev, [gd.toolUseId]: summary }))
-										}
-										respondFn={(sid, gate, data) =>
-											respondToRoomGate(roomId, sid, gate, data)
-										}
-									/>
-								</div>
+										},
+										resolved: !!resolvedGates[gd.toolUseId],
+										resolvedSummary: resolvedGates[gd.toolUseId],
+										ts: event.ts,
+									}}
+									entryIndex={i}
+									onResolved={(_idx, summary) =>
+										setResolvedGates((prev) => ({
+											...prev,
+											[gd.toolUseId]: summary ?? "",
+										}))
+									}
+									duration={null}
+									respondFn={(sid, gate, data) =>
+										respondToRoomGate(roomId, sid, gate, data)
+									}
+								/>
 							)
 						}
 						return (

@@ -12,6 +12,7 @@ interface GatePromptProps {
 	onResolved: (index: number, summary?: string) => void
 	roomId?: string
 	roomName?: string
+	respondFn?: (sessionId: string, gate: string, data: Record<string, unknown>) => Promise<unknown>
 }
 
 export function InfraConfigGate({
@@ -756,6 +757,7 @@ export function GatePrompt({
 	duration,
 	roomId,
 	roomName,
+	respondFn,
 }: GatePromptProps & { duration: string | null }) {
 	const resolve = (summary?: string) => onResolved(entryIndex, summary)
 	const { resolved, resolvedSummary } = entry
@@ -781,6 +783,7 @@ export function GatePrompt({
 					onResolved={resolve}
 					resolved={resolved}
 					resolvedSummary={resolvedSummary}
+					respondFn={respondFn}
 				/>
 			)
 			break
