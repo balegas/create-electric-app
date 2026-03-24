@@ -105,11 +105,7 @@ export async function createCommand(
 		}
 
 		console.log()
-		console.log(`Open the Web UI and paste this join code in the sidebar:`)
-		console.log()
-		console.log(`  ${result.roomId}:${result.code}`)
-		console.log()
-		console.log(`Web UI: ${serverUrl}`)
+		console.log(`Open: ${serverUrl}/room/${roomId}?code=${result.code}`)
 		console.log()
 		console.log("Press Ctrl+C to stop.")
 

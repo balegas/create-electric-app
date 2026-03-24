@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom"
 import { InfraConfigGate } from "../components/GatePrompt"
 import { Markdown } from "../components/Markdown"
 import { getAvatarColor } from "../components/SessionListItem"
@@ -11,6 +11,7 @@ import {
 	createAppRoom,
 	fetchGhAccounts,
 	getAgentRoomState,
+	joinAgentRoom,
 	type RoomState,
 	sendRoomMessage,
 } from "../lib/api"
@@ -34,6 +35,30 @@ export function RoomPage() {
 	const [sending, setSending] = useState(false)
 	const [infraGateResolved, setInfraGateResolved] = useState(false)
 	const [ghAccounts, setGhAccounts] = useState<Array<{ login: string; type: string }>>([])
+	const [searchParams, setSearchParams] = useSearchParams()
+
+	// Auto-join when ?code= query param is present (e.g. /room/:id?code=xyz)
+	useEffect(() => {
+		const code = searchParams.get("code")
+		if (!code || !roomId || roomId === "new") return
+		// Already joined? Check local store
+		if (getAgentRooms().some((r) => r.id === roomId)) {
+			// Remove code from URL
+			setSearchParams({}, { replace: true })
+			return
+		}
+		joinAgentRoom(roomId, code)
+			.then(({ id, name }) => {
+				addAgentRoom({ id, code, name, createdAt: new Date().toISOString() })
+				refreshAgentRooms()
+				// Remove code from URL so refresh doesn't re-join
+				setSearchParams({}, { replace: true })
+			})
+			.catch((err) => {
+				console.error("[room] Auto-join failed:", err)
+				setError(err instanceof Error ? err.message : "Failed to join room")
+			})
+	}, [roomId, searchParams, setSearchParams, refreshAgentRooms])
 
 	// Fetch GitHub accounts when there's a pending infra gate and user has a GH token
 	useEffect(() => {
