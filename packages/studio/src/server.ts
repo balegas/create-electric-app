@@ -727,10 +727,9 @@ export function createApp(config: ServerConfig) {
 			for (const router of roomRouters.values()) {
 				const participant = router.participants.find((p) => p.sessionId === sessionId)
 				if (participant) {
-					const questions =
-						(body.tool_input as Record<string, unknown>)?.questions as
-							| Array<{ question: string; options?: Array<{ label: string }>; multiSelect?: boolean }>
-							| undefined
+					const questions = (body.tool_input as Record<string, unknown>)?.questions as
+						| Array<{ question: string; options?: Array<{ label: string }>; multiSelect?: boolean }>
+						| undefined
 					const questionText = questions?.[0]?.question ?? "Agent needs input"
 					router
 						.emitActivity(participant.name, questionText, "ask_user_question", {
@@ -913,10 +912,9 @@ export function createApp(config: ServerConfig) {
 			for (const router of roomRouters.values()) {
 				const participant = router.participants.find((p) => p.sessionId === sessionId)
 				if (participant) {
-					const questions =
-						(body.tool_input as Record<string, unknown>)?.questions as
-							| Array<{ question: string; options?: Array<{ label: string }>; multiSelect?: boolean }>
-							| undefined
+					const questions = (body.tool_input as Record<string, unknown>)?.questions as
+						| Array<{ question: string; options?: Array<{ label: string }>; multiSelect?: boolean }>
+						| undefined
 					const questionText = questions?.[0]?.question ?? "Agent needs input"
 					router
 						.emitActivity(participant.name, questionText, "ask_user_question", {
@@ -2733,11 +2731,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					if (event.type === "gate_resolved") {
 						config.sessions.update(coderSession.sessionId, { needsInput: false })
-						const summary = (event as EngineEvent & { summary?: string }).summary
-						const msg = summary
-							? `${coderSession.name} received input: ${summary}`
-							: `${coderSession.name} received input — resuming.`
-						router.sendMessage("system", msg).catch(() => {})
 					}
 				})
 
@@ -2938,11 +2931,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						}
 						if (event.type === "gate_resolved") {
 							config.sessions.update(agentSession.sessionId, { needsInput: false })
-							const summary = (event as EngineEvent & { summary?: string }).summary
-							const msg = summary
-								? `${agentSession.name} received input: ${summary}`
-								: `${agentSession.name} received input — resuming.`
-							router.sendMessage("system", msg).catch(() => {})
 						}
 					})
 

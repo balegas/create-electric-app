@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom"
+import {
+	useLocation,
+	useNavigate,
+	useOutletContext,
+	useParams,
+	useSearchParams,
+} from "react-router-dom"
 import { AskUserQuestionGate, InfraConfigGate } from "../components/GatePrompt"
 import { Markdown } from "../components/Markdown"
 import { getAvatarColor } from "../components/SessionListItem"
@@ -12,8 +18,8 @@ import {
 	fetchGhAccounts,
 	getAgentRoomState,
 	joinAgentRoom,
-	respondToRoomGate,
 	type RoomState,
+	respondToRoomGate,
 	sendRoomMessage,
 } from "../lib/api"
 import { getGhToken } from "../lib/credentials"
@@ -51,7 +57,8 @@ export function RoomPage() {
 		joinAgentRoom(roomId, code)
 			.then((result) => {
 				// Build sessions map for sidebar display
-				const findSession = (role: string) => result.sessions?.find((s) => s.role === role)?.sessionId
+				const findSession = (role: string) =>
+					result.sessions?.find((s) => s.role === role)?.sessionId
 				addAgentRoom({
 					id: result.id,
 					code,
@@ -231,8 +238,8 @@ export function RoomPage() {
 						}
 						// Update room entry with sessions map for sidebar
 						const findSession = (role: string) =>
-							state.participants.find((p) => p.role === role)?.sessionId
-								?? state.pendingSessions?.find((s) => s.role === role)?.sessionId
+							state.participants.find((p) => p.role === role)?.sessionId ??
+							state.pendingSessions?.find((s) => s.role === role)?.sessionId
 						const coderId = findSession("coder")
 						if (coderId) {
 							const existing = getAgentRooms().find((r) => r.id === roomId)
@@ -604,6 +611,7 @@ function RoomEventList({
 }: {
 	roomId: string
 	events: RoomEvent[]
+
 	participants: Array<{
 		sessionId: string
 		name: string
@@ -614,6 +622,7 @@ function RoomEventList({
 	provisioning?: boolean
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
+	const [resolvedGates, setResolvedGates] = useState<Record<string, string>>({})
 	const workingAgents = participants.filter((p) => p.running && !p.needsInput)
 
 	useEffect(() => {
@@ -766,7 +775,11 @@ function RoomEventList({
 							const gd = event.gateData as {
 								sessionId: string
 								toolUseId: string
-								questions: Array<{ question: string; options?: Array<{ label: string; description?: string }>; multiSelect?: boolean }>
+								questions: Array<{
+									question: string
+									options?: Array<{ label: string; description?: string }>
+									multiSelect?: boolean
+								}>
 							}
 							return (
 								<div key={key} className="agent-gate-activity">
@@ -783,9 +796,13 @@ function RoomEventList({
 											questions: gd.questions,
 											ts: event.ts,
 										}}
-										onResolved={() => {}}
+										resolved={!!resolvedGates[gd.toolUseId]}
+										resolvedSummary={resolvedGates[gd.toolUseId]}
+										onResolved={(summary) =>
+											setResolvedGates((prev) => ({ ...prev, [gd.toolUseId]: summary }))
+										}
 										respondFn={(sid, gate, data) =>
-											respondToRoomGate(roomId ?? "", sid, gate, data)
+											respondToRoomGate(roomId, sid, gate, data)
 										}
 									/>
 								</div>
@@ -1043,4 +1060,3 @@ function AddAgentModal({
 		</div>
 	)
 }
-
