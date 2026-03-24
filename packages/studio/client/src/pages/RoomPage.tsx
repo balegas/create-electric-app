@@ -317,6 +317,7 @@ export function RoomPage() {
 			<div className="session-content">
 				<div className="room-messages">
 					<RoomEventList
+						roomId={roomId ?? ""}
 						events={events}
 						participants={participants}
 						provisioning={!!roomEntry?.sessions && participants.length < 3}
@@ -596,10 +597,12 @@ function SystemMessageBody({
 }
 
 function RoomEventList({
+	roomId,
 	events,
 	participants,
 	provisioning,
 }: {
+	roomId: string
 	events: RoomEvent[]
 	participants: Array<{
 		sessionId: string
