@@ -748,7 +748,7 @@
 	background: var(--bg-surface);
 	border: 1px solid var(--border);
 	border-radius: 8px;
-	color: var(--text);
+	color: var(--text-subtle);
 	color-scheme: dark;
 	padding: 10px 14px;
 	font-size: 15px;
