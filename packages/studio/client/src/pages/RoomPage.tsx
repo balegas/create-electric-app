@@ -43,6 +43,11 @@ export function RoomPage() {
 	const [infraGateResolved, setInfraGateResolved] = useState(false)
 	const [ghAccounts, setGhAccounts] = useState<Array<{ login: string; type: string }>>([])
 	const [searchParams, setSearchParams] = useSearchParams()
+	const [joining, setJoining] = useState(() => {
+		// Check if we need to join (code param present and not already joined)
+		const code = new URLSearchParams(window.location.search).get("code")
+		return !!code && !!roomId && roomId !== "new" && !getAgentRooms().some((r) => r.id === roomId)
+	})
 
 	// Auto-join when ?code= query param is present (e.g. /room/:id?code=xyz)
 	useEffect(() => {
@@ -91,11 +96,13 @@ export function RoomPage() {
 				}
 				refreshAgentRooms()
 				refreshSessions()
+				setJoining(false)
 				// Remove code from URL so refresh doesn't re-join
 				setSearchParams({}, { replace: true })
 			})
 			.catch((err) => {
 				console.error("[room] Auto-join failed:", err)
+				setJoining(false)
 				setError(err instanceof Error ? err.message : "Failed to join room")
 			})
 	}, [roomId, searchParams, setSearchParams, refreshAgentRooms])
@@ -184,14 +191,14 @@ export function RoomPage() {
 		}
 	}, [roomId, location.state, navigate, refreshSessions, refreshAgentRooms])
 
-	const { events, isClosed } = useRoomEvents(roomId && roomId !== "new" ? roomId : null)
+	const { events, isClosed } = useRoomEvents(!joining && roomId && roomId !== "new" ? roomId : null)
 
 	// Look up invite code from the local room store
 	const roomEntry = roomId ? getAgentRooms().find((r) => r.id === roomId) : undefined
 
-	// Fetch room state on mount + periodically
+	// Fetch room state on mount + periodically (wait for join to complete first)
 	useEffect(() => {
-		if (!roomId || roomId === "new") return
+		if (!roomId || roomId === "new" || joining) return
 		let cancelled = false
 		loadedRef.current = false
 		const fetchState = () => {
@@ -276,7 +283,7 @@ export function RoomPage() {
 			cancelled = true
 			clearInterval(interval)
 		}
-	}, [roomId, refreshSessions])
+	}, [roomId, joining, refreshSessions])
 
 	if (roomId === "new") {
 		return (
