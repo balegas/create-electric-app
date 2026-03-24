@@ -41,8 +41,6 @@ export function HomeScreen({
 	const [mode, setMode] = useState<Mode>("prompt")
 	const [joinCode, setJoinCode] = useState("")
 	const [browseIndex, setBrowseIndex] = useState(0)
-	const [freeform, setFreeform] = useState(false)
-
 	const recentItems: RecentItem[] = [
 		...sessions.map((session): RecentItem => ({ type: "session", session })),
 		...(rooms ?? []).map((room): RecentItem => ({ type: "room", room })),
@@ -67,11 +65,7 @@ export function HomeScreen({
 			}
 			return
 		}
-		if (freeform) {
-			onCreateSession(trimmed)
-		} else {
-			onCreateRoom(trimmed)
-		}
+		onCreateRoom(trimmed)
 		setInput("")
 	}
 
@@ -91,10 +85,6 @@ export function HomeScreen({
 			if (key.downArrow && recentItems.length > 0) {
 				setMode("browse")
 				setBrowseIndex(0)
-				return
-			}
-			if (key.ctrl && input === "r") {
-				setFreeform((v) => !v)
 				return
 			}
 			if (key.ctrl && input === "o") {
@@ -182,11 +172,7 @@ export function HomeScreen({
 				</Box>
 			) : (
 				<Box flexDirection="column">
-					<Text>
-						{freeform
-							? "Describe what you want (freeform session):"
-							: "Describe the app you want to build:"}
-					</Text>
+					<Text>Describe the app you want to build:</Text>
 					<Box marginTop={1}>
 						<Text color="cyan">&gt; </Text>
 						<TextInput
@@ -197,10 +183,7 @@ export function HomeScreen({
 							isActive={isActive && mode === "prompt" && !inputDisabled}
 						/>
 					</Box>
-					<Box marginTop={1} gap={2}>
-						<Text dimColor>
-							Mode: {freeform ? "freeform" : "room"} [^R toggle]
-						</Text>
+					<Box marginTop={1}>
 						<Text dimColor>[^O join room]</Text>
 					</Box>
 				</Box>
