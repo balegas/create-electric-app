@@ -808,9 +808,7 @@
 }
 
 .agent-gate-activity {
-	background: color-mix(in srgb, var(--orange) 8%, transparent);
-	border-radius: 6px;
-	padding: 4px 8px;
+	padding: 4px 0;
 }
 
 .agent-gate-question {

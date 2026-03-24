@@ -2743,14 +2743,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							})
 							.catch(() => {})
 						config.sessions.update(coderSession.sessionId, { needsInput: true })
-						router
-							.sendMessage(
-								"system",
-								`${coderSession.name} needs input — open their session to respond.`,
-							)
-							.catch((err) => {
-								console.error(`[room:${roomId}] Failed to send gate notification:`, err)
-							})
 					}
 					if (event.type === "gate_resolved") {
 						config.sessions.update(coderSession.sessionId, { needsInput: false })
@@ -2970,17 +2962,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 								})
 								.catch(() => {})
 							config.sessions.update(agentSession.sessionId, { needsInput: true })
-							router
-								.sendMessage(
-									"system",
-									`${agentSession.name} needs input — open their session to respond.`,
-								)
-								.catch((err) => {
-									console.error(
-										`[room:${roomId}] Failed to send gate notification (${agentSession.name}):`,
-										err,
-									)
-								})
 						}
 						if (event.type === "gate_resolved") {
 							config.sessions.update(agentSession.sessionId, { needsInput: false })
