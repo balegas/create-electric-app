@@ -2676,6 +2676,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Route assistant_message output to the room router
 					if (event.type === "assistant_message" && "text" in event) {
 						const text = (event as EngineEvent & { text: string }).text
+						// Forward all assistant messages as observability
+						router.emitActivity(coderSession.name, text).catch(() => {})
+						// Parse for @room directives and route to recipients
 						router.handleAgentOutput(coderSession.sessionId, text).catch((err) => {
 							console.error(`[room:${roomId}] handleAgentOutput error (coder):`, err)
 						})
@@ -2884,6 +2887,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						}
 						if (event.type === "assistant_message" && "text" in event) {
 							const text = (event as EngineEvent & { text: string }).text
+							router.emitActivity(agentSession.name, text).catch(() => {})
 							router.handleAgentOutput(agentSession.sessionId, text).catch((err) => {
 								console.error(
 									`[room:${roomId}] handleAgentOutput error (${agentSession.name}):`,
@@ -3288,8 +3292,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					// Route assistant_message output to the room router
 					if (event.type === "assistant_message" && "text" in event) {
+						const text = (event as EngineEvent & { text: string }).text
+						router.emitActivity(agentName, text).catch(() => {})
 						router
-							.handleAgentOutput(sessionId, (event as EngineEvent & { text: string }).text)
+							.handleAgentOutput(sessionId, text)
 							.catch((err) => {
 								console.error(`[room:${roomId}] handleAgentOutput error:`, err)
 							})
@@ -3389,8 +3395,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			// The existing bridge is already a Claude Code bridge — wire up room output handling
 			bridge.onAgentEvent((event) => {
 				if (event.type === "assistant_message" && "text" in event) {
+					const text = (event as EngineEvent & { text: string }).text
+					router.emitActivity(body.name, text).catch(() => {})
 					router
-						.handleAgentOutput(sessionId, (event as EngineEvent & { text: string }).text)
+						.handleAgentOutput(sessionId, text)
 						.catch((err) => {
 							console.error(`[room:${roomId}] handleAgentOutput error:`, err)
 						})

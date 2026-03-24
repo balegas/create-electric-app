@@ -798,6 +798,15 @@
 	padding: 0 4px;
 }
 
+/* Agent activity (observability) */
+.agent-activity {
+	opacity: 0.6;
+}
+
+.agent-activity-text {
+	font-style: italic;
+}
+
 /* DM section */
 .room-dm-section {
 	margin-top: 16px;

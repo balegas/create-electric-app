@@ -652,6 +652,14 @@ function RoomEventList({
 								</span>
 							</div>
 						)
+					case "agent_activity":
+						return (
+							<div key={key} className="console-entry agent-activity">
+								<RoomParticipantPrefix name={event.from} participants={participants} />
+								<span className="agent-activity-text">{event.text}</span>
+								{time}
+							</div>
+						)
 					default:
 						return null
 				}

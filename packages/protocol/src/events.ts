@@ -169,6 +169,15 @@ export type RoomEvent =
 			closedBy: string
 			ts: string
 	  }
+	| {
+			/** Observability-only: agent activity forwarded to room stream.
+			 *  NOT delivered to other agents — only for UI consumption. */
+			type: "agent_activity"
+			from: string
+			eventType: string
+			text: string
+			ts: string
+	  }
 
 export function ts(): string {
 	return new Date().toISOString()
