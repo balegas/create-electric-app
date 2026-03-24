@@ -240,6 +240,14 @@ export function App({ serverUrl }: { serverUrl?: string }) {
 					return
 				}
 				const result = await client.joinAgentRoom(parts[0], parts[1])
+				// Store session tokens for agent control
+				if (result.sessions) {
+					for (const s of result.sessions) {
+						if (s.sessionToken) {
+							tokenStore.setSessionToken(s.sessionId, s.sessionToken)
+						}
+					}
+				}
 				addScreen({
 					type: "room",
 					roomId: result.id,

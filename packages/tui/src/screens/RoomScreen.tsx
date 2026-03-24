@@ -9,6 +9,7 @@ import { Console } from "../components/Console.js"
 import { PromptInput } from "../components/PromptInput.js"
 import { ParticipantBar } from "../components/ParticipantBar.js"
 import { GateOverlay } from "../components/GateOverlay.js"
+import { tokenStore } from "../lib/token-store.js"
 
 interface RoomScreenProps {
 	client: ElectricAgentClient
@@ -52,6 +53,19 @@ export function RoomScreen({
 				const state = await client.getAgentRoomState(roomId)
 				if (!cancelled) {
 					setRoomState(state)
+					// Store session tokens as they appear
+					for (const p of state.participants) {
+						if (p.sessionToken) {
+							tokenStore.setSessionToken(p.sessionId, p.sessionToken)
+						}
+					}
+					if (state.pendingSessions) {
+						for (const p of state.pendingSessions) {
+							if (p.sessionToken) {
+								tokenStore.setSessionToken(p.sessionId, p.sessionToken)
+							}
+						}
+					}
 					if (state.pendingInfraGate && !infraGateResolved) {
 						setShowInfraGate(true)
 					}
@@ -385,6 +399,13 @@ function RoomEventEntry({ event, participants }: { event: RoomEvent; participant
 				<Box>
 					<Text color="blue">[system]</Text>
 					<Text> Room created: {event.name}</Text>
+				</Box>
+			)
+		case "agent_activity":
+			return (
+				<Box>
+					<Text dimColor>[{event.from}]</Text>
+					<Text dimColor italic> {event.text}</Text>
 				</Box>
 			)
 		default:
