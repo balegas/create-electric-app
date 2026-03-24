@@ -50,7 +50,21 @@ export function RoomPage() {
 		}
 		joinAgentRoom(roomId, code)
 			.then((result) => {
-				addAgentRoom({ id: result.id, code, name: result.name, createdAt: new Date().toISOString() })
+				// Build sessions map for sidebar display
+				const findSession = (role: string) => result.sessions?.find((s) => s.role === role)?.sessionId
+				addAgentRoom({
+					id: result.id,
+					code,
+					name: result.name,
+					createdAt: new Date().toISOString(),
+					sessions: findSession("coder")
+						? {
+								coder: findSession("coder")!,
+								reviewer: findSession("reviewer") ?? "",
+								uiDesigner: findSession("ui-designer"),
+							}
+						: undefined,
+				})
 				// Store agent session tokens so we can respond to gates, iterate, etc.
 				if (result.sessions) {
 					for (const s of result.sessions) {

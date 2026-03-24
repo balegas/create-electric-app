@@ -722,6 +722,26 @@ export function createApp(config: ServerConfig) {
 			const toolUseId = hookEvent.tool_use_id
 			console.log(`[hook-event] Blocking for ask_user_question gate: ${toolUseId}`)
 			config.sessions.update(sessionId, { needsInput: true })
+
+			// Forward gate to room stream if this session belongs to a room
+			for (const router of roomRouters.values()) {
+				const participant = router.participants.find((p) => p.sessionId === sessionId)
+				if (participant) {
+					const questions =
+						(body.tool_input as Record<string, unknown>)?.questions as
+							| Array<{ question: string; options?: Array<{ label: string }>; multiSelect?: boolean }>
+							| undefined
+					const questionText = questions?.[0]?.question ?? "Agent needs input"
+					router
+						.emitActivity(participant.name, questionText, "ask_user_question", {
+							sessionId,
+							toolUseId,
+							questions: questions ?? [{ question: questionText }],
+						})
+						.catch(() => {})
+					break
+				}
+			}
 			try {
 				const gateTimeout = 5 * 60 * 1000 // 5 minutes
 				const result = await Promise.race([
@@ -888,6 +908,27 @@ export function createApp(config: ServerConfig) {
 			const toolUseId = hookEvent.tool_use_id
 			console.log(`[hook] Blocking for ask_user_question gate: ${toolUseId}`)
 			config.sessions.update(sessionId, { needsInput: true })
+
+			// Forward gate to room stream if this session belongs to a room
+			for (const router of roomRouters.values()) {
+				const participant = router.participants.find((p) => p.sessionId === sessionId)
+				if (participant) {
+					const questions =
+						(body.tool_input as Record<string, unknown>)?.questions as
+							| Array<{ question: string; options?: Array<{ label: string }>; multiSelect?: boolean }>
+							| undefined
+					const questionText = questions?.[0]?.question ?? "Agent needs input"
+					router
+						.emitActivity(participant.name, questionText, "ask_user_question", {
+							sessionId,
+							toolUseId,
+							questions: questions ?? [{ question: questionText }],
+						})
+						.catch(() => {})
+					break
+				}
+			}
+
 			try {
 				const gateTimeout = 5 * 60 * 1000
 				const result = await Promise.race([
