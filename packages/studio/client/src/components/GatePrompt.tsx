@@ -489,7 +489,8 @@ export function AskUserQuestionGate({
 				_summary: label,
 			})
 			onResolved(label)
-		} catch {
+		} catch (err) {
+			console.error("[gate] handleInstantSubmit failed:", err)
 			setAnswers((prev) => ({ ...prev, [question]: "" }))
 			setSubmitting(false)
 		}
@@ -506,7 +507,8 @@ export function AskUserQuestionGate({
 				_summary: summary,
 			})
 			onResolved(summary)
-		} catch {
+		} catch (err) {
+			console.error("[gate] handleSubmit failed:", err)
 			setSubmitting(false)
 		}
 	}
