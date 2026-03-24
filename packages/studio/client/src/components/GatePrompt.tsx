@@ -771,13 +771,13 @@ export function GatePrompt({
 					<span className="prefix done">[gate]</span>
 					<span className="gate-resolved-label">{resolvedLabel(entry.event.type)}</span>
 					<Duration value={duration} />
-					{roomId && (
-						<a href={`/room/${roomId}`} className="gate-back-to-room">
-							&larr; {roomName || "Room"}
-						</a>
-					)}
 				</div>
 				{content}
+				{roomId && (
+					<a href={`/room/${roomId}`} className="gate-back-to-room">
+						&larr; Back to {roomName || "Room"}
+					</a>
+				)}
 			</div>
 		)
 	}

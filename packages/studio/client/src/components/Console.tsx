@@ -109,7 +109,15 @@ function WaitingIndicator({ sinceTs }: { sinceTs: string }) {
 	)
 }
 
-export function Console({ sessionId, entries, isLive, isComplete, onGateResolved, roomId, roomName }: ConsoleProps) {
+export function Console({
+	sessionId,
+	entries,
+	isLive,
+	isComplete,
+	onGateResolved,
+	roomId,
+	roomName,
+}: ConsoleProps) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const bottomRef = useRef<HTMLDivElement>(null)
 	const [isAtBottom, setIsAtBottom] = useState(true)

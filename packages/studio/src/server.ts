@@ -2687,9 +2687,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					// Forward ask_user_question gates to room for observability
 					if (event.type === "ask_user_question") {
-						const q = event as EngineEvent & { question?: string; questions?: Array<{ question: string }> }
+						const q = event as EngineEvent & {
+							question?: string
+							questions?: Array<{ question: string }>
+						}
 						const questionText = q.question ?? q.questions?.[0]?.question ?? "Agent needs input"
-						router.emitActivity(coderSession.name, questionText, "ask_user_question").catch(() => {})
+						router
+							.emitActivity(coderSession.name, questionText, "ask_user_question")
+							.catch(() => {})
 						config.sessions.update(coderSession.sessionId, { needsInput: true })
 						router
 							.sendMessage(
@@ -2903,9 +2908,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							})
 						}
 						if (event.type === "ask_user_question") {
-							const q = event as EngineEvent & { question?: string; questions?: Array<{ question: string }> }
+							const q = event as EngineEvent & {
+								question?: string
+								questions?: Array<{ question: string }>
+							}
 							const questionText = q.question ?? q.questions?.[0]?.question ?? "Agent needs input"
-							router.emitActivity(agentSession.name, questionText, "ask_user_question").catch(() => {})
+							router
+								.emitActivity(agentSession.name, questionText, "ask_user_question")
+								.catch(() => {})
 							config.sessions.update(agentSession.sessionId, { needsInput: true })
 							router
 								.sendMessage(
@@ -3306,11 +3316,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						if (!/^@room\b|^@\w+\b/m.test(text)) {
 							router.emitActivity(agentName, text).catch(() => {})
 						}
-						router
-							.handleAgentOutput(sessionId, text)
-							.catch((err) => {
-								console.error(`[room:${roomId}] handleAgentOutput error:`, err)
-							})
+						router.handleAgentOutput(sessionId, text).catch((err) => {
+							console.error(`[room:${roomId}] handleAgentOutput error:`, err)
+						})
 					}
 				})
 
@@ -3411,11 +3419,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					if (!/^@room\b|^@\w+\b/m.test(text)) {
 						router.emitActivity(body.name, text).catch(() => {})
 					}
-					router
-						.handleAgentOutput(sessionId, text)
-						.catch((err) => {
-							console.error(`[room:${roomId}] handleAgentOutput error:`, err)
-						})
+					router.handleAgentOutput(sessionId, text).catch((err) => {
+						console.error(`[room:${roomId}] handleAgentOutput error:`, err)
+					})
 				}
 			})
 

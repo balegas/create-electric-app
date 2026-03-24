@@ -220,7 +220,11 @@ export class RoomRouter {
 	 * Forward an agent's assistant_message to the room stream as observability.
 	 * These are NOT delivered to other agents — only visible in the room UI.
 	 */
-	async emitActivity(agentName: string, text: string, eventType = "assistant_message"): Promise<void> {
+	async emitActivity(
+		agentName: string,
+		text: string,
+		eventType = "assistant_message",
+	): Promise<void> {
 		if (this._state === "closed") return
 
 		const event: RoomEvent = {
@@ -413,9 +417,7 @@ export class RoomRouter {
 	 * Call this after emitToRecipients for full delivery, or separately for
 	 * manual delivery when autoIterate is off.
 	 */
-	async iterateRecipients(
-		msg: { from: string; to?: string; body: string },
-	): Promise<void> {
+	async iterateRecipients(msg: { from: string; to?: string; body: string }): Promise<void> {
 		if (this._state === "closed") return
 		if (msg.from === "system") return
 
