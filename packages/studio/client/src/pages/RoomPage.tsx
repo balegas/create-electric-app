@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
 	useLocation,
 	useNavigate,
@@ -629,24 +629,40 @@ function RoomEventList({
 	provisioning?: boolean
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
-	const storageKey = `electric-agent:resolved-gates:${roomId}`
-	const [resolvedGates, setResolvedGatesRaw] = useState<Record<string, string>>(() => {
-		try {
-			const raw = sessionStorage.getItem(storageKey)
-			return raw ? JSON.parse(raw) : {}
-		} catch {
-			return {}
+
+	// Derive resolved gates from stream: match gate_resolved activity events
+	// to their preceding ask_user_question events from the same agent
+	const [localResolved, setLocalResolved] = useState<Record<string, string>>({})
+	const streamResolved = useMemo(() => {
+		const resolved: Record<string, string> = {}
+		// Track pending gate toolUseIds per agent
+		const pendingByAgent: Record<string, string[]> = {}
+		for (const e of events) {
+			if (e.type !== "agent_activity") continue
+			if (e.eventType === "ask_user_question" && e.gateData) {
+				const gd = e.gateData as { toolUseId?: string }
+				if (gd.toolUseId) {
+					const list = pendingByAgent[e.from] ?? []
+					list.push(gd.toolUseId)
+					pendingByAgent[e.from] = list
+				}
+			}
+			if (e.eventType === "gate_resolved") {
+				const list = pendingByAgent[e.from]
+				if (list?.length) {
+					const toolUseId = list.shift()!
+					resolved[toolUseId] = e.text || "answered"
+				}
+			}
 		}
-	})
+		return resolved
+	}, [events])
+	const resolvedGates = { ...streamResolved, ...localResolved }
 	const setResolvedGates = useCallback(
 		(updater: (prev: Record<string, string>) => Record<string, string>) => {
-			setResolvedGatesRaw((prev) => {
-				const next = updater(prev)
-				sessionStorage.setItem(storageKey, JSON.stringify(next))
-				return next
-			})
+			setLocalResolved((prev) => updater(prev))
 		},
-		[storageKey],
+		[],
 	)
 	const workingAgents = participants.filter((p) => p.running && !p.needsInput)
 

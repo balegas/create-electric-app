@@ -2731,6 +2731,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					}
 					if (event.type === "gate_resolved") {
 						config.sessions.update(coderSession.sessionId, { needsInput: false })
+						const summary = (event as EngineEvent & { summary?: string }).summary
+						router
+							.emitActivity(coderSession.name, summary ?? "answered", "gate_resolved")
+							.catch(() => {})
 					}
 				})
 
@@ -2931,6 +2935,10 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						}
 						if (event.type === "gate_resolved") {
 							config.sessions.update(agentSession.sessionId, { needsInput: false })
+							const summary = (event as EngineEvent & { summary?: string }).summary
+							router
+								.emitActivity(agentSession.name, summary ?? "answered", "gate_resolved")
+								.catch(() => {})
 						}
 					})
 
