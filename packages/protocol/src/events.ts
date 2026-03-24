@@ -176,6 +176,16 @@ export type RoomEvent =
 			from: string
 			eventType: string
 			text: string
+			/** Full gate event data when eventType is ask_user_question */
+			gateData?: {
+				sessionId: string
+				toolUseId: string
+				questions: Array<{
+					question: string
+					options?: Array<{ label: string; description?: string }>
+					multiSelect?: boolean
+				}>
+			}
 			ts: string
 	  }
 

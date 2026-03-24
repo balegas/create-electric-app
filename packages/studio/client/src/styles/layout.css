@@ -817,6 +817,71 @@
 	color: var(--orange);
 }
 
+.agent-gate-inline {
+	margin: 4px 0;
+}
+
+.agent-gate-controls {
+	display: flex;
+	gap: 6px;
+	padding: 6px 8px;
+	flex-wrap: wrap;
+}
+
+.agent-gate-option-btn {
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	color: var(--text);
+	padding: 4px 12px;
+	font-size: 13px;
+	font-family: var(--font-sans);
+	cursor: pointer;
+}
+
+.agent-gate-option-btn:hover:not(:disabled) {
+	border-color: var(--blue);
+	color: var(--blue);
+}
+
+.agent-gate-option-btn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.agent-gate-text-form {
+	display: flex;
+	gap: 6px;
+	flex: 1;
+}
+
+.agent-gate-text-form input {
+	flex: 1;
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	color: var(--text);
+	padding: 4px 10px;
+	font-size: 13px;
+	font-family: var(--font-sans);
+}
+
+.agent-gate-text-form input:focus {
+	outline: none;
+	border-color: var(--blue);
+}
+
+.agent-gate-resolved {
+	opacity: 0.6;
+}
+
+.agent-gate-answered-badge {
+	color: var(--green);
+	font-size: 11px;
+	font-weight: 500;
+	margin-left: 6px;
+}
+
 /* DM section */
 .room-dm-section {
 	margin-top: 16px;

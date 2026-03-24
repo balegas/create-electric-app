@@ -12,6 +12,7 @@ import {
 	fetchGhAccounts,
 	getAgentRoomState,
 	joinAgentRoom,
+	respondToRoomGate,
 	type RoomState,
 	sendRoomMessage,
 } from "../lib/api"
@@ -48,9 +49,27 @@ export function RoomPage() {
 			return
 		}
 		joinAgentRoom(roomId, code)
-			.then(({ id, name }) => {
-				addAgentRoom({ id, code, name, createdAt: new Date().toISOString() })
+			.then((result) => {
+				addAgentRoom({ id: result.id, code, name: result.name, createdAt: new Date().toISOString() })
+				// Store agent session tokens so we can respond to gates, iterate, etc.
+				if (result.sessions) {
+					for (const s of result.sessions) {
+						if (s.sessionToken) {
+							setSessionToken(s.sessionId, s.sessionToken)
+						}
+						addSession({
+							id: s.sessionId,
+							projectName: s.name,
+							sandboxProjectDir: "",
+							description: `Room agent: ${s.name} (${s.role ?? "agent"})`,
+							createdAt: new Date().toISOString(),
+							lastActiveAt: new Date().toISOString(),
+							status: "running",
+						})
+					}
+				}
 				refreshAgentRooms()
+				refreshSessions()
 				// Remove code from URL so refresh doesn't re-join
 				setSearchParams({}, { replace: true })
 			})
@@ -679,6 +698,17 @@ function RoomEventList({
 						)
 					case "agent_activity": {
 						const isGate = event.eventType === "ask_user_question"
+						if (isGate && event.gateData) {
+							return (
+								<RoomGateQuestion
+									key={key}
+									roomId={roomId ?? ""}
+									event={event}
+									time={time}
+									participants={participants}
+								/>
+							)
+						}
 						return (
 							<div
 								key={key}
@@ -927,6 +957,101 @@ function AddAgentModal({
 						</div>
 					)}
 				</div>
+			</div>
+		</div>
+	)
+}
+
+/** Inline gate question with answer controls rendered in the room event list */
+function RoomGateQuestion({
+	roomId,
+	event,
+	time,
+	participants,
+}: {
+	roomId: string
+	event: RoomEvent & { type: "agent_activity"; gateData?: Record<string, unknown> }
+	time: React.ReactNode
+	participants: Array<{ sessionId: string; name: string }>
+}) {
+	const [answered, setAnswered] = useState(false)
+	const [answering, setAnswering] = useState(false)
+	const [textAnswer, setTextAnswer] = useState("")
+	const gateData = event.gateData as
+		| { sessionId: string; toolUseId: string; questions: Array<{ question: string; options?: Array<{ label: string }>; multiSelect?: boolean }> }
+		| undefined
+
+	if (!gateData) return null
+
+	const question = gateData.questions[0]
+	if (!question) return null
+
+	const handleAnswer = async (answer: string) => {
+		setAnswering(true)
+		try {
+			await respondToRoomGate(roomId, gateData.sessionId, "ask_user_question", {
+				toolUseId: gateData.toolUseId,
+				answers: { [question.question]: answer },
+			})
+			setAnswered(true)
+		} catch (err) {
+			console.error("[room] Gate respond failed:", err)
+		} finally {
+			setAnswering(false)
+		}
+	}
+
+	if (answered) {
+		return (
+			<div className="console-entry agent-gate-activity agent-gate-resolved">
+				<RoomParticipantPrefix name={event.from} participants={participants} />
+				<span className="agent-gate-question">{question.question}</span>
+				<span className="agent-gate-answered-badge">answered</span>
+				{time}
+			</div>
+		)
+	}
+
+	return (
+		<div className="agent-gate-activity agent-gate-inline">
+			<div className="console-entry">
+				<RoomParticipantPrefix name={event.from} participants={participants} />
+				<span className="agent-gate-question">{question.question}</span>
+				{time}
+			</div>
+			<div className="agent-gate-controls">
+				{question.options ? (
+					question.options.map((opt) => (
+						<button
+							key={opt.label}
+							type="button"
+							className="agent-gate-option-btn"
+							onClick={() => handleAnswer(opt.label)}
+							disabled={answering}
+						>
+							{opt.label}
+						</button>
+					))
+				) : (
+					<form
+						className="agent-gate-text-form"
+						onSubmit={(e) => {
+							e.preventDefault()
+							if (textAnswer.trim()) handleAnswer(textAnswer.trim())
+						}}
+					>
+						<input
+							type="text"
+							value={textAnswer}
+							onChange={(e) => setTextAnswer(e.target.value)}
+							placeholder="Type your answer..."
+							disabled={answering}
+						/>
+						<button type="submit" className="agent-gate-option-btn" disabled={answering || !textAnswer.trim()}>
+							{answering ? "..." : "Send"}
+						</button>
+					</form>
+				)}
 			</div>
 		</div>
 	)

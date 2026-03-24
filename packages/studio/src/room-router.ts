@@ -224,6 +224,11 @@ export class RoomRouter {
 		agentName: string,
 		text: string,
 		eventType = "assistant_message",
+		gateData?: {
+			sessionId: string
+			toolUseId: string
+			questions: Array<{ question: string; options?: Array<{ label: string; description?: string }>; multiSelect?: boolean }>
+		},
 	): Promise<void> {
 		if (this._state === "closed") return
 
@@ -232,6 +237,7 @@ export class RoomRouter {
 			from: agentName,
 			eventType,
 			text,
+			...(gateData ? { gateData } : {}),
 			ts: ts(),
 		}
 		await this.stream.append(JSON.stringify(event))

@@ -2689,11 +2689,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					if (event.type === "ask_user_question") {
 						const q = event as EngineEvent & {
 							question?: string
-							questions?: Array<{ question: string }>
+							questions?: Array<{ question: string; options?: Array<{ label: string; description?: string }>; multiSelect?: boolean }>
+							tool_use_id?: string
 						}
 						const questionText = q.question ?? q.questions?.[0]?.question ?? "Agent needs input"
+						const questions = q.questions ?? (q.question ? [{ question: q.question }] : [])
 						router
-							.emitActivity(coderSession.name, questionText, "ask_user_question")
+							.emitActivity(coderSession.name, questionText, "ask_user_question", {
+								sessionId: coderSession.sessionId,
+								toolUseId: q.tool_use_id ?? "",
+								questions,
+							})
 							.catch(() => {})
 						config.sessions.update(coderSession.sessionId, { needsInput: true })
 						router
@@ -2910,11 +2916,17 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						if (event.type === "ask_user_question") {
 							const q = event as EngineEvent & {
 								question?: string
-								questions?: Array<{ question: string }>
+								questions?: Array<{ question: string; options?: Array<{ label: string; description?: string }>; multiSelect?: boolean }>
+								tool_use_id?: string
 							}
 							const questionText = q.question ?? q.questions?.[0]?.question ?? "Agent needs input"
+							const questions = q.questions ?? (q.question ? [{ question: q.question }] : [])
 							router
-								.emitActivity(agentSession.name, questionText, "ask_user_question")
+								.emitActivity(agentSession.name, questionText, "ask_user_question", {
+									sessionId: agentSession.sessionId,
+									toolUseId: q.tool_use_id ?? "",
+									questions,
+								})
 								.catch(() => {})
 							config.sessions.update(agentSession.sessionId, { needsInput: true })
 							router
@@ -3047,7 +3059,18 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		if (room.revoked) return c.json({ error: "Room has been revoked" }, 410)
 
 		const roomToken = deriveRoomToken(config.streamConfig.secret, room.id)
-		return c.json({ id: room.id, code: room.code, name: room.name, roomToken })
+
+		// Include session tokens for all agents in the room so joiners can
+		// respond to gates, iterate agents, etc.
+		const router = roomRouters.get(id)
+		const sessions = (router?.participants ?? []).map((p) => ({
+			sessionId: p.sessionId,
+			name: p.name,
+			role: p.role,
+			sessionToken: deriveSessionToken(config.streamConfig.secret, p.sessionId),
+		}))
+
+		return c.json({ id: room.id, code: room.code, name: room.name, roomToken, sessions })
 	})
 
 	// Get room state
@@ -3587,6 +3610,95 @@ echo "Start claude in this project — the session will appear in the studio UI.
 
 		await router.iterateRecipients({ from: body.from, to: body.to, body: body.body })
 		return c.json({ ok: true })
+	})
+
+	// Room-scoped gate respond — allows room members to answer agent gates
+	// without needing individual session tokens (room token is sufficient)
+	app.post("/api/rooms/:id/respond", async (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		const body = (await c.req.json()) as Record<string, unknown>
+		const sessionId = body.sessionId as string
+		const gate = body.gate as string
+		if (!sessionId || !gate) {
+			return c.json({ error: "sessionId and gate are required" }, 400)
+		}
+
+		// Verify the session belongs to this room
+		const participant = router.participants.find((p) => p.sessionId === sessionId)
+		if (!participant) {
+			return c.json({ error: "Session is not a participant in this room" }, 403)
+		}
+
+		const summary = (body._summary as string) || undefined
+		const participantId = c.req.header("X-Participant-Id")
+		const participantName = c.req.header("X-Participant-Name")
+		const resolvedBy: Participant | undefined =
+			participantId && participantName
+				? { id: participantId, displayName: participantName }
+				: undefined
+
+		if (gate === "ask_user_question") {
+			const toolUseId = body.toolUseId as string
+			if (!toolUseId) {
+				return c.json({ error: "toolUseId is required for ask_user_question" }, 400)
+			}
+			const answers: Record<string, string> =
+				(body.answers as Record<string, string>) ??
+				(body.answer ? { [(body.question as string) || "answer"]: body.answer as string } : {})
+			const resolved = resolveGate(sessionId, `ask_user_question:${toolUseId}`, { answers })
+			if (resolved) {
+				try {
+					const bridge = getOrCreateBridge(config, sessionId)
+					await bridge.emit({
+						type: "gate_resolved",
+						gate: "ask_user_question",
+						summary,
+						resolvedBy,
+						ts: ts(),
+					})
+				} catch {
+					// Non-critical
+				}
+				return c.json({ ok: true })
+			}
+		}
+
+		if (gate === "outbound_message_gate") {
+			const gateId = body.gateId as string
+			const action = body.action as "approve" | "edit" | "drop"
+			if (!gateId || !action) {
+				return c.json({ error: "gateId and action are required" }, 400)
+			}
+			const resolved = resolveGate(sessionId, gateId, {
+				action,
+				editedBody: body.editedBody as string | undefined,
+			})
+			if (resolved) return c.json({ ok: true })
+			return c.json({ error: "No pending gate found" }, 404)
+		}
+
+		// For other gate types, try bridge forwarding
+		const bridge = bridges.get(sessionId)
+		if (bridge) {
+			await bridge.sendGateResponse(gate, body)
+			try {
+				await bridge.emit({
+					type: "gate_resolved",
+					gate,
+					summary,
+					resolvedBy,
+					ts: ts(),
+				})
+			} catch {
+				// Non-critical
+			}
+			return c.json({ ok: true })
+		}
+
+		return c.json({ error: "No bridge found for session" }, 404)
 	})
 
 	// --- SSE Proxy ---

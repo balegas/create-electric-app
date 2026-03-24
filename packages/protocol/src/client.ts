@@ -424,15 +424,30 @@ export class ElectricAgentClient {
 	async joinAgentRoom(
 		id: string,
 		code: string,
-	): Promise<{ id: string; code: string; name: string; roomToken: string }> {
+	): Promise<{
+		id: string
+		code: string
+		name: string
+		roomToken: string
+		sessions?: Array<{ sessionId: string; name: string; role?: string; sessionToken: string }>
+	}> {
 		const result = await this.request<{
 			id: string
 			code: string
 			name: string
 			roomToken: string
+			sessions?: Array<{ sessionId: string; name: string; role?: string; sessionToken: string }>
 		}>(`/join-room/${id}/${code}`)
 		if (result.roomToken) {
 			this.tokens.setRoomToken(result.id, result.roomToken)
+		}
+		// Store session tokens so the joiner can control agents (respond to gates, etc.)
+		if (result.sessions) {
+			for (const s of result.sessions) {
+				if (s.sessionToken) {
+					this.tokens.setSessionToken(s.sessionId, s.sessionToken)
+				}
+			}
 		}
 		return result
 	}
@@ -477,6 +492,18 @@ export class ElectricAgentClient {
 		return this.request<{ ok: boolean }>(`/rooms/${roomId}/messages`, {
 			method: "POST",
 			body: { from, body, ...(to ? { to } : {}) },
+		})
+	}
+
+	respondToRoomGate(
+		roomId: string,
+		sessionId: string,
+		gate: string,
+		data: Record<string, unknown>,
+	): Promise<{ ok: boolean }> {
+		return this.request<{ ok: boolean }>(`/rooms/${roomId}/respond`, {
+			method: "POST",
+			body: { sessionId, gate, ...data },
 		})
 	}
 
