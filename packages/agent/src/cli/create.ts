@@ -10,7 +10,7 @@ import { ElectricAgentClient } from "@electric-agent/protocol/client"
 
 export async function createCommand(
 	description: string,
-	opts: { port?: number; serverUrl?: string },
+	opts: { port?: number; serverUrl?: string; local?: boolean },
 ) {
 	const port = opts.port ?? 4400
 	const serverUrl = opts.serverUrl ?? `http://127.0.0.1:${port}`
@@ -77,29 +77,42 @@ export async function createCommand(
 		// Auto-provision infrastructure
 		const coderSession = result.sessions.find((s) => s.role === "coder")
 		if (coderSession) {
-			console.log("Provisioning infrastructure...")
-			try {
-				const provision = await client.provisionElectric()
-				await client.respondToGate(coderSession.sessionId, "infra_config", {
-					mode: "claim",
-					databaseUrl: provision.databaseUrl,
-					electricUrl: provision.electricUrl,
-					sourceId: provision.sourceId,
-					secret: provision.secret,
-					claimId: provision.claimId,
-				})
-				console.log(`Electric Cloud provisioned (72h TTL)`)
-				console.log(`Claim: ${provision.claimUrl}`)
-			} catch {
-				console.log("Cloud unavailable, using local Docker...")
+			if (opts.local) {
+				console.log("Using local Docker for database and Electric...")
 				try {
 					await client.respondToGate(coderSession.sessionId, "infra_config", {
 						mode: "local",
 					})
-					console.log("Using local Docker")
+					console.log("Local Docker infrastructure configured")
 				} catch {
 					console.error("Failed to configure infrastructure")
 					await cleanup()
+				}
+			} else {
+				console.log("Provisioning Electric Cloud...")
+				try {
+					const provision = await client.provisionElectric()
+					await client.respondToGate(coderSession.sessionId, "infra_config", {
+						mode: "claim",
+						databaseUrl: provision.databaseUrl,
+						electricUrl: provision.electricUrl,
+						sourceId: provision.sourceId,
+						secret: provision.secret,
+						claimId: provision.claimId,
+					})
+					console.log(`Electric Cloud provisioned (72h TTL)`)
+					console.log(`Claim: ${provision.claimUrl}`)
+				} catch {
+					console.log("Cloud unavailable, falling back to local Docker...")
+					try {
+						await client.respondToGate(coderSession.sessionId, "infra_config", {
+							mode: "local",
+						})
+						console.log("Local Docker infrastructure configured")
+					} catch {
+						console.error("Failed to configure infrastructure")
+						await cleanup()
+					}
 				}
 			}
 		}
