@@ -1,5 +1,43 @@
 # @electric-agent/studio
 
+## 1.21.0
+
+### Minor Changes
+
+- f9acb23: TUI/WebUI parity: room-first sessions, shared protocol client, agent observability
+
+  - Unify WebUI and TUI on shared ElectricAgentClient from @electric-agent/protocol
+  - Migrate WebUI SSE from EventSource to protocol client's fetch-based streaming
+  - Split room message delivery from agent iteration (autoIterate flag + manual deliver API)
+  - Forward agent assistant_message events to room stream as observability (agent_activity)
+  - Add custom agent role with skill textarea in Add Agent modal
+  - Show ask_user_question gates in room timeline
+  - Add back-to-room link on resolved gates in session view
+  - Move Settings panel to AppShell (works on all pages including RoomPage)
+
+### Patch Changes
+
+- 57f8c76: Add consistent "Setting up <name>..." log message for reviewer agents in room workflows, matching the coder agent pattern. Replace green accent color with purple throughout the UI for brand consistency.
+- 577fac7: Fix duplicate spinner in tool grouping: replace spinner + arrow icon with dashed-underline "N more tools" toggle that clearly signals clickability.
+- f33ba51: Room gates, observability, and headless create command
+
+  - Room-level gate respond endpoint (POST /rooms/:id/respond) with room token auth
+  - Join API returns session tokens for all agents in the room
+  - Room state polling auto-discovers agents and stores tokens
+  - Forward ask_user_question and gate_resolved to room stream as agent_activity
+  - Derive resolved gate state from durable stream (survives refresh)
+  - Reuse AskUserQuestionGate component in both agent and room views
+  - Show agent name with session link on room gate questions
+  - Headless `electric-agent create` command with --local flag
+  - Auto-join room via ?code= query parameter
+  - Guard TodoWidget against non-array todos
+  - Fix gate duplication, back-to-room styling, select theming
+
+- Updated dependencies [8c6dfd0]
+- Updated dependencies [f33ba51]
+- Updated dependencies [f9acb23]
+  - @electric-agent/protocol@1.9.0
+
 ## 1.20.0
 
 ### Minor Changes
