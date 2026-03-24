@@ -227,7 +227,11 @@ export class RoomRouter {
 		gateData?: {
 			sessionId: string
 			toolUseId: string
-			questions: Array<{ question: string; options?: Array<{ label: string; description?: string }>; multiSelect?: boolean }>
+			questions: Array<{
+				question: string
+				options?: Array<{ label: string; description?: string }>
+				multiSelect?: boolean
+			}>
 		},
 	): Promise<void> {
 		if (this._state === "closed") return

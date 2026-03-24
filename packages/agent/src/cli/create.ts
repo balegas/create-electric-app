@@ -129,4 +129,3 @@ export async function createCommand(
 		await cleanup()
 	}
 }
-

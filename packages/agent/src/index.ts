@@ -66,13 +66,15 @@ program
 	.option("-p, --port <number>", "Server port (starts server if not running)", "4400")
 	.option("--server <url>", "Connect to existing server instead of starting one")
 	.option("--local", "Use local Docker for database and Electric (no cloud provisioning)")
-	.action(async (description: string, opts: { port?: string; server?: string; local?: boolean }) => {
-		const { createCommand } = await import("./cli/create.js")
-		await createCommand(description, {
-			port: opts.port ? parseInt(opts.port, 10) : undefined,
-			serverUrl: opts.server,
-			local: opts.local,
-		})
-	})
+	.action(
+		async (description: string, opts: { port?: string; server?: string; local?: boolean }) => {
+			const { createCommand } = await import("./cli/create.js")
+			await createCommand(description, {
+				port: opts.port ? parseInt(opts.port, 10) : undefined,
+				serverUrl: opts.server,
+				local: opts.local,
+			})
+		},
+	)
 
 program.parse()
