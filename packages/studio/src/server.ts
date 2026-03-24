@@ -2726,22 +2726,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							console.error(`[room:${roomId}] handleAgentOutput error (coder):`, err)
 						})
 					}
-					// Forward ask_user_question gates to room for observability
+					// ask_user_question gates are forwarded to the room via the
+					// hook-event handler — no need to duplicate here.
 					if (event.type === "ask_user_question") {
-						const q = event as EngineEvent & {
-							question?: string
-							questions?: Array<{ question: string; options?: Array<{ label: string; description?: string }>; multiSelect?: boolean }>
-							tool_use_id?: string
-						}
-						const questionText = q.question ?? q.questions?.[0]?.question ?? "Agent needs input"
-						const questions = q.questions ?? (q.question ? [{ question: q.question }] : [])
-						router
-							.emitActivity(coderSession.name, questionText, "ask_user_question", {
-								sessionId: coderSession.sessionId,
-								toolUseId: q.tool_use_id ?? "",
-								questions,
-							})
-							.catch(() => {})
 						config.sessions.update(coderSession.sessionId, { needsInput: true })
 					}
 					if (event.type === "gate_resolved") {
@@ -2947,20 +2934,6 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							})
 						}
 						if (event.type === "ask_user_question") {
-							const q = event as EngineEvent & {
-								question?: string
-								questions?: Array<{ question: string; options?: Array<{ label: string; description?: string }>; multiSelect?: boolean }>
-								tool_use_id?: string
-							}
-							const questionText = q.question ?? q.questions?.[0]?.question ?? "Agent needs input"
-							const questions = q.questions ?? (q.question ? [{ question: q.question }] : [])
-							router
-								.emitActivity(agentSession.name, questionText, "ask_user_question", {
-									sessionId: agentSession.sessionId,
-									toolUseId: q.tool_use_id ?? "",
-									questions,
-								})
-								.catch(() => {})
 							config.sessions.update(agentSession.sessionId, { needsInput: true })
 						}
 						if (event.type === "gate_resolved") {
