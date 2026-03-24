@@ -361,6 +361,8 @@ export function SessionPage() {
 						isLive={isLive}
 						isComplete={isComplete}
 						onGateResolved={markGateResolved}
+						roomId={parentRoom?.id}
+						roomName={parentRoom?.name}
 					/>
 				)}
 				{sendError && (

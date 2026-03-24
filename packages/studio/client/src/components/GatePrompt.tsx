@@ -10,6 +10,8 @@ interface GatePromptProps {
 	entry: GateEntry
 	entryIndex: number
 	onResolved: (index: number, summary?: string) => void
+	roomId?: string
+	roomName?: string
 }
 
 export function InfraConfigGate({
@@ -728,6 +730,8 @@ export function GatePrompt({
 	entryIndex,
 	onResolved,
 	duration,
+	roomId,
+	roomName,
 }: GatePromptProps & { duration: string | null }) {
 	const resolve = (summary?: string) => onResolved(entryIndex, summary)
 	const { resolved, resolvedSummary } = entry
@@ -767,6 +771,11 @@ export function GatePrompt({
 					<span className="prefix done">[gate]</span>
 					<span className="gate-resolved-label">{resolvedLabel(entry.event.type)}</span>
 					<Duration value={duration} />
+					{roomId && (
+						<a href={`/room/${roomId}`} className="gate-back-to-room">
+							&larr; {roomName || "Room"}
+						</a>
+					)}
 				</div>
 				{content}
 			</div>

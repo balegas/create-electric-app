@@ -2676,15 +2676,20 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Route assistant_message output to the room router
 					if (event.type === "assistant_message" && "text" in event) {
 						const text = (event as EngineEvent & { text: string }).text
-						// Forward all assistant messages as observability
-						router.emitActivity(coderSession.name, text).catch(() => {})
+						// Forward as observability (skip if it has @room — those become agent_message)
+						if (!/^@room\b|^@\w+\b/m.test(text)) {
+							router.emitActivity(coderSession.name, text).catch(() => {})
+						}
 						// Parse for @room directives and route to recipients
 						router.handleAgentOutput(coderSession.sessionId, text).catch((err) => {
 							console.error(`[room:${roomId}] handleAgentOutput error (coder):`, err)
 						})
 					}
-					// Notify room when coder is waiting for user input
+					// Forward ask_user_question gates to room for observability
 					if (event.type === "ask_user_question") {
+						const q = event as EngineEvent & { question?: string; questions?: Array<{ question: string }> }
+						const questionText = q.question ?? q.questions?.[0]?.question ?? "Agent needs input"
+						router.emitActivity(coderSession.name, questionText, "ask_user_question").catch(() => {})
 						config.sessions.update(coderSession.sessionId, { needsInput: true })
 						router
 							.sendMessage(
@@ -2887,7 +2892,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 						}
 						if (event.type === "assistant_message" && "text" in event) {
 							const text = (event as EngineEvent & { text: string }).text
-							router.emitActivity(agentSession.name, text).catch(() => {})
+							if (!/^@room\b|^@\w+\b/m.test(text)) {
+								router.emitActivity(agentSession.name, text).catch(() => {})
+							}
 							router.handleAgentOutput(agentSession.sessionId, text).catch((err) => {
 								console.error(
 									`[room:${roomId}] handleAgentOutput error (${agentSession.name}):`,
@@ -2896,6 +2903,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 							})
 						}
 						if (event.type === "ask_user_question") {
+							const q = event as EngineEvent & { question?: string; questions?: Array<{ question: string }> }
+							const questionText = q.question ?? q.questions?.[0]?.question ?? "Agent needs input"
+							router.emitActivity(agentSession.name, questionText, "ask_user_question").catch(() => {})
 							config.sessions.update(agentSession.sessionId, { needsInput: true })
 							router
 								.sendMessage(
@@ -3293,7 +3303,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					// Route assistant_message output to the room router
 					if (event.type === "assistant_message" && "text" in event) {
 						const text = (event as EngineEvent & { text: string }).text
-						router.emitActivity(agentName, text).catch(() => {})
+						if (!/^@room\b|^@\w+\b/m.test(text)) {
+							router.emitActivity(agentName, text).catch(() => {})
+						}
 						router
 							.handleAgentOutput(sessionId, text)
 							.catch((err) => {
@@ -3396,7 +3408,9 @@ echo "Start claude in this project — the session will appear in the studio UI.
 			bridge.onAgentEvent((event) => {
 				if (event.type === "assistant_message" && "text" in event) {
 					const text = (event as EngineEvent & { text: string }).text
-					router.emitActivity(body.name, text).catch(() => {})
+					if (!/^@room\b|^@\w+\b/m.test(text)) {
+						router.emitActivity(body.name, text).catch(() => {})
+					}
 					router
 						.handleAgentOutput(sessionId, text)
 						.catch((err) => {

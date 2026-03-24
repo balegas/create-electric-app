@@ -652,14 +652,28 @@ function RoomEventList({
 								</span>
 							</div>
 						)
-					case "agent_activity":
+					case "agent_activity": {
+						const isGate = event.eventType === "ask_user_question"
+						const agentP = participants.find((p) => p.name === event.from)
 						return (
-							<div key={key} className="console-entry agent-activity">
+							<div key={key} className={`console-entry ${isGate ? "agent-gate-activity" : "agent-activity"}`}>
 								<RoomParticipantPrefix name={event.from} participants={participants} />
-								<span className="agent-activity-text">{event.text}</span>
+								{isGate ? (
+									<>
+										<span className="agent-gate-question">{event.text}</span>
+										{agentP && (
+											<a href={`/session/${agentP.sessionId}`} className="agent-gate-respond-link">
+												Respond
+											</a>
+										)}
+									</>
+								) : (
+									<span className="agent-activity-text">{event.text}</span>
+								)}
 								{time}
 							</div>
 						)
+					}
 					default:
 						return null
 				}

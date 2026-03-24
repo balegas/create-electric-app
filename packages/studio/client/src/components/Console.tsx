@@ -12,6 +12,8 @@ interface ConsoleProps {
 	isLive: boolean
 	isComplete: boolean
 	onGateResolved: (index: number, summary?: string) => void
+	roomId?: string
+	roomName?: string
 }
 
 /** Minimum action entries to trigger grouping. */
@@ -107,7 +109,7 @@ function WaitingIndicator({ sinceTs }: { sinceTs: string }) {
 	)
 }
 
-export function Console({ sessionId, entries, isLive, isComplete, onGateResolved }: ConsoleProps) {
+export function Console({ sessionId, entries, isLive, isComplete, onGateResolved, roomId, roomName }: ConsoleProps) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const bottomRef = useRef<HTMLDivElement>(null)
 	const [isAtBottom, setIsAtBottom] = useState(true)
@@ -201,6 +203,8 @@ export function Console({ sessionId, entries, isLive, isComplete, onGateResolved
 								entryIndex={i}
 								onResolved={onGateResolved}
 								duration={duration}
+								roomId={roomId}
+								roomName={roomName}
 							/>
 						)
 					default:
