@@ -1,5 +1,31 @@
 # @electric-agent/agent
 
+## 1.4.21
+
+### Patch Changes
+
+- f33ba51: Room gates, observability, and headless create command
+
+  - Room-level gate respond endpoint (POST /rooms/:id/respond) with room token auth
+  - Join API returns session tokens for all agents in the room
+  - Room state polling auto-discovers agents and stores tokens
+  - Forward ask_user_question and gate_resolved to room stream as agent_activity
+  - Derive resolved gate state from durable stream (survives refresh)
+  - Reuse AskUserQuestionGate component in both agent and room views
+  - Show agent name with session link on room gate questions
+  - Headless `electric-agent create` command with --local flag
+  - Auto-join room via ?code= query parameter
+  - Guard TodoWidget against non-array todos
+  - Fix gate duplication, back-to-room styling, select theming
+
+- Updated dependencies [57f8c76]
+- Updated dependencies [577fac7]
+- Updated dependencies [8c6dfd0]
+- Updated dependencies [f33ba51]
+- Updated dependencies [f9acb23]
+  - @electric-agent/studio@1.21.0
+  - @electric-agent/protocol@1.9.0
+
 ## 1.4.20
 
 ### Patch Changes
