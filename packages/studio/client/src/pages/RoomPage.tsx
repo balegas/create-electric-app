@@ -194,12 +194,59 @@ export function RoomPage() {
 						loadedRef.current = true
 						setRoomState(state)
 						setError(null)
-						// Sync participant status to localStorage so sidebar reflects it
+						// Sync participant status + tokens to localStorage
 						for (const p of state.participants) {
-							updateSession(p.sessionId, {
+							// Store session token so we can respond to gates
+							if (p.sessionToken) {
+								setSessionToken(p.sessionId, p.sessionToken)
+							}
+							// Upsert session in sidebar
+							addSession({
+								id: p.sessionId,
+								projectName: p.name,
+								sandboxProjectDir: "",
+								description: `Room agent: ${p.name} (${p.role ?? "agent"})`,
+								createdAt: new Date().toISOString(),
+								lastActiveAt: new Date().toISOString(),
 								status: p.running ? "running" : "complete",
 								needsInput: p.needsInput,
 							})
+						}
+						// Also track pending sessions (still provisioning)
+						if (state.pendingSessions) {
+							for (const s of state.pendingSessions) {
+								if (s.sessionToken) {
+									setSessionToken(s.sessionId, s.sessionToken)
+								}
+								addSession({
+									id: s.sessionId,
+									projectName: s.name,
+									sandboxProjectDir: "",
+									description: `Room agent: ${s.name} (${s.role ?? "agent"}) — provisioning`,
+									createdAt: new Date().toISOString(),
+									lastActiveAt: new Date().toISOString(),
+									status: "running",
+								})
+							}
+						}
+						// Update room entry with sessions map for sidebar
+						const findSession = (role: string) =>
+							state.participants.find((p) => p.role === role)?.sessionId
+								?? state.pendingSessions?.find((s) => s.role === role)?.sessionId
+						const coderId = findSession("coder")
+						if (coderId) {
+							const existing = getAgentRooms().find((r) => r.id === roomId)
+							if (existing && !existing.sessions?.coder) {
+								addAgentRoom({
+									...existing,
+									sessions: {
+										coder: coderId,
+										reviewer: findSession("reviewer") ?? "",
+										uiDesigner: findSession("ui-designer"),
+									},
+								})
+								refreshAgentRooms()
+							}
 						}
 						refreshSessions()
 					}

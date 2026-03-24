@@ -3162,6 +3162,14 @@ echo "Start claude in this project — the session will appear in the studio UI.
 					role: p.role,
 					running: p.bridge.isRunning(),
 					needsInput: config.sessions.get(p.sessionId)?.needsInput ?? false,
+					sessionToken: deriveSessionToken(config.streamConfig.secret, p.sessionId),
+				})),
+				// Sessions that are still being provisioned (not yet active participants)
+				pendingSessions: router.pendingSessions.map((s) => ({
+					sessionId: s.sessionId,
+					name: s.name,
+					role: s.role,
+					sessionToken: deriveSessionToken(config.streamConfig.secret, s.sessionId),
 				})),
 			})
 		}

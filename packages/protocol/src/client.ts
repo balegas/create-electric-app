@@ -105,6 +105,14 @@ export interface RoomState {
 		role?: string
 		running?: boolean
 		needsInput?: boolean
+		sessionToken?: string
+	}>
+	/** Sessions still being provisioned (not yet active participants) */
+	pendingSessions?: Array<{
+		sessionId: string
+		name: string
+		role?: string
+		sessionToken?: string
 	}>
 }
 
