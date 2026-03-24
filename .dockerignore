@@ -8,5 +8,6 @@ note-share
 task-flow
 task-manager
 task-master
+packages/tui
 *.md
 !README.md
