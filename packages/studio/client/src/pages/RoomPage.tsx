@@ -629,7 +629,25 @@ function RoomEventList({
 	provisioning?: boolean
 }) {
 	const bottomRef = useRef<HTMLDivElement>(null)
-	const [resolvedGates, setResolvedGates] = useState<Record<string, string>>({})
+	const storageKey = `electric-agent:resolved-gates:${roomId}`
+	const [resolvedGates, setResolvedGatesRaw] = useState<Record<string, string>>(() => {
+		try {
+			const raw = sessionStorage.getItem(storageKey)
+			return raw ? JSON.parse(raw) : {}
+		} catch {
+			return {}
+		}
+	})
+	const setResolvedGates = useCallback(
+		(updater: (prev: Record<string, string>) => Record<string, string>) => {
+			setResolvedGatesRaw((prev) => {
+				const next = updater(prev)
+				sessionStorage.setItem(storageKey, JSON.stringify(next))
+				return next
+			})
+		},
+		[storageKey],
+	)
 	const workingAgents = participants.filter((p) => p.running && !p.needsInput)
 
 	useEffect(() => {

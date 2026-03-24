@@ -318,6 +318,11 @@
 	opacity: 0.65;
 }
 
+.gate-answered .gate-option.selected {
+	opacity: 1;
+	border-color: var(--green);
+}
+
 .gate-back-to-room {
 	display: inline-block;
 	color: var(--blue);

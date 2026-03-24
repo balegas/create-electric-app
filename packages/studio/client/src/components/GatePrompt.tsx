@@ -553,7 +553,6 @@ export function AskUserQuestionGate({
 												className={`gate-option ${isSelected ? "selected" : ""}`}
 												disabled
 											>
-												{isSelected && <span className="gate-resolved-check">&#10003; </span>}
 												<span className="gate-option-title">{opt.label}</span>
 												{opt.description && (
 													<span className="gate-option-desc">{opt.description}</span>
