@@ -84,7 +84,8 @@ export function HomeScreen({
 	}
 
 	// Down arrow from prompt → enter browse mode
-	// Ctrl+T → toggle freeform mode, Ctrl+J → switch to join mode
+	// Ctrl+R → toggle room/freeform mode, Ctrl+O → switch to join mode
+	// NOTE: Ctrl+J = 0x0A (LF/Enter) in terminals, Ctrl+T intercepted by some emulators
 	useInput(
 		(input, key) => {
 			if (key.downArrow && recentItems.length > 0) {
@@ -92,11 +93,11 @@ export function HomeScreen({
 				setBrowseIndex(0)
 				return
 			}
-			if (key.ctrl && input === "t") {
+			if (key.ctrl && input === "r") {
 				setFreeform((v) => !v)
 				return
 			}
-			if (key.ctrl && input === "j") {
+			if (key.ctrl && input === "o") {
 				setMode("join")
 				return
 			}
@@ -198,9 +199,9 @@ export function HomeScreen({
 					</Box>
 					<Box marginTop={1} gap={2}>
 						<Text dimColor>
-							Mode: {freeform ? "freeform" : "room"} [^T toggle]
+							Mode: {freeform ? "freeform" : "room"} [^R toggle]
 						</Text>
-						<Text dimColor>[^J join room]</Text>
+						<Text dimColor>[^O join room]</Text>
 					</Box>
 				</Box>
 			)}
