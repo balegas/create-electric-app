@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
+import { Settings } from "../components/Settings"
 import { Sidebar } from "../components/Sidebar"
 import { Toaster } from "../components/Toaster"
 import { type AgentRoomEntry, getAgentRooms } from "../lib/agent-room-store"
@@ -269,6 +270,15 @@ export function AppShell() {
 					</svg>
 				</button>
 			</div>
+			{showSettings && (
+				<Settings
+					authSource={authSource}
+					hasGhToken={hasGhToken}
+					onKeySaved={refreshSettings}
+					onClose={() => setShowSettings(false)}
+					devMode={devMode}
+				/>
+			)}
 			<Toaster />
 		</AppContext.Provider>
 	)

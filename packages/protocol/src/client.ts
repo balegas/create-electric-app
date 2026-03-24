@@ -447,6 +447,7 @@ export class ElectricAgentClient {
 			name?: string
 			role?: string
 			initialPrompt?: string
+			customSkill?: string
 		},
 	): Promise<{
 		sessionId: string

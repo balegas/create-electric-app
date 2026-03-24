@@ -81,6 +81,7 @@ export const addAgentSchema = z.object({
 	name: z.string().max(MAX_SHORT).optional(),
 	role: z.string().max(MAX_SHORT).optional(),
 	initialPrompt: z.string().max(MAX_TEXT).optional(),
+	customSkill: z.string().max(MAX_TEXT).optional(),
 	apiKey: optionalKey,
 	oauthToken: optionalKey,
 	ghToken: optionalKey,

@@ -3223,11 +3223,12 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				// Resolve role skill (behavioral guidelines + tool permissions)
 				const roleSkill = resolveRoleSkill(body.role)
 
-				// Inject role skill file into sandbox
-				if (roleSkill) {
+				// Inject role skill file into sandbox — built-in role or custom skill content
+				const skillContent = roleSkill?.skillContent ?? body.customSkill
+				if (skillContent) {
 					try {
 						const skillDir = `${handle.projectDir}/.claude/skills/role`
-						const skillB64 = Buffer.from(roleSkill.skillContent).toString("base64")
+						const skillB64 = Buffer.from(skillContent).toString("base64")
 						await config.sandbox.exec(
 							handle,
 							`mkdir -p '${skillDir}' && echo '${skillB64}' | base64 -d > '${skillDir}/SKILL.md'`,

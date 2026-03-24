@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { Console } from "../components/Console"
 import { PromptInput } from "../components/PromptInput"
-import { Settings } from "../components/Settings"
 import { Skeleton } from "../components/Skeleton"
 import { useSession } from "../hooks/useSession"
 import { useAppContext } from "../layouts/AppShell"
@@ -207,17 +206,6 @@ export function SessionPage() {
 
 	return (
 		<>
-			{showSettings && (
-				<Settings
-					authSource={authSource}
-					hasGhToken={hasGhToken ?? false}
-					onKeySaved={refreshSettings}
-					onClose={() => setShowSettings(false)}
-					onCopyLog={effectiveId ? handleCopyHistory : undefined}
-					devMode={devMode}
-				/>
-			)}
-
 			<div className="session-header">
 				<button
 					type="button"

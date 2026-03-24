@@ -2,7 +2,6 @@ import { useCallback, useState } from "react"
 import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom"
 import { PromptInput } from "../components/PromptInput"
 import { RepoPickerModal } from "../components/RepoPickerModal"
-import { Settings } from "../components/Settings"
 import { useAppContext } from "../layouts/AppShell"
 import { resumeFromGithub } from "../lib/api"
 import { addSession } from "../lib/session-store"
@@ -59,16 +58,6 @@ export function HomePage() {
 
 	return (
 		<>
-			{showSettings && (
-				<Settings
-					authSource={authSource}
-					hasGhToken={hasGhToken ?? false}
-					onKeySaved={refreshSettings}
-					onClose={() => setShowSettings(false)}
-					devMode={devMode}
-				/>
-			)}
-
 			<div className="mobile-home-topbar">
 				<button
 					type="button"

@@ -770,10 +770,11 @@ function RoomInput({
 }
 
 /** Built-in roles that map to role skill files with specific tool permissions. */
-const BUILT_IN_ROLES = [
+const AGENT_ROLES = [
 	{ value: "coder", label: "Coder", description: "Writes code, creates PRs" },
 	{ value: "reviewer", label: "Reviewer", description: "Reviews PRs (read-only)" },
 	{ value: "ui-designer", label: "UI Designer", description: "Audits and improves UI" },
+	{ value: "custom", label: "Custom", description: "No preset role — define with a skill" },
 ] as const
 
 function AddAgentModal({
@@ -788,8 +789,11 @@ function AddAgentModal({
 	const [name, setName] = useState("")
 	const [role, setRole] = useState("coder")
 	const [initialPrompt, setInitialPrompt] = useState("")
+	const [customSkill, setCustomSkill] = useState("")
 	const [adding, setAdding] = useState(false)
 	const [addError, setAddError] = useState<string | null>(null)
+
+	const isCustom = role === "custom"
 
 	const handleAdd = useCallback(async () => {
 		setAdding(true)
@@ -797,8 +801,9 @@ function AddAgentModal({
 		try {
 			const result = await addAgentToRoom(roomId, {
 				name: name.trim() || undefined,
-				role: role.trim() || undefined,
+				role: isCustom ? undefined : role.trim() || undefined,
 				initialPrompt: initialPrompt.trim() || undefined,
+				customSkill: isCustom && customSkill.trim() ? customSkill.trim() : undefined,
 			})
 			if (result.sessionToken) {
 				setSessionToken(result.sessionId, result.sessionToken)
@@ -818,7 +823,7 @@ function AddAgentModal({
 		} finally {
 			setAdding(false)
 		}
-	}, [roomId, name, role, initialPrompt, onAdded])
+	}, [roomId, name, role, isCustom, initialPrompt, customSkill, onAdded])
 
 	return (
 		<div className="modal-overlay" onClick={onClose}>
@@ -837,13 +842,24 @@ function AddAgentModal({
 					<label className="room-form-label">
 						Role
 						<select value={role} onChange={(e) => setRole(e.target.value)}>
-							{BUILT_IN_ROLES.map((r) => (
+							{AGENT_ROLES.map((r) => (
 								<option key={r.value} value={r.value}>
 									{r.label} — {r.description}
 								</option>
 							))}
 						</select>
 					</label>
+					{isCustom && (
+						<label className="room-form-label">
+							Skill
+							<textarea
+								value={customSkill}
+								onChange={(e) => setCustomSkill(e.target.value)}
+								placeholder="Paste skill instructions (written to .claude/skills/role/SKILL.md)"
+								rows={6}
+							/>
+						</label>
+					)}
 					<label className="room-form-label">
 						Initial Prompt
 						<textarea
