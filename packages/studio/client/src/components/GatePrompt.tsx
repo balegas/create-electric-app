@@ -417,19 +417,23 @@ interface NormalizedQuestion {
 	multiSelect?: boolean
 }
 
-function AskUserQuestionGate({
+export function AskUserQuestionGate({
 	sessionId,
 	event,
 	onResolved,
 	resolved,
 	resolvedSummary,
+	respondFn,
 }: {
 	sessionId: string
 	event: Extract<EngineEvent, { type: "ask_user_question" }>
 	onResolved: (summary: string) => void
 	resolved?: boolean
 	resolvedSummary?: string
+	/** Override the default respondToGate call (e.g. for room-scoped respond) */
+	respondFn?: (sessionId: string, gate: string, data: Record<string, unknown>) => Promise<unknown>
 }) {
+	const respond = respondFn ?? respondToGate
 	// Normalize: use full questions array if present, else build single-item array
 	const questions: NormalizedQuestion[] =
 		Array.isArray(event.questions) && event.questions.length
@@ -479,7 +483,7 @@ function AskUserQuestionGate({
 		setSubmitting(true)
 		const answersPayload = { [question]: label }
 		try {
-			await respondToGate(sessionId, "ask_user_question", {
+			await respond(sessionId, "ask_user_question", {
 				toolUseId: event.tool_use_id,
 				answers: answersPayload,
 				_summary: label,
@@ -496,7 +500,7 @@ function AskUserQuestionGate({
 		const summary = buildSummary(answersPayload)
 		setSubmitting(true)
 		try {
-			await respondToGate(sessionId, "ask_user_question", {
+			await respond(sessionId, "ask_user_question", {
 				toolUseId: event.tool_use_id,
 				answers: answersPayload,
 				_summary: summary,
