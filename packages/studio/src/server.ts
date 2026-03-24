@@ -3063,6 +3063,7 @@ echo "Start claude in this project — the session will appear in the studio UI.
 				roomId,
 				state: router.state,
 				roundCount: router.roundCount,
+				autoIterate: router.autoIterate,
 				previewUrl,
 				appPort,
 				pendingInfraGate,
@@ -3529,6 +3530,33 @@ echo "Start claude in this project — the session will appear in the studio UI.
 		await stream.append(JSON.stringify(event))
 		router.close()
 
+		return c.json({ ok: true })
+	})
+
+	// Toggle auto-iterate on a room
+	app.post("/api/rooms/:id/auto-iterate", async (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		const body = await c.req.json<{ enabled: boolean }>()
+		router.autoIterate = body.enabled
+		console.log(`[room] auto-iterate ${body.enabled ? "enabled" : "disabled"} for room=${roomId}`)
+		return c.json({ ok: true, autoIterate: router.autoIterate })
+	})
+
+	// Manually deliver a message to recipients (trigger iterate)
+	app.post("/api/rooms/:id/deliver", async (c) => {
+		const roomId = c.req.param("id")
+		const router = roomRouters.get(roomId)
+		if (!router) return c.json({ error: "Room not found" }, 404)
+
+		const body = await c.req.json<{ from: string; body: string; to?: string }>()
+		if (!body.from || !body.body) {
+			return c.json({ error: "from and body are required" }, 400)
+		}
+
+		await router.iterateRecipients({ from: body.from, to: body.to, body: body.body })
 		return c.json({ ok: true })
 	})
 

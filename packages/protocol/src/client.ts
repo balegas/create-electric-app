@@ -90,6 +90,7 @@ export interface RoomState {
 	roomId: string
 	state: "active" | "closed" | "interrupted"
 	roundCount: number
+	autoIterate?: boolean
 	previewUrl?: string
 	appPort?: number
 	pendingInfraGate?: {
@@ -481,6 +482,25 @@ export class ElectricAgentClient {
 	closeAgentRoom(roomId: string): Promise<{ ok: boolean }> {
 		return this.request<{ ok: boolean }>(`/rooms/${roomId}/close`, {
 			method: "POST",
+		})
+	}
+
+	setAutoIterate(roomId: string, enabled: boolean): Promise<{ ok: boolean; autoIterate: boolean }> {
+		return this.request<{ ok: boolean; autoIterate: boolean }>(`/rooms/${roomId}/auto-iterate`, {
+			method: "POST",
+			body: { enabled },
+		})
+	}
+
+	deliverRoomMessage(
+		roomId: string,
+		from: string,
+		body: string,
+		to?: string,
+	): Promise<{ ok: boolean }> {
+		return this.request<{ ok: boolean }>(`/rooms/${roomId}/deliver`, {
+			method: "POST",
+			body: { from, body, ...(to ? { to } : {}) },
 		})
 	}
 

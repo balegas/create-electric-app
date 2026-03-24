@@ -116,6 +116,10 @@ export const addAgentToRoom = (
 export const sendRoomMessage = (roomId: string, from: string, body: string, to?: string) =>
 	client.sendRoomMessage(roomId, from, body, to)
 export const closeAgentRoom = (roomId: string) => client.closeAgentRoom(roomId)
+export const setAutoIterate = (roomId: string, enabled: boolean) =>
+	client.setAutoIterate(roomId, enabled)
+export const deliverRoomMessage = (roomId: string, from: string, body: string, to?: string) =>
+	client.deliverRoomMessage(roomId, from, body, to)
 export const addSessionToRoom = (
 	roomId: string,
 	config: Parameters<typeof client.addSessionToRoom>[1],

@@ -51,6 +51,7 @@ export class RoomRouter {
 	private _resolvedInfraDetails: Record<string, string> | null = null
 	private _state: "active" | "closed" = "active"
 	private _roundCount = 0
+	private _autoIterate = true
 	private cancelSubscription: (() => void) | null = null
 	private stream: DurableStream
 
@@ -86,6 +87,19 @@ export class RoomRouter {
 
 	get roundCount(): number {
 		return this._roundCount
+	}
+
+	/**
+	 * When true (default), incoming room messages trigger an iterate on
+	 * recipients. When false, messages are visible in session streams
+	 * but agents are NOT woken up — human must manually deliver.
+	 */
+	get autoIterate(): boolean {
+		return this._autoIterate
+	}
+
+	set autoIterate(value: boolean) {
+		this._autoIterate = value
 	}
 
 	/**
@@ -340,31 +354,61 @@ export class RoomRouter {
 	}
 
 	/**
-	 * Deliver a message to recipient agent(s) via their bridges.
+	 * Resolve recipients for a message.
 	 */
-	private async deliverMessage(msg: { from: string; to?: string; body: string }): Promise<void> {
-		if (this._state === "closed") return
-
-		// System messages are for the room UI only — don't deliver to agents
-		if (msg.from === "system") return
-
-		const deliverTo: RoomParticipant[] = []
+	private resolveRecipients(msg: { from: string; to?: string }): RoomParticipant[] {
+		if (msg.from === "system") return []
 
 		if (msg.to) {
-			// Direct message: find the specific recipient by name
 			const recipient = [...this._participants.values()].find((p) => p.name === msg.to)
-			if (recipient) deliverTo.push(recipient)
-		} else {
-			// Broadcast: deliver to all except sender
-			for (const p of this._participants.values()) {
-				if (p.name !== msg.from) deliverTo.push(p)
-			}
+			return recipient ? [recipient] : []
 		}
 
-		// Announce when agents pick up a task (visible in room timeline)
+		// Broadcast: all except sender
+		return [...this._participants.values()].filter((p) => p.name !== msg.from)
+	}
+
+	/**
+	 * Emit a message to recipients' session streams (visibility only — no iterate).
+	 */
+	private async emitToRecipients(
+		msg: { from: string; to?: string; body: string },
+		recipients: RoomParticipant[],
+	): Promise<void> {
+		await Promise.all(
+			recipients.map(async (p) => {
+				try {
+					await p.bridge.emit({
+						type: "user_prompt",
+						message: msg.body,
+						sender: msg.from,
+						ts: ts(),
+					})
+				} catch (err) {
+					console.error(`[room-router] failed to emit to ${p.name}:`, err)
+				}
+			}),
+		)
+	}
+
+	/**
+	 * Send iterate command to recipients, waking them up to process the message.
+	 * Call this after emitToRecipients for full delivery, or separately for
+	 * manual delivery when autoIterate is off.
+	 */
+	async iterateRecipients(
+		msg: { from: string; to?: string; body: string },
+	): Promise<void> {
+		if (this._state === "closed") return
+		if (msg.from === "system") return
+
+		const recipients = this.resolveRecipients(msg)
+		const prompt = `Message from ${msg.from}:\n\n${msg.body}`
+
+		// Announce when agents pick up a review task
 		const isReviewRequest = /^REVIEW_REQUEST:/m.test(msg.body)
-		if (isReviewRequest && deliverTo.length > 0) {
-			for (const p of deliverTo) {
+		if (isReviewRequest && recipients.length > 0) {
+			for (const p of recipients) {
 				const action =
 					p.role === "reviewer"
 						? "starting review"
@@ -375,25 +419,35 @@ export class RoomRouter {
 			}
 		}
 
-		const prompt = `Message from ${msg.from}:\n\n${msg.body}`
-
 		await Promise.all(
-			deliverTo.map(async (p) => {
+			recipients.map(async (p) => {
 				try {
-					// Emit the incoming message to the agent's session stream
-					// so it's visible in the session UI
-					await p.bridge.emit({
-						type: "user_prompt",
-						message: msg.body,
-						sender: msg.from,
-						ts: ts(),
-					})
 					await p.bridge.sendCommand({ command: "iterate", request: prompt })
 				} catch (err) {
-					console.error(`[room-router] failed to deliver to ${p.name}:`, err)
+					console.error(`[room-router] failed to iterate ${p.name}:`, err)
 				}
 			}),
 		)
+	}
+
+	/**
+	 * Route a message from the room stream to recipients.
+	 * Emits to session streams for visibility. Only sends iterate if autoIterate is on.
+	 */
+	private async deliverMessage(msg: { from: string; to?: string; body: string }): Promise<void> {
+		if (this._state === "closed") return
+		if (msg.from === "system") return
+
+		const recipients = this.resolveRecipients(msg)
+		if (recipients.length === 0) return
+
+		// Always make the message visible in recipients' session streams
+		await this.emitToRecipients(msg, recipients)
+
+		// Only trigger agents if autoIterate is enabled
+		if (this._autoIterate) {
+			await this.iterateRecipients(msg)
+		}
 	}
 
 	/**
